@@ -1,0 +1,124 @@
+@using CustomerHelpAgent.Share.Shop
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (requests is null)
+{
+    <div class="shop-loading"><Spin /></div>
+}
+else
+{
+    <section class="shop-requests" aria-label="我的申請">
+        <header class="shop-requests-head">
+            <h1 class="shop-title">我的申請</h1>
+            <a class="shop-link-button" href="/shop/after-sales/new">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="add" />
+                <span>申請售後服務</span>
+            </a>
+        </header>
+
+        @if (requests.Count == 0)
+        {
+            <p class="shop-empty">目前沒有售後申請。</p>
+        }
+
+        @foreach (var request in requests)
+        {
+            <article class="shop-request">
+                <header class="shop-request-head">
+                    <div class="shop-request-heading">
+                        <div class="shop-request-no">申請編號 @request.RequestNo</div>
+                        <div class="shop-request-meta">送出時間 @request.CreatedAt.ToString("yyyy/MM/dd HH:mm") · 訂單編號 @request.OrderNo</div>
+                    </div>
+                    <StatusPill Text="@AfterSalesLabels.StatusText(request.Status)" Tone="@ToneOf(request.Status)" />
+                </header>
+
+                <dl class="shop-facts">
+                    <div><dt>商品</dt><dd>@request.ProductName（@request.Color／@request.Size）</dd></div>
+                    <div><dt>申請類型</dt><dd>@TypeDetail(request)</dd></div>
+                    <div class="shop-fact-wide"><dt>客服備註</dt><dd>@(string.IsNullOrWhiteSpace(request.StaffNote) ? "—" : request.StaffNote)</dd></div>
+                </dl>
+
+                @if (request.Status == AfterSalesStatus.NeedMoreInfo)
+                {
+                    <footer class="shop-request-foot">
+                        <button type="button" class="shop-link-button" data-action="resubmit" data-request-no="@request.RequestNo"
+                                @onclick="() => OpenResubmit(request)">
+                            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="upload_file" />
+                            <span>補充資料</span>
+                        </button>
+                    </footer>
+                }
+            </article>
+        }
+    </section>
+
+    @*
+        表單對話窗，規範見 docs/architecture/對話窗 UI 設計規範.md。
+        ⚠️ EditForm 上絕不可掛鍵盤事件（§6.3，ModalKeyboardConventionTests 守門）。
+    *@
+    <Modal Title="@("補充資料")"
+           Class="form-modal shop-resubmit-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("送出補件")"
+           CancelText="@("取消")"
+           OnOk="OnResubmitOkAsync"
+           OnCancel="OnResubmitCancelAsync">
+        @if (resubmitTarget is not null)
+        {
+            <EditForm Model="@resubmitForm" Context="editContext">
+                <AntDesign.Form TModel="ResubmitFormModel" Model="@resubmitForm" Layout="FormLayout.Vertical" Context="formContext">
+                    <FormSection Title="申請內容">
+                        <FormItem Label="申請編號">
+                            <span>@resubmitTarget.RequestNo</span>
+                        </FormItem>
+                        <FormItem Label="商品與類型">
+                            <span>@resubmitTarget.ProductName（@resubmitTarget.Color／@resubmitTarget.Size）· @TypeDetail(resubmitTarget)</span>
+                        </FormItem>
+                        <FormItem Label="客服需要你補充" Class="form-field-full">
+                            <p class="shop-staff-note">@resubmitTarget.StaffNote</p>
+                        </FormItem>
+                    </FormSection>
+
+                    <FormSection Title="補充資料" Hint="補充說明與照片至少擇一">
+                        <FormItem Label="商品是否穿過">
+                            <RadioGroup @bind-Value="resubmitForm.IsWorn">
+                                <Radio Value="@((bool?)false)">未穿過</Radio>
+                                <Radio Value="@((bool?)true)">已穿過</Radio>
+                            </RadioGroup>
+                        </FormItem>
+                        <FormItem Label="補充說明" Class="form-field-full">
+                            <TextArea @bind-Value="resubmitForm.Supplement" Rows="4" MaxLength="1000" Placeholder="請依客服的備註補充說明" />
+                        </FormItem>
+                        <FormItem Label="補充照片" Class="form-field-full">
+                            <InputFile OnChange="OnResubmitPhotosSelectedAsync" multiple accept="@ShopPhotoPicker.Accept" />
+                            <div class="form-field-hint">最多 3 張，每張 10 MB 以內（jpg、png、webp）。</div>
+                            @if (resubmitPhotos.Count > 0)
+                            {
+                                <ul class="shop-photo-list">
+                                    @foreach (var photo in resubmitPhotos)
+                                    {
+                                        <li class="shop-photo">
+                                            <span>@photo.Name（@ShopPhotoPicker.FormatSize(photo.Size)）</span>
+                                            <CrudActionButton Title="移除" Icon="close" Danger OnClick="@(() => RemoveResubmitPhoto(photo.Id))" />
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </FormItem>
+                    </FormSection>
+                </AntDesign.Form>
+            </EditForm>
+        }
+    </Modal>
+}

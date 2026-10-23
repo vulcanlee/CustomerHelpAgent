@@ -306,7 +306,7 @@ public sealed class PasswordPolicyTests : IDisposable
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(new[] { "MyUserServiceLogin.cs", "PasswordPolicy.cs", "SupportUserSeeder.cs" }, callers);
+        Assert.Equal(new[] { "DemoAccountSeeder.cs", "MyUserServiceLogin.cs", "PasswordPolicy.cs", "SupportUserSeeder.cs" }, callers);
     }
 
     // ---------- 登入鎖定 ----------

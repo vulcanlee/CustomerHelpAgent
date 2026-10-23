@@ -1,0 +1,50 @@
+@inherits LayoutComponentBase
+
+@*
+    顧客商店版面（售後展示）：只有頂部列，刻意不含側邊欄、操作說明鈕與 OverlayStyles
+    （後者只能在 Routes.razor 渲染一次，速查表 §6.8）。
+    登入檢查完成前整個版面都不渲染，與 MainLayout 相同（PageAuthorizationTests／ShopLayoutTests 守門）。
+*@
+@if (isAuthenticated)
+{
+    <div class="shop-page">
+        <header class="shop-topbar">
+            <a class="shop-brand" href="/shop">
+                <span class="shop-brand-icon" aria-hidden="true">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="storefront" />
+                </span>
+                <span class="shop-brand-name">示範鞋服商店</span>
+            </a>
+
+            <nav class="shop-nav" aria-label="商店導覽">
+                <NavLink class="shop-nav-link" href="/shop" Match="NavLinkMatch.All">我的訂單</NavLink>
+                <NavLink class="shop-nav-link" href="/shop/after-sales" Match="NavLinkMatch.Prefix">售後申請</NavLink>
+            </nav>
+
+            <div class="shop-user">
+                @if (canOpenBackOffice)
+                {
+                    <a class="shop-user-link" href="/App">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="dashboard" />
+                        <span>回到後台</span>
+                    </a>
+                }
+                <span class="shop-user-name">@userDisplayName</span>
+                <button type="button" class="shop-user-link" @onclick="OnLogoutClickAsync">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="logout" />
+                    <span>登出</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="shop-content">
+            @Body
+        </main>
+    </div>
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">關閉</span>
+</div>

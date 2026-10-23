@@ -29,7 +29,11 @@ public static class AiChatEndpoint
     /// <summary>OpenAI 的路徑後綴。官方文件的 <c>base_url</c> 就是帶著它的形式。</summary>
     public const string OpenAiV1Suffix = "/v1";
 
-    public static AiChatEndpointDescriptor Create(AiSettings settings)
+    /// <summary>
+    /// 供 OpenAI SDK 使用的 BaseUri（以 <c>/</c> 結尾，SDK 再接 <c>chat/completions</c>）。
+    /// 後綴補齊規則與 <see cref="Create"/> 相同。
+    /// </summary>
+    public static Uri CreateBaseUri(AiSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -38,18 +42,18 @@ public static class AiChatEndpoint
             ? (provider == AiProvider.OpenAI ? DefaultOpenAiEndpoint : string.Empty)
             : settings.Endpoint.Trim().TrimEnd('/');
 
-        if (provider == AiProvider.OpenAI)
-        {
-            return new AiChatEndpointDescriptor(
-                new Uri($"{EnsureSuffix(baseUrl, OpenAiV1Suffix)}/chat/completions"),
-                "Authorization",
-                $"Bearer {settings.ApiKey}");
-        }
+        return new Uri(
+            EnsureSuffix(baseUrl, provider == AiProvider.OpenAI ? OpenAiV1Suffix : AzureV1Suffix) + "/");
+    }
 
-        return new AiChatEndpointDescriptor(
-            new Uri($"{EnsureSuffix(baseUrl, AzureV1Suffix)}/chat/completions"),
-            "api-key",
-            settings.ApiKey);
+    public static AiChatEndpointDescriptor Create(AiSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var uri = new Uri(CreateBaseUri(settings), "chat/completions");
+        return settings.GetProvider() == AiProvider.OpenAI
+            ? new AiChatEndpointDescriptor(uri, "Authorization", $"Bearer {settings.ApiKey}")
+            : new AiChatEndpointDescriptor(uri, "api-key", settings.ApiKey);
     }
 
     /// <summary>

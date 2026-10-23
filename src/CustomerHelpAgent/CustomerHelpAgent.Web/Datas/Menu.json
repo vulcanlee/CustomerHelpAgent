@@ -6,6 +6,25 @@
     "url": "/App"
   },
   {
+    "id": 9,
+    "name": "售後服務",
+    "icon": "support_agent",
+    "subMenu": [
+      {
+        "id": 91,
+        "name": "售後審核",
+        "icon": "fact_check",
+        "url": "/after-sales-review"
+      },
+      {
+        "id": 92,
+        "name": "售後規則管理",
+        "icon": "rule",
+        "url": "/after-sales-policies"
+      }
+    ]
+  },
+  {
     "id": 2,
     "name": "專案管理",
     "icon": "work",

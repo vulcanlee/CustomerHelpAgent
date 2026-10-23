@@ -331,6 +331,7 @@ namespace CustomerHelpAgent.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.DownloadPath, "download");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.UploadPath, "upload");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.ProjectFilePath, "project file");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.AfterSalesFilePath, "after-sales file");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.ExceptionPath, "exception stack trace");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.TokenUsagePath, "LLM usage raw payload");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiCallLogPath, "AI call log");

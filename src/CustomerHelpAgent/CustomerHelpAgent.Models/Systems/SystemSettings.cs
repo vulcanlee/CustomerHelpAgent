@@ -36,6 +36,13 @@ public class ExternalFileSystem
     public string ProjectFilePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// 售後申請照片的存放目錄（1.0.3 起）：結構為 <c>{root}/{yyyy}/{MM}/{Guid}.副檔名</c>，
+    /// 檔案生命週期一律經由 AfterSalesFileStore 處理（含根目錄檢查）。
+    /// ⚠️ 照片只能經由附件端點（擁有者或審核者）讀取，<b>絕不可放在 DownloadPath 底下</b>（那裡以靜態檔案對外提供）。
+    /// </summary>
+    public string AfterSalesFilePath { get; set; } = string.Empty;
+
+    /// <summary>
     /// 系統例外紀錄的堆疊檔案存放目錄。每一種例外只在首次發生時寫一個檔，
     /// 檔案生命週期一律經由 ExceptionStackFileStore 處理。
     /// </summary>

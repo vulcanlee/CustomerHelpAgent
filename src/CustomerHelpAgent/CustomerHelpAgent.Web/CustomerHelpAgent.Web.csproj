@@ -12,6 +12,7 @@
     <PackageReference Include="Cronos" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
     <PackageReference Include="QRCoder" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" />

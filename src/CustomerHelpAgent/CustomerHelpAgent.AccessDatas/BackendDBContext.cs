@@ -41,6 +41,16 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<PasswordHistory> PasswordHistory { get; set; }
     public virtual DbSet<TwoFactorBackupCode> TwoFactorBackupCode { get; set; }
     public virtual DbSet<PromptTemplate> PromptTemplate { get; set; }
+    public virtual DbSet<Product> Product { get; set; }
+    public virtual DbSet<ProductVariant> ProductVariant { get; set; }
+    public virtual DbSet<SalesOrder> SalesOrder { get; set; }
+    public virtual DbSet<SalesOrderItem> SalesOrderItem { get; set; }
+    public virtual DbSet<Shipment> Shipment { get; set; }
+    public virtual DbSet<ShipmentEvent> ShipmentEvent { get; set; }
+    public virtual DbSet<AfterSalesPolicy> AfterSalesPolicy { get; set; }
+    public virtual DbSet<AfterSalesRequest> AfterSalesRequest { get; set; }
+    public virtual DbSet<AfterSalesAttachment> AfterSalesAttachment { get; set; }
+    public virtual DbSet<ProcessMetric> ProcessMetric { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -264,6 +274,71 @@ public partial class BackendDBContext : DbContext
 
             // 同一個範本最多一個作用中的版本；切換時在同一個交易裡先全部取消再設定。
             entity.HasIndex(x => x.TemplateKey).IsUnique().HasFilter("\"IsActive\" = 1");
+        });
+        #endregion
+
+        #region 售後展示領域（商品、訂單、物流、售後申請與流程度量）
+        // 這些實體刻意不實作 ISoftDeletable／IConcurrencyStamped：規則以新增版本取代就地編輯，
+        // 申請以狀態條件更新防衝突，且沒有刪除畫面。FK 一律 Restrict（沿用上方迴圈）。
+        modelBuilder.Entity<Product>(entity =>
+        {
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.Property(x => x.Price).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<ProductVariant>(entity =>
+        {
+            entity.HasIndex(x => new { x.ProductId, x.Color, x.Size }).IsUnique();
+            entity.HasOne(x => x.Product).WithMany(x => x.Variants).HasForeignKey(x => x.ProductId);
+        });
+
+        modelBuilder.Entity<SalesOrder>(entity =>
+        {
+            entity.HasIndex(x => x.OrderNo).IsUnique();
+            entity.HasIndex(x => x.CustomerUserId);
+            entity.HasOne(x => x.CustomerUser).WithMany().HasForeignKey(x => x.CustomerUserId);
+        });
+
+        modelBuilder.Entity<SalesOrderItem>(entity =>
+        {
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            entity.HasOne(x => x.SalesOrder).WithMany(x => x.Items).HasForeignKey(x => x.SalesOrderId);
+            entity.HasOne(x => x.ProductVariant).WithMany().HasForeignKey(x => x.ProductVariantId);
+        });
+
+        modelBuilder.Entity<Shipment>(entity =>
+        {
+            entity.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId);
+        });
+
+        modelBuilder.Entity<ShipmentEvent>(entity =>
+        {
+            entity.HasOne(x => x.Shipment).WithMany(x => x.Events).HasForeignKey(x => x.ShipmentId);
+        });
+
+        modelBuilder.Entity<AfterSalesPolicy>(entity =>
+        {
+            entity.HasIndex(x => new { x.Code, x.Version }).IsUnique();
+        });
+
+        modelBuilder.Entity<AfterSalesRequest>(entity =>
+        {
+            entity.HasIndex(x => x.RequestNo).IsUnique();
+            entity.HasIndex(x => x.CaseKey);
+            entity.HasIndex(x => x.CustomerUserId);
+            entity.HasOne(x => x.CustomerUser).WithMany().HasForeignKey(x => x.CustomerUserId);
+            entity.HasOne(x => x.SalesOrderItem).WithMany().HasForeignKey(x => x.SalesOrderItemId);
+            entity.HasOne(x => x.AppliedPolicy).WithMany().HasForeignKey(x => x.AppliedPolicyId);
+        });
+
+        modelBuilder.Entity<AfterSalesAttachment>(entity =>
+        {
+            entity.HasOne(x => x.AfterSalesRequest).WithMany(x => x.Attachments).HasForeignKey(x => x.AfterSalesRequestId);
+        });
+
+        modelBuilder.Entity<ProcessMetric>(entity =>
+        {
+            entity.HasIndex(x => x.CaseKey);
         });
         #endregion
 

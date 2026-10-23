@@ -1,5 +1,6 @@
 using System.Reflection;
 using CustomerHelpAgent.Models.AdapterModel;
+using CustomerHelpAgent.Models.Shop;
 
 namespace CustomerHelpAgent.Tests;
 
@@ -19,6 +20,7 @@ public sealed class AdapterModelCloneTests
         typeof(CategoryAdapterModel),
         typeof(TeamAdapterModel),
         typeof(ProjectAdapterModel),
+        typeof(AfterSalesPolicyModel),
     };
 
     [Theory]

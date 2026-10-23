@@ -51,6 +51,11 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
+  <!-- Microsoft Agent Framework（售後 Agent 示範；釘死版本，遞移帶入 Microsoft.Extensions.AI.OpenAI 與 OpenAI SDK） -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.25.0" />
+  </ItemGroup>
+
   <!-- 測試 -->
   <ItemGroup>
     <PackageVersion Include="bunit"                     Version="2.11.3" />

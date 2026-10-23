@@ -21,6 +21,7 @@ public sealed class SystemSettingsValidator : IValidateOptions<SystemSettings>
         RequirePath(errors, nameof(paths.DownloadPath), paths.DownloadPath);
         RequirePath(errors, nameof(paths.UploadPath), paths.UploadPath);
         RequirePath(errors, nameof(paths.ProjectFilePath), paths.ProjectFilePath);
+        RequirePath(errors, nameof(paths.AfterSalesFilePath), paths.AfterSalesFilePath);
         RequirePath(errors, nameof(paths.ExceptionPath), paths.ExceptionPath);
         RequirePath(errors, nameof(paths.TokenUsagePath), paths.TokenUsagePath);
         RequirePath(errors, nameof(paths.AiCallLogPath), paths.AiCallLogPath);
@@ -56,6 +57,7 @@ public sealed class SystemSettingsValidator : IValidateOptions<SystemSettings>
             (nameof(paths.DownloadPath), paths.DownloadPath),
             (nameof(paths.UploadPath), paths.UploadPath),
             (nameof(paths.ProjectFilePath), paths.ProjectFilePath),
+            (nameof(paths.AfterSalesFilePath), paths.AfterSalesFilePath),
             (nameof(paths.ExceptionPath), paths.ExceptionPath),
             (nameof(paths.TokenUsagePath), paths.TokenUsagePath),
             (nameof(paths.AiCallLogPath), paths.AiCallLogPath),

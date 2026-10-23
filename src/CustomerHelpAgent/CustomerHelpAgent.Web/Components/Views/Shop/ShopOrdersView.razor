@@ -1,0 +1,61 @@
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (orders is null)
+{
+    <div class="shop-loading"><Spin /></div>
+}
+else
+{
+    <section class="shop-orders" aria-label="我的訂單">
+        <h1 class="shop-title">我的訂單</h1>
+
+        @if (orders.Count == 0)
+        {
+            <p class="shop-empty">目前沒有訂單。</p>
+        }
+
+        @foreach (var order in orders)
+        {
+            <article class="shop-order-card">
+                <header class="shop-order-head">
+                    <div class="shop-order-heading">
+                        <div class="shop-order-no">訂單編號 @order.OrderNo</div>
+                        <div class="shop-order-meta">下單日 @order.OrderedAt.ToString("yyyy/MM/dd") · 簽收日 @FormatDate(order.DeliveredAt)</div>
+                    </div>
+                    <StatusPill Text="@order.StatusText" Tone="@(order.DeliveredAt is null ? StatusTone.Accent : StatusTone.Positive)" />
+                </header>
+
+                <ul class="shop-item-list">
+                    @foreach (var item in order.Items)
+                    {
+                        <li class="shop-item">
+                            <div class="shop-item-info">
+                                <span class="shop-item-name">@item.ProductName</span>
+                                <span class="shop-item-spec">顏色 @item.Color · 尺碼 @item.Size · 數量 @item.Quantity</span>
+                            </div>
+                            <a class="shop-item-action" href="@($"/shop/after-sales/new?orderItemId={item.OrderItemId}")">
+                                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="assignment_return" />
+                                <span>申請售後</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+
+                <footer class="shop-order-foot">
+                    <a class="shop-order-link" href="@($"/shop/orders/{order.OrderId}")">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="local_shipping" />
+                        <span>訂單明細與物流</span>
+                    </a>
+                </footer>
+            </article>
+        }
+    </section>
+}

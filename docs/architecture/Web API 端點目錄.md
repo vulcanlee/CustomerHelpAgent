@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.9
+- 文件版本：1.10
 - 文件狀態：已實作
-- 現行系統版本：1.0.0
+- 現行系統版本：1.0.3
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/10/23
 
@@ -56,6 +56,8 @@
 - **成功時不包 `ApiResult`**，維持原生 File stream（`enableRangeProcessing: true`，支援 1GB 附件續傳）；只有錯誤才回 `ApiResult`。
 
 查無紀錄、團隊越界（`ProjectService.GetFileDownloadAsync` 以 `IsTeamAccessible` 守門）、實體檔案不存在**一律回 404**，不以狀態碼洩漏檔案是否存在；三者差異由 Service 層的 Warning 日誌區分。成功下載寫入稽核 `Project.FileDownload`。
+
+> **售後申請照片下載 `AfterSalesFileController`（1.0.3 起，售後展示 M1）**：`src/CustomerHelpAgent/CustomerHelpAgent.Web/Controllers/AfterSalesFileController.cs`，路由 `api/after-sales-files`（**無** `api/v1` 平行路由）。`GET after-sales-files/{id}/download`，只收 `[Authorize(CookieScheme)]`（呼叫端是後台「售後審核」畫面上的一般連結；顧客本人也可經此端點下載自己的照片〔有擁有權檢查〕，但 M1 顧客端「我的申請」畫面**沒有**照片連結）。**不掛 `[HasPermission]`**：由 `AfterSalesRequestService.GetAttachmentForAsync` 判斷——申請人本人，或具「售後審核」檢視權限者（管理員短路）才可取得；成功回原生檔案（`Content-Disposition: inline`，檔名走 `filename*`，只收 jpg／png／webp 因此不會被當頁面執行）。查無紀錄、非本人也非審核者、實體檔不存在**一律回 `ApiResult` 404**。成功下載寫入稽核 `Shop.Attachment.Download`（稽核失敗不擋下載）。
 
 > **系統備份下載 `BackupController`（0.9.99 起）**：`src/CustomerHelpAgent/CustomerHelpAgent.Web/Controllers/BackupController.cs`，路由 `api/backups`（**無** `api/v1` 平行路由）。`GET backups/{fileName}/download`，同樣走 `[Authorize(CookieScheme)]`、成功回原生檔案（`application/zip`，支援續傳）；不用 `[HasPermission]`，而是每次從資料庫確認是**管理員**，否則回 `ApiResult` 403；找不到備份回 `ApiResult` 404。第一段下載寫入稽核 `Backup.Download`（續傳的後續區段不重複寫）。
 

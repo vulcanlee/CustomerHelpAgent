@@ -11,7 +11,7 @@ namespace CustomerHelpAgent.Business.Startup;
 /// <item>必須<b>冪等</b>：每次啟動都會執行，資料已存在時不得重複新增，也不得覆寫使用者後來改過的內容。</item>
 /// <item>注入 Scoped 的 <c>BackendDBContext</c>（與其他 seeder 共用同一個 instance），返回前自行 <c>SaveChangesAsync</c>；
 /// 初始化器會在每個 seeder 之後清空追蹤狀態，不要依賴前一個 seeder 留下的實體。</item>
-/// <item><see cref="Order"/> 不可與其他 seeder 重複（重複時啟動失敗）。內建：10 預設角色、20 support 帳號、30 RBAC 回填、40 匯入舊的 AI 提示詞設定。</item>
+/// <item><see cref="Order"/> 不可與其他 seeder 重複（重複時啟動失敗）。內建：10 預設角色、20 support 帳號、30 RBAC 回填、40 匯入舊的 AI 提示詞設定、50 售後展示示範帳號、60 售後展示示範商品與訂單。</item>
 /// </list>
 /// </summary>
 public interface IDatabaseSeeder

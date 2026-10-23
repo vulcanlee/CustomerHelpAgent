@@ -1,0 +1,190 @@
+@using CustomerHelpAgent.Share.Shop
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (orderItems is null)
+{
+    <div class="shop-loading"><Spin /></div>
+}
+else if (submittedRequestNo is not null)
+{
+    <section class="shop-form" aria-label="售後申請已送出">
+        <article class="shop-card shop-done" role="status">
+            <span class="shop-done-icon" aria-hidden="true"><MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="task_alt" /></span>
+            <h1 class="shop-title">已送出售後申請</h1>
+            <p class="shop-done-no">申請編號 <strong>@submittedRequestNo</strong></p>
+            <p class="shop-hint">客服審核後會更新申請狀態，可以到「我的申請」查看進度。</p>
+            <div class="shop-done-links">
+                <a class="shop-link-button" href="/shop/after-sales">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="list_alt" />
+                    <span>查看我的申請</span>
+                </a>
+                <a class="shop-link-button" href="/shop">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="shopping_bag" />
+                    <span>回到我的訂單</span>
+                </a>
+            </div>
+        </article>
+    </section>
+}
+else
+{
+    @* 刻意保留傳統的多步驟（M2 Agent 的對照組）；也刻意不顯示規則條文與資格判定，由客服審核。 *@
+    <section class="shop-form" aria-label="申請售後服務">
+        <a class="shop-back-link" href="/shop">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="arrow_back" />
+            <span>回到我的訂單</span>
+        </a>
+        <h1 class="shop-title">申請售後服務</h1>
+
+        <ol class="shop-steps">
+            <li class="shop-card shop-step">
+                <h2 class="shop-step-title"><span class="shop-step-no">1</span>選擇訂單商品</h2>
+                @if (orderItems.Count == 0)
+                {
+                    <p class="shop-empty">目前沒有可以申請售後的訂單商品。</p>
+                }
+                else
+                {
+                    <Select TItem="int?" TItemValue="int?" @bind-Value="selectedOrderItemId" @bind-Value:after="OnOrderItemChangedAsync"
+                            Placeholder="請選擇訂單商品" Style="width: 100%;">
+                        @foreach (var item in orderItems)
+                        {
+                            <SelectOption TItem="int?" TItemValue="int?" Value="@((int?)item.OrderItemId)" Label="@item.Label" />
+                        }
+                    </Select>
+                }
+            </li>
+
+            @if (SelectedItem is { } item)
+            {
+                <li class="shop-card shop-step">
+                    <h2 class="shop-step-title"><span class="shop-step-no">2</span>選擇申請類型</h2>
+                    <div class="shop-choices" role="group" aria-label="申請類型">
+                        @foreach (var type in TypeChoices)
+                        {
+                            <button type="button" data-type="@type"
+                                    class="shop-choice @(selectedType == type ? "is-selected" : null)"
+                                    aria-pressed="@(selectedType == type ? "true" : "false")"
+                                    @onclick="() => OnTypeSelectedAsync(type)">
+                                @AfterSalesLabels.TypeText(type)
+                            </button>
+                        }
+                    </div>
+                </li>
+
+                @if (selectedType is { } chosenType)
+                {
+                    <li class="shop-card shop-step">
+                        <h2 class="shop-step-title"><span class="shop-step-no">3</span>填寫@(AfterSalesLabels.TypeText(chosenType))的資料</h2>
+
+                        @if (chosenType == AfterSalesType.SizeExchange)
+                        {
+                            var sizes = TargetSizes(variantOptions, item.Color, item.Size);
+                            <div class="shop-field" data-field="target-size">
+                                <label class="shop-label">想換的尺碼（目前 @item.Size）</label>
+                                @if (sizes.Count == 0)
+                                {
+                                    <p class="shop-empty">這個商品沒有其他尺碼可以選。</p>
+                                }
+                                else
+                                {
+                                    <Select TItem="string" TItemValue="string" @bind-Value="targetSize" @bind-Value:after="OnDetailChangedAsync"
+                                            Placeholder="請選擇尺碼" Style="width: 100%; max-width: 20rem;">
+                                        @foreach (var size in sizes)
+                                        {
+                                            <SelectOption TItem="string" TItemValue="string" Value="@size" Label="@size" />
+                                        }
+                                    </Select>
+                                }
+                            </div>
+                        }
+                        else if (chosenType == AfterSalesType.ColorExchange)
+                        {
+                            var colors = TargetColors(variantOptions, item.Color, item.Size);
+                            <div class="shop-field" data-field="target-color">
+                                <label class="shop-label">想換的顏色（目前 @item.Color）</label>
+                                @if (colors.Count == 0)
+                                {
+                                    <p class="shop-empty">這個商品沒有其他顏色可以選。</p>
+                                }
+                                else
+                                {
+                                    <Select TItem="string" TItemValue="string" @bind-Value="targetColor" @bind-Value:after="OnDetailChangedAsync"
+                                            Placeholder="請選擇顏色" Style="width: 100%; max-width: 20rem;">
+                                        @foreach (var color in colors)
+                                        {
+                                            <SelectOption TItem="string" TItemValue="string" Value="@color" Label="@color" />
+                                        }
+                                    </Select>
+                                }
+                            </div>
+                        }
+
+                        @if (AsksIsWorn(chosenType))
+                        {
+                            <div class="shop-field" data-field="is-worn">
+                                <span class="shop-label">商品是否穿過</span>
+                                <div class="shop-choices" role="group" aria-label="商品是否穿過">
+                                    <button type="button" class="shop-choice @(isWorn == false ? "is-selected" : null)"
+                                            aria-pressed="@(isWorn == false ? "true" : "false")"
+                                            @onclick="() => OnIsWornSelectedAsync(false)">未穿過</button>
+                                    <button type="button" class="shop-choice @(isWorn == true ? "is-selected" : null)"
+                                            aria-pressed="@(isWorn == true ? "true" : "false")"
+                                            @onclick="() => OnIsWornSelectedAsync(true)">已穿過</button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (chosenType == AfterSalesType.QualityIssue)
+                        {
+                            <div class="shop-field" data-field="photos">
+                                <label class="shop-label">問題處的照片</label>
+                                <p class="shop-hint">請拍清楚有問題的地方，最多 3 張，每張 10 MB 以內（jpg、png、webp）。</p>
+                                <InputFile OnChange="OnPhotosSelectedAsync" multiple accept="@ShopPhotoPicker.Accept" />
+                                @if (pendingPhotos.Count > 0)
+                                {
+                                    <ul class="shop-photo-list">
+                                        @foreach (var photo in pendingPhotos)
+                                        {
+                                            <li class="shop-photo">
+                                                <span>@photo.Name（@ShopPhotoPicker.FormatSize(photo.Size)）</span>
+                                                <CrudActionButton Title="移除" Icon="close" Danger OnClick="@(() => RemovePhoto(photo.Id))" />
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                        else if (chosenType == AfterSalesType.ShipmentUrge)
+                        {
+                            <p class="shop-hint">這個類型不需要填寫其他資料，請在下一步說明情況。</p>
+                        }
+                    </li>
+
+                    <li class="shop-card shop-step">
+                        <h2 class="shop-step-title"><span class="shop-step-no">4</span>問題描述</h2>
+                        <TextArea @bind-Value="description" @bind-Value:after="OnDetailChangedAsync" Rows="4" MaxLength="1000"
+                                  Placeholder="請描述遇到的情況，例如尺寸偏小、哪個部位開膠" />
+                    </li>
+
+                    <li class="shop-card shop-step">
+                        <h2 class="shop-step-title"><span class="shop-step-no">5</span>送出申請</h2>
+                        <p class="shop-hint">送出後由客服審核，審核結果會顯示在「我的申請」。</p>
+                        <div>
+                            <Button Type="@ButtonType.Primary" Loading="@submitting" OnClick="OnSubmitClickAsync">送出申請</Button>
+                        </div>
+                    </li>
+                }
+            }
+        </ol>
+    </section>
+}

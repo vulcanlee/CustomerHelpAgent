@@ -20,6 +20,12 @@ public class RolePermissionService
                 MagicObjectHelper.角色_分類清單,
                 MagicObjectHelper.角色_團隊清單,
             ],
+            [
+                MagicObjectHelper.角色_售後服務,
+                MagicObjectHelper.角色_售後審核,
+                MagicObjectHelper.角色_售後規則,
+            ],
+            [MagicObjectHelper.角色_顧客商店],
             [MagicObjectHelper.角色_登出],
         ];
     }

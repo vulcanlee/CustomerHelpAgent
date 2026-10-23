@@ -127,7 +127,7 @@ public sealed class SoftDeletePurgeJob : IScheduledJob
 
         if (inUse > 0)
         {
-            message.Append($"{inUse} 個角色仍被使用者當作主要角色，留到下次。");
+            message.Append($"{inUse} 筆仍在使用（角色仍是使用者的主要角色，或使用者仍有訂單／售後申請），留到下次。");
         }
 
         if (protectedCount > 0)

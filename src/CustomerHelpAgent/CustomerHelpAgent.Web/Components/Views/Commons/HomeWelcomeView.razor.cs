@@ -81,6 +81,17 @@ public partial class HomeWelcomeView
 
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_首頁) == false)
         {
+            // 售後展示的顧客沒有後台首頁權限：登入後一律導到商店（/shop）。
+            // ⚠️ 必須放在這個分支裡、排在首頁權限檢查之後：管理員與展示者兩種權限都有，應留在後台；
+            // 而 MenuPermissionConsistencyTests 以本檔第一個 CheckAccessPage 呼叫比對選單權限。
+            if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_顧客商店))
+            {
+                // 導走之前不渲染首頁框架。
+                isAccessChecked = false;
+                NavigationManager.NavigateTo("/shop");
+                return;
+            }
+
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
             await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/");
             Logger.LogWarning("Home welcome view denied because current user has not this role permission.");

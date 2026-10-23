@@ -21,6 +21,9 @@ public sealed class SidebarMenuService
         [1] = MagicObjectHelper.角色_首頁,
         [2] = MagicObjectHelper.角色_專案管理,
         [21] = MagicObjectHelper.角色_專案項目,
+        [9] = MagicObjectHelper.角色_售後服務,
+        [91] = MagicObjectHelper.角色_售後審核,
+        [92] = MagicObjectHelper.角色_售後規則,
         // 系統管理群組與其下四個子群組（帳號與權限、監控與診斷、AI 管理、系統設定與維運）的權限鍵，刻意不列入
         // RolePermissionService.GetRoleListPermissionAllName()，因此不會種出 Permission 資料列、
         // 任何角色都無法被授予，只有管理員短路能通過。詳見 MagicObjectHelper。

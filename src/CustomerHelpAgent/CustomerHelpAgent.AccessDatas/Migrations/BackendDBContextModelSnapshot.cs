@@ -19,6 +19,180 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                 .UseCollation("Chinese_Taiwan_Stroke_CI_AS")
                 .HasAnnotation("ProductVersion", "10.0.5");
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AfterSalesRequestId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StoredFileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AfterSalesRequestId");
+
+                    b.ToTable("AfterSalesAttachment");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EffectiveTo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RequiresPhoto")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RequiresUnworn")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("WindowDays")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code", "Version")
+                        .IsUnique();
+
+                    b.ToTable("AfterSalesPolicy");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AppliedPolicyId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("CaseKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DecidedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("IsWorn")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequestNo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SalesOrderItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StaffNote")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TargetColor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetSize")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedPolicyId");
+
+                    b.HasIndex("CaseKey");
+
+                    b.HasIndex("CustomerUserId");
+
+                    b.HasIndex("RequestNo")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderItemId");
+
+                    b.ToTable("AfterSalesRequest");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AiCallLog", b =>
                 {
                     b.Property<int>("Id")
@@ -611,6 +785,100 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("Permission");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProcessMetric", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Actor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AfterSalesRequestId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("CaseKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseKey");
+
+                    b.ToTable("ProcessMetric");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Product", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Product");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProductVariant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Size")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Stock")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "Color", "Size")
+                        .IsUnique();
+
+                    b.ToTable("ProductVariant");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Project", b =>
                 {
                     b.Property<int>("Id")
@@ -829,6 +1097,75 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("RoleView");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SalesOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrderNo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OrderedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RecipientName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RecipientPhone")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ShippingAddress")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerUserId");
+
+                    b.HasIndex("OrderNo")
+                        .IsUnique();
+
+                    b.ToTable("SalesOrder");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SalesOrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("SalesOrderItem");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ScheduledJobState", b =>
                 {
                     b.Property<string>("JobName")
@@ -854,6 +1191,64 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.HasKey("JobName");
 
                     b.ToTable("ScheduledJobState");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Shipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Carrier")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ShippedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StatusText")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TrackingNo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("Shipment");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ShipmentEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ShipmentId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShipmentId");
+
+                    b.ToTable("ShipmentEvent");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SystemParameter", b =>
@@ -1120,6 +1515,43 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("UserTeam");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesAttachment", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", "AfterSalesRequest")
+                        .WithMany("Attachments")
+                        .HasForeignKey("AfterSalesRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AfterSalesRequest");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.AfterSalesPolicy", "AppliedPolicy")
+                        .WithMany()
+                        .HasForeignKey("AppliedPolicyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.MyUser", "CustomerUser")
+                        .WithMany()
+                        .HasForeignKey("CustomerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.SalesOrderItem", "SalesOrderItem")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AppliedPolicy");
+
+                    b.Navigation("CustomerUser");
+
+                    b.Navigation("SalesOrderItem");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AnnouncementDismissal", b =>
                 {
                     b.HasOne("CustomerHelpAgent.AccessDatas.Models.Announcement", "Announcement")
@@ -1193,6 +1625,17 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Navigation("MyUser");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProductVariant", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.Product", "Product")
+                        .WithMany("Variants")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProjectFile", b =>
                 {
                     b.HasOne("CustomerHelpAgent.AccessDatas.Models.Project", "Project")
@@ -1221,6 +1664,58 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("RoleView");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SalesOrder", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.MyUser", "CustomerUser")
+                        .WithMany()
+                        .HasForeignKey("CustomerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CustomerUser");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SalesOrderItem", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.SalesOrder", "SalesOrder")
+                        .WithMany("Items")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProductVariant");
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Shipment", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ShipmentEvent", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.Shipment", "Shipment")
+                        .WithMany("Events")
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Shipment");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Team", b =>
@@ -1280,9 +1775,29 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Product", b =>
+                {
+                    b.Navigation("Variants");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Project", b =>
                 {
                     b.Navigation("Files");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.SalesOrder", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Shipment", b =>
+                {
+                    b.Navigation("Events");
                 });
 #pragma warning restore 612, 618
         }

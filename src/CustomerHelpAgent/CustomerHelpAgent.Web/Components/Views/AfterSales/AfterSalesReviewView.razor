@@ -1,0 +1,164 @@
+@using CustomerHelpAgent.Models.Shop
+@using CustomerHelpAgent.Share.Shop
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="after-sales-review-toolbar">
+            <Select TItem="string" TItemValue="string" Value="@statusFilter" ValueChanged="OnStatusFilterChangedAsync"
+                    Style="width: 160px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="狀態：全部" />
+                @foreach (var status in StatusOptions)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@status.ToString()" Label="@AfterSalesLabels.StatusText(status)" />
+                }
+            </Select>
+            <ToolbarIconButton Title="重新整理" Icon="refresh"
+                               OnClick="@(async () => await OnRefreshAsync())" />
+        </div>
+
+        <div class="after-sales-review-table-wrap">
+            <Table TItem="AfterSalesRequestView"
+                   Class="after-sales-review-table"
+                   RemoteDataSource="true"
+                   DataSource="@requests"
+                   OnRowClick="OnRowClickAsync"
+                   RowClassName="@(_ => "after-sales-review-row")"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total">
+                <Column TData="string" DataIndex="@nameof(AfterSalesRequestView.RequestNo)" Title="編號" />
+                <Column TData="string" DataIndex="@nameof(AfterSalesRequestView.CustomerName)" Title="顧客" />
+                <Column TData="string" Title="商品">@ProductText(context)</Column>
+                <Column TData="string" Title="類型">@TypeDetail(context)</Column>
+                <Column TData="string" Title="管道">@AfterSalesLabels.ChannelText(context.Channel)</Column>
+                <Column TData="string" Title="狀態">
+                    <StatusPill Text="@AfterSalesLabels.StatusText(context.Status)" Tone="@ToneOf(context.Status)" />
+                </Column>
+                <Column TData="DateTime" Title="送件時間">@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</Column>
+            </Table>
+        </div>
+    </div>
+
+    @*
+        審核窗：唯讀內容＋客服動作，不含 EditForm（不是表單對話窗）。尺寸在 OverlayStyles.razor 的 .after-sales-review-modal。
+        傳統流程刻意把「訂單」「售後規則」「照片」分開：客服要自己一個一個點開才看得到，每次點開記一筆埋點。
+    *@
+    <Modal Title="@("售後申請審核")"
+           Class="after-sales-review-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="@(() => CloseModal())">
+        @if (current is not null)
+        {
+            <section class="after-sales-review-section" aria-label="申請內容">
+                <h3 class="after-sales-review-heading">申請內容</h3>
+                <dl class="after-sales-review-facts">
+                    <div><dt>申請編號</dt><dd>@current.RequestNo</dd></div>
+                    <div><dt>狀態</dt><dd><StatusPill Text="@AfterSalesLabels.StatusText(current.Status)" Tone="@ToneOf(current.Status)" /></dd></div>
+                    <div><dt>顧客</dt><dd>@current.CustomerName</dd></div>
+                    <div><dt>管道</dt><dd>@AfterSalesLabels.ChannelText(current.Channel)</dd></div>
+                    <div><dt>商品</dt><dd>@ProductText(current)</dd></div>
+                    <div><dt>申請類型</dt><dd>@TypeDetail(current)</dd></div>
+                    <div><dt>是否穿過</dt><dd>@WornText(current.IsWorn)</dd></div>
+                    <div><dt>送件時間</dt><dd>@current.CreatedAt.ToString("yyyy/MM/dd HH:mm")</dd></div>
+                    <div class="after-sales-review-fact-wide"><dt>顧客說明</dt><dd class="after-sales-review-text">@current.Description</dd></div>
+                    <div class="after-sales-review-fact-wide"><dt>客服備註</dt><dd class="after-sales-review-text">@(string.IsNullOrWhiteSpace(current.StaffNote) ? "—" : current.StaffNote)</dd></div>
+                </dl>
+            </section>
+
+            <div class="after-sales-review-reveal">
+                <Button Disabled="@showOrder" OnClick="@(async () => await OnShowOrderAsync())">查看訂單</Button>
+                <Button Disabled="@showPolicy" OnClick="@(async () => await OnShowPolicyAsync())">查看售後規則</Button>
+                <Button Disabled="@showPhotos" OnClick="@(() => OnShowPhotos())">查看照片</Button>
+            </div>
+
+            @if (showOrder)
+            {
+                <section class="after-sales-review-section" aria-label="訂單">
+                    <h3 class="after-sales-review-heading">訂單</h3>
+                    <dl class="after-sales-review-facts">
+                        <div><dt>訂單編號</dt><dd>@current.OrderNo</dd></div>
+                        <div><dt>商品</dt><dd>@ProductText(current)</dd></div>
+                        <div><dt>簽收日</dt><dd>@(current.DeliveredAt?.ToString("yyyy/MM/dd") ?? "尚未簽收")</dd></div>
+                        <div><dt>簽收至今</dt><dd>@DaysSinceDeliveryText</dd></div>
+                    </dl>
+                </section>
+            }
+
+            @if (showPolicy)
+            {
+                <section class="after-sales-review-section" aria-label="售後規則">
+                    <h3 class="after-sales-review-heading">售後規則（送件時套用的版本）</h3>
+                    @if (appliedPolicy is null)
+                    {
+                        <p class="after-sales-review-empty">送件時沒有找到適用的售後規則，請依公司規定人工判斷。</p>
+                    }
+                    else
+                    {
+                        <dl class="after-sales-review-facts">
+                            <div><dt>規則</dt><dd>@appliedPolicy.Title（@appliedPolicy.Code）</dd></div>
+                            <div><dt>版本</dt><dd>v@(appliedPolicy.Version)</dd></div>
+                            <div><dt>生效期間</dt><dd>@appliedPolicy.EffectiveFrom.ToString("yyyy/MM/dd HH:mm") ～ @(appliedPolicy.EffectiveTo?.ToString("yyyy/MM/dd HH:mm") ?? "現行")</dd></div>
+                            <div><dt>來源</dt><dd>@appliedPolicy.Source</dd></div>
+                            <div class="after-sales-review-fact-wide"><dt>條文</dt><dd class="after-sales-review-text">@appliedPolicy.Content</dd></div>
+                        </dl>
+                    }
+                </section>
+            }
+
+            @if (showPhotos)
+            {
+                <section class="after-sales-review-section" aria-label="照片">
+                    <h3 class="after-sales-review-heading">照片</h3>
+                    @if (current.Attachments.Count == 0)
+                    {
+                        <p class="after-sales-review-empty">這筆申請沒有照片。</p>
+                    }
+                    else
+                    {
+                        <ul class="after-sales-review-photos">
+                            @foreach (var photo in current.Attachments)
+                            {
+                                <li>
+                                    <a href="@PhotoUrl(photo)" target="_blank" rel="noopener">
+                                        <img src="@PhotoUrl(photo)" alt="@photo.OriginalFileName" loading="lazy" />
+                                        <span>@photo.OriginalFileName</span>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+
+            @if (current.Status == AfterSalesStatus.Submitted)
+            {
+                <RequirePermission Page="@MagicObjectHelper.角色_售後審核" Action="@PermissionActions.Edit">
+                    <section class="after-sales-review-section" aria-label="處理">
+                        <h3 class="after-sales-review-heading">處理</h3>
+                        <TextArea @bind-Value="staffNote" Rows="3" MaxLength="1000"
+                                  Placeholder="要求補件時必填：寫下需要顧客補充什麼；核准或駁回時可選填" />
+                        <div class="after-sales-review-actions">
+                            <Button Disabled="@busy" OnClick="@(async () => await OnRequestMoreInfoAsync())">要求補件</Button>
+                            <Button Danger Disabled="@busy" OnClick="@(async () => await OnDecideAsync(false))">駁回</Button>
+                            <Button Type="@ButtonType.Primary" Disabled="@busy" OnClick="@(async () => await OnDecideAsync(true))">核准</Button>
+                        </div>
+                    </section>
+                </RequirePermission>
+            }
+        }
+    </Modal>
+}

@@ -21,7 +21,7 @@
     .\Restore-Backup.ps1 -BackupFile D:\Backup\backup-20261004-020000.zip -SitePath C:\inetpub\app
 
 .EXAMPLE
-    .\Restore-Backup.ps1 -BackupFile .\backup-20261004-020000.zip -DatabasePath D:\data\DB -ProjectFilePath D:\data\ProjectFile -ExceptionPath D:\data\Exception -TokenUsagePath D:\data\TokenUsage -AuditContentPath D:\data\AuditContent -DataProtectionKeyPath D:\data\Keys -Yes
+    .\Restore-Backup.ps1 -BackupFile .\backup-20261004-020000.zip -DatabasePath D:\data\DB -ProjectFilePath D:\data\ProjectFile -AfterSalesFilePath D:\data\AfterSalesFile -ExceptionPath D:\data\Exception -TokenUsagePath D:\data\TokenUsage -AuditContentPath D:\data\AuditContent -DataProtectionKeyPath D:\data\Keys -Yes
 #>
 [CmdletBinding()]
 param(
@@ -33,6 +33,7 @@ param(
 
     [string]$DatabasePath,
     [string]$ProjectFilePath,
+    [string]$AfterSalesFilePath,
     [string]$ExceptionPath,
     [string]$TokenUsagePath,
     [string]$AiCallLogPath,
@@ -99,6 +100,7 @@ function Resolve-SettingPath([string]$explicit, [string]$key) {
 $targets = @{
     DatabasePath          = Resolve-SettingPath $DatabasePath 'DatabasePath'
     ProjectFilePath       = Resolve-SettingPath $ProjectFilePath 'ProjectFilePath'
+    AfterSalesFilePath    = Resolve-SettingPath $AfterSalesFilePath 'AfterSalesFilePath'
     ExceptionPath         = Resolve-SettingPath $ExceptionPath 'ExceptionPath'
     TokenUsagePath        = Resolve-SettingPath $TokenUsagePath 'TokenUsagePath'
     AiCallLogPath         = Resolve-SettingPath $AiCallLogPath 'AiCallLogPath'

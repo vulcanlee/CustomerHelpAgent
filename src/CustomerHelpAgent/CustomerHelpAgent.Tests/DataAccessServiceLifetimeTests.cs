@@ -23,6 +23,10 @@ public sealed class DataAccessServiceLifetimeTests
     public static TheoryData<Type> DataAccessServices =>
     [
         typeof(CategoryService),
+        typeof(AfterSalesPolicyService),
+        typeof(ShopOrderService),
+        typeof(AfterSalesRequestService),
+        typeof(ProcessMetricService),
         typeof(TeamService),
         typeof(RoleViewService),
         typeof(ProjectService),

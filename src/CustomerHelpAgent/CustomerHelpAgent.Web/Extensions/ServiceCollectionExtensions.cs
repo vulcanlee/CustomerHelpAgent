@@ -14,6 +14,7 @@ using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Helpers;
+using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Ai;
 using CustomerHelpAgent.Web.Auth;
 using CustomerHelpAgent.Web.Backup;
@@ -78,6 +79,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAiSystemPromptProvider, AiSystemPromptProvider>();
         services.AddScoped<IAiExceptionAnalysisService, AiExceptionAnalysisService>();
         services.AddScoped<IAiHealthProbe, AiHealthProbe>();
+        services.AddScoped<AgentChatClientFactory>();
 
         // 全專案第一個 AddHttpClient。刻意用 **named client** 而非 typed client：
         // 1. AddHttpClient<IAiLogAnalysisService, AiLogAnalysisService>() 會把服務註冊成
@@ -136,6 +138,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDatabaseSeeder, SupportUserSeeder>();
         services.AddScoped<IDatabaseSeeder, RbacBackfillSeeder>();
         services.AddScoped<IDatabaseSeeder, LegacySystemPromptSeeder>();
+        // 售後展示的示範帳號與商品、訂單、規則（DemoSettings:Enabled 時才寫入）。
+        services.AddScoped<IDatabaseSeeder, DemoAccountSeeder>();
+        services.AddScoped<IDatabaseSeeder, DemoCatalogSeeder>();
 
         services.AddScoped<IPermissionChecker, PermissionChecker>();
         services.AddScoped<IRbacWriteService, RbacWriteService>();
@@ -167,6 +172,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SoftDeletePurgeService>();
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
+        services.AddScoped<AfterSalesPolicyService>();
+        services.AddScoped<ShopOrderService>();
+        // 售後申請（1.0.3 起）：照片實體檔一律經 AfterSalesFileStore（含根目錄檢查）；埋點失敗不中斷流程。
+        services.AddScoped<AfterSalesFileStore>();
+        services.AddScoped<AfterSalesRequestService>();
+        services.AddScoped<ProcessMetricService>();
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
         services.AddScoped<TeamRepository>();
@@ -312,6 +323,7 @@ public static class ServiceCollectionExtensions
         services.AddValidatedOptions<AiPricingSettings, AiPricingSettingsValidator>(configuration, AiPricingSettings.SectionName);
         services.AddValidatedOptions<ForwardedHeadersSettings, ForwardedHeadersSettingsValidator>(configuration, ForwardedHeadersSettings.SectionName);
         services.AddValidatedOptions<ScheduledJobSettings, ScheduledJobSettingsValidator>(configuration, ScheduledJobSettings.SectionName);
+        services.AddValidatedOptions<DemoSettings, DemoSettingsValidator>(configuration, DemoSettings.SectionName);
         services.AddOptions<SecuritySettings>().Bind(configuration.GetSection(SecuritySettings.SectionName)).ValidateOnStart();
         services.AddOptions<SwaggerSettings>().Bind(configuration.GetSection(SwaggerSettings.SectionName)).ValidateOnStart();
 

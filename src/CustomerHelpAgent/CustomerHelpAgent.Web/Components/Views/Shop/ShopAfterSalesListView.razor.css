@@ -1,0 +1,146 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。對話窗外框的尺寸在 OverlayStyles.razor 的 .shop-resubmit-modal。 */
+.shop-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.shop-requests {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.shop-requests-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.shop-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.shop-empty {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.shop-request {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.shop-request-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.shop-request-heading {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.shop-request-no {
+    color: var(--shop-text);
+    font-weight: 700;
+}
+
+.shop-request-meta {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+.shop-facts {
+    display: grid;
+    gap: 0.5rem 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    margin: 0;
+}
+
+.shop-fact-wide {
+    grid-column: 1 / -1;
+}
+
+.shop-facts dt {
+    color: var(--shop-muted);
+    font-size: 0.8rem;
+}
+
+.shop-facts dd {
+    color: var(--shop-text);
+    margin: 0;
+    white-space: pre-line;
+}
+
+.shop-request-foot {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.shop-link-button {
+    align-items: center;
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 0.9rem;
+    text-decoration: none;
+}
+
+.shop-link-button:hover,
+.shop-link-button:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+/* 以下在補件對話窗內：自己寫的元素仍帶本檢視的 scope 屬性，所以留在這裡。 */
+.shop-staff-note {
+    background: var(--shop-tint);
+    border-radius: 12px;
+    color: var(--shop-text);
+    margin: 0;
+    padding: 0.6rem 0.9rem;
+    white-space: pre-line;
+}
+
+.shop-photo-list {
+    display: grid;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+}
+
+.shop-photo {
+    align-items: center;
+    background: var(--shop-tint);
+    border-radius: 16px;
+    color: var(--shop-text);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
+}
+
+@media (max-width: 640.98px) {
+    .shop-request {
+        padding: 1rem;
+    }
+}

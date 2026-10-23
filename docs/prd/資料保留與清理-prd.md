@@ -36,7 +36,7 @@
 - **彙總** `Web/DataRetention/DataRetentionOverviewService`（scoped）：組合 `ScheduledJobOverviewService`、各資料服務的 `GetRetentionStatsAsync`、`BackupStore`、`INLogFilePathResolver` 與各保留設定（`IOptionsMonitor<T>.CurrentValue`，含系統參數覆寫）；每列各自 try/catch。
 - **與清理同一個條件**：各服務把清理的 Where 抽成 `private static Expression<Func<T,bool>>`，清理與統計共用；門檻由 `Scheduling/RetentionCutoffs`（本地或 UTC 依資料表）或服務的 `ExpiryThreshold`（Token、AI 對話：當天 0 點往前）計算，清理作業同步改用。
   - 站內通知兩條規則取 Id 聯集，不重複計。
-  - 已刪除資料的數字是「最多」：support、預設角色、仍在使用的角色、還有下屬的部門會被清理留到下次。
+  - 已刪除資料的數字是「最多」：support、預設角色、仍在使用的角色、仍有訂單／售後申請的顧客、還有下屬的部門會被清理留到下次。
   - 系統備份：`max(0, 份數 + 1 − KeepCount)`（下一次備份成功後刪除）。日誌檔：最後修改超過 `NLogRetention.MaxArchiveDays`（30，對照 nlog.config）的檔案數，約略值。
 - **檔案空間** `DirectorySizeProbe`：遞迴加總，略過無權限與 reparse point；各資料夾在背景並行、整體 10 秒上限，超過或出錯顯示「至少 X」；已刪除專案的附件大小由資料庫 `ProjectFile.FileSize` 加總。
 - **立即清理**：先重新計算一次（確認窗用最新數字）→ 紅色確認窗 → `ScheduledJobOverviewService.TryTrigger`（與排程作業頁「立即執行」同一個佇列與作業鎖）→ 稽核。作業停用或總開關關閉時仍可執行一次；保留規則為 0、已在佇列或執行中、找不到作業時停用按鈕並在提示說明原因。進行中每 5 秒自動更新。

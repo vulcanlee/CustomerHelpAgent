@@ -1,8 +1,8 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.17
+- 文件版本：1.18
 - 文件狀態：已實作
-- 現行系統版本：1.0.0
+- 現行系統版本：1.0.3
 - 首次實作版本：0.9.42
 - 最後核對日期：2026/10/23
 
@@ -104,7 +104,7 @@ scoped CSS 連 `::deep` 都打不到。
 
 ## 六、資料來源
 
-0.9.78 起所有動作代碼集中在 `CustomerHelpAgent.Business/Helpers/AuditActions.cs`（0.9.78 時約 55 個，現行 134 個），呼叫點一律引用常數，
+0.9.78 起所有動作代碼集中在 `CustomerHelpAgent.Business/Helpers/AuditActions.cs`（0.9.78 時約 55 個，現行 140 個），呼叫點一律引用常數，
 由 `AuditConventionTests` 守門；0.9.78 新增的事件（分類／團隊／專案增刪改、附件、登出、SSO、自行改密碼、JWT 刷新失敗、
 Blazor 頁面權限拒絕、各頁匯出與維護、自動清理）見 [日誌與例外處理 PRD](日誌與例外處理-prd.md) §6.3 LOG-14。
 **來源 IP（0.9.117 起）** 不由呼叫端傳入：`AuditLogService` 寫入時向 `IClientIpProvider` 取，
@@ -148,6 +148,7 @@ Debug 預設不寫進檔案，要到「日誌等級設定」調到 Debug 才看�
 | `Project.AutoPurge` / `Category.AutoPurge` / `Team.AutoPurge` / `User.AutoPurge` / `Role.AutoPurge` | 排程作業「已刪除資料清理」（0.9.97 起）：每種資料每次一筆彙總，無操作者，`TargetId` 為 `*`，Detail 為 `rows=N; days=D; trigger=T; items=#Id 名稱, …`（上限 1000 字） |
 | `Permission.Denied` | `HasPermissionAttribute`（API 動作級授權被拒）；0.9.78 起 Blazor 頁面權限拒絕也記（`AuthenticationStateHelper.RecordPageAccessDeniedAsync`）|
 | `Project.FileDownload` | `ProjectFileController` |
+| `Shop.Request.Submit` / `Shop.Request.Resubmit` / `Shop.Request.MoreInfo` / `Shop.Request.Decide` / `Shop.Policy.AddVersion` / `Shop.Attachment.Download` | 售後展示（1.0.3 起）：`AfterSalesRequestService`（顧客送件、補件；客服要求補件、核准／駁回）、`AfterSalesPolicyService`（店家新增規則版本）、`AfterSalesFileController`（下載申請照片，成功才記）。Detail 只有編號、類型、狀態等，不含說明、地址、手機 |
 | `LogLevel.Apply` / `LogLevel.Restore` | `LogLevelSettingView` |
 | `LogViewer.AiAnalyze` / `LogViewer.AiAnalyzeExportPdf` | `LogViewerView` |
 | `Audit.Purge` / `Audit.ClearAll` | `AuditLogView`（0.9.42 起）|

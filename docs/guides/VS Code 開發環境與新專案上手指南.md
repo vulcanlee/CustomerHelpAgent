@@ -2,7 +2,7 @@
 
 - 文件版本：3.3
 - 文件狀態：已實作
-- 現行系統版本：1.0.0
+- 現行系統版本：1.0.3
 - 首次實作版本：0.9.1
 - 最後核對日期：2026/10/23
 
@@ -101,12 +101,13 @@ dotnet run --project src/CustomerHelpAgent/CustomerHelpAgent.Web/CustomerHelpAge
 |------|------|----------|
 | `C:\temp\CustomerHelpAgent\DB\BackendDB.db` | SQLite 資料庫 | `SystemSettings:ExternalFileSystem:DatabasePath` |
 | `C:\temp\CustomerHelpAgent\Download` / `Upload` / `ProjectFile` | 檔案上傳與下載目錄 | 同上區段的 `DownloadPath`／`UploadPath`／`ProjectFilePath` |
+| `C:\temp\CustomerHelpAgent\AfterSalesFile` | 售後申請照片（1.0.3 起） | 同上區段的 `AfterSalesFilePath` |
 | `C:\temp\CustomerHelpAgent\Exception` / `TokenUsage` / `AiCallLog` | 例外堆疊、LLM 原始用量、AI 對話紀錄的檔案 | 同上區段的 `ExceptionPath`／`TokenUsagePath`／`AiCallLogPath` |
 | `C:\temp\CustomerHelpAgent\Keys` | Data Protection 金鑰環（登入 Cookie 靠它解密，刪掉等於全站登出） | 同上區段的 `DataProtectionKeyPath` |
 | `C:\temp\CustomerHelpAgent\Backup` | 系統備份 zip（0.9.99 起，含金鑰環） | 同上區段的 `BackupPath` |
 | `C:\temp\Logs\CustomerHelpAgent.Web\` | NLog 日誌 | `NLog:BasePath` + 組件命名空間 |
 
-`ExternalFileSystem` 的十個目錄（0.9.99 起含 `BackupPath`、0.9.131 起含 `AuditContentPath`）若不存在，`Program.cs` 的「系統使用的目錄準備」區段會在啟動時自動建立。
+`ExternalFileSystem` 的十一個目錄（0.9.99 起含 `BackupPath`、0.9.131 起含 `AuditContentPath`、1.0.3 起含 `AfterSalesFilePath`）若不存在，`Program.cs` 的「系統使用的目錄準備」區段會在啟動時自動建立。
 
 ### 3.2 建置注意事項
 
@@ -535,7 +536,7 @@ pwsh ./scripts/New-StarterProject.ps1 `
 | 品牌圖檔 | `wwwroot/images/brand-logo.png`、`wwwroot/favicon.png` 是二進位檔，腳本不會動 —— 規格與作法見 [§7 品牌客製化](#7-品牌客製化圖示圖片產品名稱與說明) |
 | 產品名稱與說明 | `appsettings.json` 的 `SystemSettings:SystemInformation`（`SystemName` / `SystemDescription`）—— 見 [§7.4](#74-更換產品名稱與簡短說明)。`SystemVersion` 腳本已重設為 `1.0.0`，不必再改 |
 | 文件內文 | `docs/**` 與 `readme.md` 裡描述舊系統的敘述句（不只是代號） |
-| 外部目錄路徑 | `ExternalFileSystem` 十個路徑會被換成 `C:\temp\Acme.Erp\...`，確認是你要的位置 |
+| 外部目錄路徑 | `ExternalFileSystem` 十一個路徑會被換成 `C:\temp\Acme.Erp\...`，確認是你要的位置 |
 | 機密 | 用新的 `UserSecretsId` 重新設定一次 User Secrets（見 [§5](#5-機密設定檔user-secrets)） |
 
 即使用了腳本，仍**強烈建議**照 [§8.3 高風險清單](#83-高風險清單) 逐條核對，再跑 [§9 驗證清單](#9-更名後驗證清單)。
@@ -637,7 +638,7 @@ CustomerHelpAgent.slnx                                    → Acme.Erp.slnx
 | 鍵 | 建議值 |
 |----|--------|
 | `SystemSettings:SystemInformation:*` | 產品名稱、簡短說明與版本 —— 完整說明見 [§7.4](#74-更換產品名稱與簡短說明)；版本建議比照腳本重設為 `1.0.0 (當天日期)` |
-| `SystemSettings:ExternalFileSystem:*` | 十個路徑，確認 `C:\temp\Acme.Erp\...` 是你要的 |
+| `SystemSettings:ExternalFileSystem:*` | 十一個路徑，確認 `C:\temp\Acme.Erp\...` 是你要的 |
 | `JwtSettings:Issuer` / `Audience` | `Acme.Erp` / `Acme.Erp.WebApi` |
 | `JwtSettings:SigningKey` | 換成你自己的值；建議直接搬進 User Secrets |
 | `BootstrapSettings:*` | 改掉預設的 `support` / `support` |

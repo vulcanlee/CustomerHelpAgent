@@ -1,0 +1,102 @@
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (isLoading)
+{
+    <div class="shop-loading"><Spin /></div>
+}
+else
+{
+    <section class="shop-detail" aria-label="訂單明細與物流">
+        <a class="shop-back-link" href="/shop">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="arrow_back" />
+            <span>回到我的訂單</span>
+        </a>
+
+        @if (detail is null)
+        {
+            <p class="shop-empty" role="status">找不到這筆訂單</p>
+        }
+        else
+        {
+            var summary = detail.Summary;
+            <h1 class="shop-title">訂單編號 @summary.OrderNo</h1>
+
+            <article class="shop-card">
+                <header class="shop-card-head">
+                    <h2 class="shop-card-title">訂單資訊</h2>
+                    <StatusPill Text="@summary.StatusText" Tone="@(summary.DeliveredAt is null ? StatusTone.Accent : StatusTone.Positive)" />
+                </header>
+                <dl class="shop-facts">
+                    <div><dt>下單日</dt><dd>@summary.OrderedAt.ToString("yyyy/MM/dd")</dd></div>
+                    <div><dt>簽收日</dt><dd>@FormatDate(summary.DeliveredAt, "尚未簽收")</dd></div>
+                    <div><dt>收件人</dt><dd>@detail.RecipientName</dd></div>
+                    <div><dt>收件地址</dt><dd>@detail.ShippingAddress</dd></div>
+                </dl>
+                <ul class="shop-item-list">
+                    @foreach (var item in summary.Items)
+                    {
+                        <li class="shop-item">
+                            <span class="shop-item-name">@item.ProductName</span>
+                            <span class="shop-item-spec">顏色 @item.Color · 尺碼 @item.Size · 數量 @item.Quantity</span>
+                        </li>
+                    }
+                </ul>
+            </article>
+
+            <article class="shop-card">
+                <header class="shop-card-head">
+                    <h2 class="shop-card-title">物流追蹤</h2>
+                    @if (urgedRequestNo is not null)
+                    {
+                        <span class="shop-urged" role="status">已送出催件申請（申請編號 @urgedRequestNo）</span>
+                    }
+                    else if (canUrge)
+                    {
+                        <Button Type="@ButtonType.Primary" Loading="@urging" OnClick="OnUrgeClickAsync">申請催件</Button>
+                    }
+                </header>
+
+                @if (detail.Shipment is null)
+                {
+                    <p class="shop-empty">尚未出貨。</p>
+                }
+                else
+                {
+                    var shipment = detail.Shipment;
+                    <dl class="shop-facts">
+                        <div><dt>物流業者</dt><dd>@shipment.Carrier</dd></div>
+                        <div><dt>追蹤編號</dt><dd>@shipment.TrackingNo</dd></div>
+                        <div><dt>物流狀態</dt><dd>@shipment.StatusText</dd></div>
+                        <div><dt>出貨日</dt><dd>@FormatDate(shipment.ShippedAt, "尚未出貨")</dd></div>
+                    </dl>
+
+                    @if (shipment.Events.Count == 0)
+                    {
+                        <p class="shop-empty">目前沒有物流紀錄。</p>
+                    }
+                    else
+                    {
+                        <ol class="shop-timeline">
+                            @foreach (var shipmentEvent in shipment.Events)
+                            {
+                                <li class="shop-timeline-item">
+                                    <span class="shop-timeline-time">@shipmentEvent.OccurredAt.ToString("yyyy/MM/dd HH:mm")</span>
+                                    <span class="shop-timeline-text">@shipmentEvent.Description</span>
+                                    <span class="shop-timeline-place">@shipmentEvent.Location</span>
+                                </li>
+                            }
+                        </ol>
+                    }
+                }
+            </article>
+        }
+    </section>
+}

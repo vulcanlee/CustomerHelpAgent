@@ -1,0 +1,122 @@
+/* 審核窗內容是本檢視自己的 markup，會帶 scope 屬性，所以寫在這裡；外框尺寸在 OverlayStyles.razor 的 .after-sales-review-modal。 */
+.after-sales-review-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.after-sales-review-table-wrap {
+    overflow-x: auto;
+}
+
+/* 點一下任一列即開審核窗；列由 AntDesign 渲染，需要 ::deep。只改游標，顏色沿用 theme.css 的列 hover。 */
+::deep .after-sales-review-row {
+    cursor: pointer;
+}
+
+.after-sales-review-section {
+    border-top: 1px solid var(--app-line);
+    padding: 0.75rem 0;
+}
+
+.after-sales-review-section:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.after-sales-review-heading {
+    color: var(--app-accent);
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+}
+
+.after-sales-review-facts {
+    display: grid;
+    gap: 0.5rem 1.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+}
+
+.after-sales-review-facts > div {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.after-sales-review-fact-wide {
+    grid-column: 1 / -1;
+}
+
+.after-sales-review-facts dt {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.after-sales-review-facts dd {
+    color: var(--app-text);
+    margin: 0;
+    word-break: break-word;
+}
+
+.after-sales-review-text {
+    white-space: pre-wrap;
+}
+
+.after-sales-review-empty {
+    color: var(--app-muted);
+    margin: 0;
+}
+
+.after-sales-review-reveal,
+.after-sales-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0.5rem 0;
+}
+
+.after-sales-review-actions {
+    justify-content: flex-end;
+    padding-bottom: 0;
+}
+
+.after-sales-review-photos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.after-sales-review-photos a {
+    color: var(--app-text);
+    display: grid;
+    gap: 0.25rem;
+    text-decoration: none;
+    width: 180px;
+}
+
+.after-sales-review-photos img {
+    aspect-ratio: 1 / 1;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    object-fit: cover;
+    width: 100%;
+}
+
+.after-sales-review-photos span {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 640.98px) {
+    .after-sales-review-facts {
+        grid-template-columns: 1fr;
+    }
+}

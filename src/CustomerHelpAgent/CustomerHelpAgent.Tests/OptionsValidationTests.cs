@@ -186,6 +186,20 @@ public sealed class OptionsValidationTests
     public void GoogleOAuth_Disabled_ShouldPassEvenWhenEmpty()
         => AssertValid(new GoogleOAuthSettingsValidator().Validate(null, new GoogleOAuthSettings { Enabled = false }));
 
+    // ---------- DemoSettings ----------
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("demo123")]
+    public void DemoSettings_EnabledWithShortPassword_ShouldFail(string password)
+        => AssertInvalid(
+            new DemoSettingsValidator().Validate(null, new DemoSettings { Enabled = true, DemoUserPassword = password }),
+            "DemoSettings:DemoUserPassword");
+
+    [Fact]
+    public void DemoSettings_Disabled_ShouldPassEvenWhenEmpty()
+        => AssertValid(new DemoSettingsValidator().Validate(null, new DemoSettings { Enabled = false, DemoUserPassword = string.Empty }));
+
     // ---------- ForwardedHeaders ----------
 
     [Theory]
@@ -316,6 +330,7 @@ public sealed class OptionsValidationTests
         paths.DownloadPath = @"C:\temp\app\Download";
         paths.UploadPath = @"C:\temp\app\Upload";
         paths.ProjectFilePath = @"C:\temp\app\ProjectFile";
+        paths.AfterSalesFilePath = @"C:\temp\app\AfterSalesFile";
         paths.ExceptionPath = @"C:\temp\app\Exception";
         paths.TokenUsagePath = @"C:\temp\app\TokenUsage";
         paths.AiCallLogPath = @"C:\temp\app\AiCallLog";

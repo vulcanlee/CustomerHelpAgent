@@ -1,0 +1,11 @@
+@page "/shop/orders/{OrderId:int}"
+@layout ShopLayout
+
+<PageTitle>訂單明細與物流</PageTitle>
+
+<ShopOrderDetailView OrderId="OrderId" />
+
+@code {
+    [Parameter]
+    public int OrderId { get; set; }
+}

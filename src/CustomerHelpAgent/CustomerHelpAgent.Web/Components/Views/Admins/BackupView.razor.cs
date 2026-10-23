@@ -263,6 +263,7 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
         private static string FolderLabel(string settingKey) => settingKey switch
         {
             nameof(ExternalFileSystem.ProjectFilePath) => "附件",
+            nameof(ExternalFileSystem.AfterSalesFilePath) => "售後照片",
             nameof(ExternalFileSystem.ExceptionPath) => "例外堆疊",
             nameof(ExternalFileSystem.TokenUsagePath) => "Token 原始檔",
             nameof(ExternalFileSystem.AuditContentPath) => "稽核內容",

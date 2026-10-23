@@ -1,0 +1,126 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.shop-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.shop-orders {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.shop-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.shop-empty {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.shop-order-card {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.shop-order-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.shop-order-heading {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.shop-order-no {
+    color: var(--shop-text);
+    font-weight: 700;
+}
+
+.shop-order-meta {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+.shop-item-list {
+    display: grid;
+    gap: 0.75rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.shop-item {
+    align-items: center;
+    background: var(--shop-tint);
+    border-radius: 16px;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+}
+
+.shop-item-info {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.shop-item-name {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
+.shop-item-spec {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+.shop-item-action,
+.shop-order-link {
+    align-items: center;
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    display: inline-flex;
+    flex-shrink: 0;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 0.9rem;
+    text-decoration: none;
+}
+
+.shop-item-action:hover,
+.shop-item-action:focus-visible,
+.shop-order-link:hover,
+.shop-order-link:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+.shop-order-foot {
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 640.98px) {
+    .shop-order-card {
+        padding: 1rem;
+    }
+
+    .shop-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

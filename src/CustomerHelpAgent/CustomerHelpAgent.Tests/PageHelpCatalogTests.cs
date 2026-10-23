@@ -31,9 +31,22 @@ public sealed class PageHelpCatalogTests
         ["/Auths/ResetPassword"] = "NoFooterLayout 重設密碼頁，沒有頂欄",
         ["/Auths/RefreshSession"] = "換發 Cookie 的轉導頁，停留時間趨近於零",
         ["/Auths/TwoFactor"] = "NoFooterLayout 兩步驟驗證第二步，沒有頂欄",
+        ["/shop"] = "顧客商店版面沒有頂欄操作說明按鈕",
+        ["/shop/orders/{OrderId:int}"] = "顧客商店版面沒有頂欄操作說明按鈕",
+        ["/shop/after-sales/new"] = "顧客商店版面沒有頂欄操作說明按鈕",
+        ["/shop/after-sales"] = "顧客商店版面沒有頂欄操作說明按鈕",
     };
 
     private static readonly string[] UnfinishedMarkers = ["TODO", "TBD", "待補", "（略）", "(略)"];
+
+    /// <summary>含未完成標記字樣、但其實是畫面上的正式用語（售後申請狀態「待補件」），比對前先拿掉。</summary>
+    private static readonly string[] DomainTermsContainingMarkers = ["待補件"];
+
+    private static string? FindUnfinishedMarker(string markdown)
+    {
+        var text = DomainTermsContainingMarkers.Aggregate(markdown, (current, term) => current.Replace(term, string.Empty, StringComparison.Ordinal));
+        return UnfinishedMarkers.FirstOrDefault(x => text.Contains(x, StringComparison.OrdinalIgnoreCase));
+    }
 
     [Fact]
     public void EveryPageRoute_IsEitherInCatalog_OrExplicitlyExcluded()
@@ -165,7 +178,7 @@ public sealed class PageHelpCatalogTests
                     failures.Add($"{name} / {section.Heading}：僅 {length} 字（至少 {minimumLength}）");
                 }
 
-                var hit = UnfinishedMarkers.FirstOrDefault(x => section.Markdown.Contains(x, StringComparison.OrdinalIgnoreCase));
+                var hit = FindUnfinishedMarker(section.Markdown);
                 if (hit is not null)
                 {
                     failures.Add($"{name} / {section.Heading}：含未完成標記「{hit}」");
@@ -229,7 +242,7 @@ public sealed class PageHelpCatalogTests
                 failures.Add($"{name}：下列項目過短（至少 {minimumBulletLength} 字）：{string.Join('、', thin)}");
             }
 
-            var hit = UnfinishedMarkers.FirstOrDefault(x => preamble.Contains(x, StringComparison.OrdinalIgnoreCase));
+            var hit = FindUnfinishedMarker(preamble);
             if (hit is not null)
             {
                 failures.Add($"{name}：前言含未完成標記「{hit}」");

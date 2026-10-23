@@ -1,0 +1,12 @@
+@page "/shop/after-sales/new"
+@layout ShopLayout
+
+<PageTitle>申請售後服務</PageTitle>
+
+<ShopAfterSalesFormView OrderItemId="OrderItemId" />
+
+@code {
+    /// <summary>從「我的訂單」帶入（?orderItemId=…）；不是本人的商品由檢視忽略。</summary>
+    [SupplyParameterFromQuery]
+    public int? OrderItemId { get; set; }
+}

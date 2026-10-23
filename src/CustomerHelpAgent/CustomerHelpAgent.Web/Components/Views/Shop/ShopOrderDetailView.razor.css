@@ -1,0 +1,164 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.shop-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.shop-detail {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.shop-back-link {
+    align-items: center;
+    color: var(--shop-accent);
+    display: inline-flex;
+    font-weight: 600;
+    gap: 0.35rem;
+    justify-self: start;
+    text-decoration: none;
+}
+
+.shop-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.shop-empty {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.shop-card {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.shop-card-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.shop-card-title {
+    color: var(--shop-text);
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.shop-urged {
+    color: var(--shop-accent);
+    font-weight: 600;
+}
+
+.shop-facts {
+    display: grid;
+    gap: 0.5rem 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    margin: 0;
+}
+
+.shop-facts dt {
+    color: var(--shop-muted);
+    font-size: 0.8rem;
+}
+
+.shop-facts dd {
+    color: var(--shop-text);
+    margin: 0;
+}
+
+.shop-item-list {
+    display: grid;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.shop-item {
+    background: var(--shop-tint);
+    border-radius: 16px;
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.65rem 1rem;
+}
+
+.shop-item-name {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
+.shop-item-spec {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+/* 物流時間軸：左側一條線，每個事件一個圓點。 */
+.shop-timeline {
+    display: grid;
+    gap: 1rem;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 1.25rem;
+    position: relative;
+}
+
+.shop-timeline::before {
+    background: var(--shop-line);
+    bottom: 0.25rem;
+    content: "";
+    left: 0.3rem;
+    position: absolute;
+    top: 0.25rem;
+    width: 2px;
+}
+
+.shop-timeline-item {
+    display: grid;
+    gap: 0.15rem;
+    position: relative;
+}
+
+.shop-timeline-item::before {
+    background: var(--shop-accent);
+    border-radius: var(--shop-radius-pill);
+    content: "";
+    height: 0.6rem;
+    left: -1.2rem;
+    position: absolute;
+    top: 0.35rem;
+    width: 0.6rem;
+}
+
+.shop-timeline-time {
+    color: var(--shop-muted);
+    font-size: 0.8rem;
+}
+
+.shop-timeline-text {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
+.shop-timeline-place {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+@media (max-width: 640.98px) {
+    .shop-card {
+        padding: 1rem;
+    }
+}

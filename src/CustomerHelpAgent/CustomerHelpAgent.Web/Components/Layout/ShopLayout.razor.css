@@ -1,0 +1,133 @@
+/* 顧客商店版面。顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.shop-page {
+    background: var(--shop-page);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.shop-topbar {
+    align-items: center;
+    background: var(--shop-surface);
+    border-bottom: 1px solid var(--shop-line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    padding: 0.85rem 1.5rem;
+    position: sticky;
+    top: 0;
+    /* 高於 AntDesign 表格固定欄（2～4），低於 Modal／Notification（1000+），見速查表 §6.2。 */
+    z-index: 20;
+}
+
+.shop-brand {
+    align-items: center;
+    color: var(--shop-text);
+    display: inline-flex;
+    font-size: 1.1rem;
+    font-weight: 800;
+    gap: 0.5rem;
+    text-decoration: none;
+}
+
+.shop-brand-icon {
+    color: var(--shop-accent);
+    display: inline-flex;
+}
+
+.shop-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* NavLink 渲染的 <a> 是本元件的子元件輸出，要用 ::deep 才拿得到 scope。 */
+.shop-nav ::deep .shop-nav-link {
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-muted);
+    font-weight: 600;
+    padding: 0.4rem 0.95rem;
+    text-decoration: none;
+}
+
+.shop-nav ::deep .shop-nav-link:hover,
+.shop-nav ::deep .shop-nav-link:focus-visible {
+    color: var(--shop-accent);
+}
+
+.shop-nav ::deep .shop-nav-link.active {
+    background: var(--shop-accent-soft);
+    color: var(--shop-accent);
+}
+
+.shop-user {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.shop-user-name {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
+.shop-user-link {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: 0.35rem;
+    padding: 0.3rem 0.85rem;
+    text-decoration: none;
+}
+
+.shop-user-link:hover,
+.shop-user-link:focus-visible {
+    border-color: var(--shop-accent);
+    color: var(--shop-accent);
+}
+
+.shop-content {
+    flex: 1 1 auto;
+    margin: 0 auto;
+    max-width: 1040px;
+    padding: 1.5rem 1rem 3rem;
+    width: 100%;
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+@media (max-width: 640.98px) {
+    .shop-topbar {
+        padding: 0.75rem 1rem;
+    }
+
+    .shop-user {
+        margin-left: 0;
+    }
+}

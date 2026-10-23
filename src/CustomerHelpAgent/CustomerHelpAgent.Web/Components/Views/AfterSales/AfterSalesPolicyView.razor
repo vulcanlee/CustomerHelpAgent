@@ -1,0 +1,106 @@
+@using CustomerHelpAgent.Models.Shop
+@using CustomerHelpAgent.Share.Shop
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="after-sales-policy-toolbar">
+            <ToolbarIconButton Title="重新整理" Icon="refresh"
+                               OnClick="@(async () => await OnRefreshAsync())" />
+        </div>
+
+        <div class="alert alert-info after-sales-policy-alert" role="alert">
+            規則不就地修改：每次調整都是「新增版本」，舊版本立即失效但保留下來，已送出的申請仍看得到當時套用的那一版。
+        </div>
+
+        <div class="after-sales-policy-table-wrap">
+            <Table TItem="AfterSalesPolicyModel"
+                   Class="after-sales-policy-table"
+                   DataSource="@policies"
+                   PageSize="@MagicObjectHelper.PageSize">
+                <Column TData="string" DataIndex="@nameof(AfterSalesPolicyModel.Code)" Title="代碼" />
+                <Column TData="string" DataIndex="@nameof(AfterSalesPolicyModel.Title)" Title="標題" />
+                <Column TData="string" Title="類型">@AfterSalesLabels.TypeText(context.Type)</Column>
+                <Column TData="string" DataIndex="@nameof(AfterSalesPolicyModel.Category)" Title="適用類別" />
+                <Column TData="string" Title="版本">v@(context.Version)</Column>
+                <Column TData="string" Title="申請期限">@(context.WindowDays is { } days ? $"簽收後 {days} 天" : "不限")</Column>
+                <Column TData="string" Title="條件">@ConditionText(context)</Column>
+                <Column TData="string" Title="生效時間">@context.EffectiveFrom.ToString("yyyy/MM/dd HH:mm")</Column>
+                <Column TData="string" Title="失效時間">@(context.EffectiveTo?.ToString("yyyy/MM/dd HH:mm") ?? "—")</Column>
+                <Column TData="string" Title="狀態">
+                    <StatusPill Text="@(IsExpired(context) ? "已失效" : "現行")"
+                                Tone="@(IsExpired(context) ? StatusTone.Muted : StatusTone.Positive)" />
+                </Column>
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    @if (!IsExpired(context))
+                    {
+                        <RequirePermission Page="@MagicObjectHelper.角色_售後規則" Action="@PermissionActions.Create">
+                            <CrudActionButton Title="新增版本" Icon="post_add"
+                                              OnClick="@(() => OnAddVersion(context))" />
+                        </RequirePermission>
+                    }
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    @*
+        表單對話窗，規範見 docs/architecture/對話窗 UI 設計規範.md。
+        ⚠️ EditForm 上絕不可掛鍵盤事件（§6.3，ModalKeyboardConventionTests 守門）。
+    *@
+    <Modal Title="@modalTitle"
+           Class="form-modal after-sales-policy-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("新增版本")"
+           CancelText="@("取消")"
+           OnOk="OnModalOkAsync"
+           OnCancel="OnModalCancelAsync">
+        <EditForm Model="@draft" Context="editContext">
+            <AntDesign.Form TModel="AfterSalesPolicyModel" Model="@draft" Layout="FormLayout.Vertical" Context="formContext">
+                <FormSection Title="規則" Hint="代碼、類型與適用類別沿用目前的版本，不能修改">
+                    <FormItem Label="代碼">
+                        <span>@draft.Code（以 v@(draft.Version) 為基礎）</span>
+                    </FormItem>
+                    <FormItem Label="類型與適用類別">
+                        <span>@AfterSalesLabels.TypeText(draft.Type) · @draft.Category</span>
+                    </FormItem>
+                    <FormItem Label="標題" Required>
+                        <Input @bind-Value="draft.Title" MaxLength="100" Placeholder="請輸入規則標題" />
+                    </FormItem>
+                    <FormItem Label="來源" Required>
+                        <Input @bind-Value="draft.Source" MaxLength="200" Placeholder="例如：售後服務說明（2026 年版）" />
+                    </FormItem>
+                    <FormItem Label="申請期限（簽收後天數）">
+                        <AntDesign.InputNumber TValue="int?" @bind-Value="draft.WindowDays" Min="1" Max="365" Step="1"
+                                               Placeholder="留空表示不限" Style="width: 100%;" />
+                    </FormItem>
+                    <FormItem Label="條件">
+                        <Space>
+                            <SpaceItem>
+                                <Checkbox Checked="@draft.RequiresUnworn" CheckedChanged="@(value => draft.RequiresUnworn = value)">商品須未穿著</Checkbox>
+                            </SpaceItem>
+                            <SpaceItem>
+                                <Checkbox Checked="@draft.RequiresPhoto" CheckedChanged="@(value => draft.RequiresPhoto = value)">須附照片</Checkbox>
+                            </SpaceItem>
+                        </Space>
+                    </FormItem>
+                    <FormItem Label="條文" Required Class="form-field-full">
+                        <TextArea @bind-Value="draft.Content" Rows="6" MaxLength="4000" Placeholder="請輸入給顧客與客服看的規則條文" />
+                    </FormItem>
+                </FormSection>
+            </AntDesign.Form>
+        </EditForm>
+    </Modal>
+}

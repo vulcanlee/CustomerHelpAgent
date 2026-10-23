@@ -119,6 +119,20 @@
     --app-radius-control: 14px;
     --app-radius-pill: 999px;
     --app-ease-jelly: cubic-bezier(0.2, 0.8, 0.3, 1.3);
+
+    /* ── 顧客商店版面（售後展示 ShopLayout 與 Views/Shop）──
+       別名層，與 --ov-*／--login-* 相同：一律指向 --app-*，不放字面值。 */
+    --shop-page: var(--app-page);
+    --shop-surface: var(--app-card);
+    --shop-tint: var(--app-tint);
+    --shop-line: var(--app-line);
+    --shop-text: var(--app-text);
+    --shop-muted: var(--app-muted);
+    --shop-accent: var(--app-accent);
+    --shop-accent-soft: var(--app-accent-soft);
+    --shop-shadow: var(--app-shadow);
+    --shop-radius-card: var(--app-radius-card);
+    --shop-radius-pill: var(--app-radius-pill);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -42,6 +42,7 @@ public sealed class SystemBackupTests : IDisposable
         var paths = settings.ExternalFileSystem;
         paths.DatabasePath = Dir("DB");
         paths.ProjectFilePath = Dir("ProjectFile");
+        paths.AfterSalesFilePath = Dir("AfterSalesFile");
         paths.ExceptionPath = Dir("Exception");
         paths.TokenUsagePath = Dir("TokenUsage");
         paths.AiCallLogPath = Dir("AiCallLog");
@@ -59,6 +60,8 @@ public sealed class SystemBackupTests : IDisposable
         File.WriteAllText(Path.Combine(paths.ProjectFilePath, "a.txt"), "attachment");
         Directory.CreateDirectory(Path.Combine(paths.ProjectFilePath, "2026", "10"));
         File.WriteAllText(Path.Combine(paths.ProjectFilePath, "2026", "10", "b.pdf"), "nested attachment");
+        Directory.CreateDirectory(Path.Combine(paths.AfterSalesFilePath, "2026", "10"));
+        File.WriteAllText(Path.Combine(paths.AfterSalesFilePath, "2026", "10", "photo.jpg"), "after-sales photo");
         File.WriteAllText(Path.Combine(paths.ExceptionPath, "stack.txt"), "stack");
         File.WriteAllText(Path.Combine(paths.TokenUsagePath, "usage.json"), "{}");
         File.WriteAllText(Path.Combine(paths.DataProtectionKeyPath, "key-1.xml"), "<key/>");
@@ -102,9 +105,13 @@ public sealed class SystemBackupTests : IDisposable
         Assert.True(Convert.ToInt32(Scalar(snapshot, "SELECT COUNT(*) FROM AuditLog")) >= 50);
 
         Assert.Equal(
-            new[] { "AuditContentPath", "DataProtectionKeyPath", "ExceptionPath", "ProjectFilePath", "TokenUsagePath" },
+            new[] { "AfterSalesFilePath", "AuditContentPath", "DataProtectionKeyPath", "ExceptionPath", "ProjectFilePath", "TokenUsagePath" },
             manifest.Folders.Select(x => x.SettingKey).Order().ToArray());
         Assert.True(File.Exists(Path.Combine(extracted, "files", "ProjectFile", "2026", "10", "b.pdf")));
+        Assert.True(File.Exists(Path.Combine(extracted, "files", "AfterSalesFile", "2026", "10", "photo.jpg")));
+        var afterSalesFolder = manifest.Folders.Single(x => x.SettingKey == "AfterSalesFilePath");
+        Assert.Equal("files/AfterSalesFile", afterSalesFolder.Entry);
+        Assert.Equal(1, afterSalesFolder.FileCount);
         Assert.True(File.Exists(Path.Combine(extracted, "files", "Keys", "key-1.xml")));
         Assert.True(File.Exists(Path.Combine(extracted, "files", "AuditContent", "202610", "diff.txt")));
         Assert.Equal(2, manifest.Folders.Single(x => x.SettingKey == "ProjectFilePath").FileCount);
@@ -278,6 +285,7 @@ public sealed class SystemBackupTests : IDisposable
         nameof(ExternalFileSystem.DatabasePath), nameof(ExternalFileSystem.DownloadPath), nameof(ExternalFileSystem.UploadPath),
         nameof(ExternalFileSystem.ProjectFilePath), nameof(ExternalFileSystem.ExceptionPath), nameof(ExternalFileSystem.TokenUsagePath),
         nameof(ExternalFileSystem.AiCallLogPath), nameof(ExternalFileSystem.AuditContentPath), nameof(ExternalFileSystem.DataProtectionKeyPath),
+        nameof(ExternalFileSystem.AfterSalesFilePath),
     ];
 
     [Theory]
@@ -399,6 +407,7 @@ public sealed class SystemBackupTests : IDisposable
         DownloadPath = @"C:\data\app\Download",
         UploadPath = @"C:\data\app\Upload",
         ProjectFilePath = @"C:\data\app\ProjectFile",
+        AfterSalesFilePath = @"C:\data\app\AfterSalesFile",
         ExceptionPath = @"C:\data\app\Exception",
         TokenUsagePath = @"C:\data\app\TokenUsage",
         AiCallLogPath = @"C:\data\app\AiCallLog",

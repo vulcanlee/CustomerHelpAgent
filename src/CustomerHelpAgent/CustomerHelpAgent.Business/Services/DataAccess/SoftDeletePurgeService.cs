@@ -31,7 +31,7 @@ public sealed class SoftDeletePurgeTypeResult(string entityType)
     /// <summary>候選之後被還原、已被手動永久刪除、或刪除時版本號不符。</summary>
     public int Skipped { get; set; }
 
-    /// <summary>角色仍被使用者（含尚未到期的已刪除使用者）當作主要角色，留到下次。</summary>
+    /// <summary>角色仍被使用者（含尚未到期的已刪除使用者）當作主要角色，或使用者仍有訂單／售後申請，留到下次。</summary>
     public int InUse { get; set; }
 
     /// <summary>support 帳號與「預設角色」永遠不自動刪除。</summary>
@@ -131,9 +131,10 @@ public class SoftDeletePurgeService
             nameof(Team) => PurgeTypeAsync<Team>(result, nameof(Team), cutoffLocal, x => x.Id, x => x.Name,
                 isProtected: null, isInUse: IsTeamParentOfAnyAsync, include: null, attachmentsOf: null, order: DeepestTeamsFirstAsync, cancellationToken),
 
+            // 售後示範（M1 起）：仍有訂單或售後申請的顧客不能刪（業務紀錄、外鍵 Restrict，不連帶刪除），留到下次。
             nameof(MyUser) => PurgeTypeAsync<MyUser>(result, nameof(MyUser), cutoffLocal, x => x.Id, x => x.Account,
                 isProtected: x => string.Equals(x.Account, bootstrapSettings.SupportAccount, StringComparison.OrdinalIgnoreCase),
-                isInUse: null, include: null, attachmentsOf: null, order: null, cancellationToken),
+                isInUse: IsUserReferencedByShopRecordsAsync, include: null, attachmentsOf: null, order: null, cancellationToken),
 
             nameof(RoleView) => PurgeTypeAsync<RoleView>(result, nameof(RoleView), cutoffLocal, x => x.Id, x => x.Name,
                 isProtected: x => x.Name == MagicObjectHelper.預設角色,
@@ -151,7 +152,7 @@ public class SoftDeletePurgeService
 
     /// <summary>
     /// 五種資料各自的已刪除筆數、最早的刪除時間與超過 <paramref name="cutoffLocal"/>（本地時間；null＝不自動清理）的筆數。
-    /// ⚠️ 過期筆數是「最多」：support 帳號、預設角色、仍在使用的角色、還有下屬的部門會被 <see cref="PurgeExpiredAsync"/> 留到下次。
+    /// ⚠️ 過期筆數是「最多」：support 帳號、預設角色、仍在使用的角色、仍有訂單／售後申請的顧客、還有下屬的部門會被 <see cref="PurgeExpiredAsync"/> 留到下次。
     /// </summary>
     public async Task<SoftDeleteRetentionStats> GetRetentionStatsAsync(DateTime? cutoffLocal)
     {
@@ -336,6 +337,14 @@ public class SoftDeletePurgeService
         }
 
         return candidates.OrderByDescending(x => DepthOf(x.Id)).ThenBy(x => x.Id).ToList();
+    }
+
+    /// <summary>使用者仍是訂單或售後申請的顧客（兩者的 <c>CustomerUserId</c> 都是 Restrict 外鍵）。</summary>
+    private async Task<bool> IsUserReferencedByShopRecordsAsync(int userId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.SalesOrder.AnyAsync(x => x.CustomerUserId == userId)
+            || await context.AfterSalesRequest.AnyAsync(x => x.CustomerUserId == userId);
     }
 
     /// <summary>任何使用者（含已刪除、尚未到期的）仍以這個角色為主要角色。外鍵 Restrict 連已刪除的使用者都算。</summary>

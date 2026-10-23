@@ -274,6 +274,45 @@ public sealed class SoftDeletePurgeTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ExpiredCustomerWithOrdersOrAfterSalesRequests_ShouldBeInUse_AndOtherExpiredUsersAreStillPurged()
+    {
+        // 訂單與售後申請是業務紀錄（外鍵 Restrict，不連帶刪除）：顧客留到下次，不可讓整批使用者清除中止。
+        await InitializeAsync();
+        await using (var db = NewContext())
+        {
+            var buyer = NewUser("buyer", Expired);
+            var requester = NewUser("requester", Expired);
+            db.MyUser.AddRange(buyer, requester);
+            var variant = new ProductVariant { Product = new Product { Code = "P1", Name = "跑鞋", Category = "Shoes", Price = 1m }, Color = "黑", Size = "26" };
+            db.ProductVariant.Add(variant);
+            await db.SaveChangesAsync();
+            var order = new SalesOrder
+            {
+                OrderNo = "A1",
+                CustomerUserId = buyer.Id,
+                RecipientName = "王小明",
+                ShippingAddress = "台北市",
+                RecipientPhone = "0912345678",
+                Items = [new SalesOrderItem { ProductVariantId = variant.Id, Quantity = 1, UnitPrice = 1m }],
+            };
+            db.SalesOrder.Add(order);
+            await db.SaveChangesAsync();
+            db.AfterSalesRequest.Add(new AfterSalesRequest { RequestNo = "AS1", CustomerUserId = requester.Id, SalesOrderItemId = order.Items[0].Id, Description = "尺寸偏小" });
+            db.MyUser.Add(NewUser("plain", Expired));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Service().PurgeExpiredAsync(Cutoff, default);
+
+        var users = Type(result, "MyUser");
+        Assert.False(users.Failed);
+        Assert.Equal(2, users.InUse);
+        Assert.Equal("plain", Assert.Single(users.Removed).Name);
+        await using var verify = NewContext();
+        Assert.Equal(["buyer", "requester"], (await All<MyUser>(verify)).Select(x => x.Account).Order().ToArray());
+    }
+
+    [Fact]
     public async Task RoleAssignedToSomeoneJustBeforeItsDelete_ShouldBeInUse_AndTheNextRoleIsStillPurged()
     {
         await InitializeAsync();

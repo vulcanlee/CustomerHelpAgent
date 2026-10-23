@@ -1,8 +1,8 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.57
+- 文件版本：6.59
 - 文件狀態：維護中
-- 現行系統版本：1.0.1
+- 現行系統版本：1.0.3
 - 首次實作版本：0.2.8
 - 最後核對日期：2026/10/23
 
@@ -16,7 +16,7 @@
 |------|----------|------|
 | [`architecture/`](architecture/) | 系統架構、資料模型、API / DTO 設計規範、開發慣例 | 開發慣例速查、架構總覽、資料模型、Web API 設計慣例、API Versioning |
 | [`security/`](security/) | 認證、授權、登入、密碼與機密金鑰機制 | 認證授權、Google OAuth2、記住我、密碼儲存 |
-| [`features/`](features/) | 個別功能機制說明 | 腳手架總覽（含 FAQ 與名詞附錄）、分散式快取、檔案上傳、健康監控、AI 日誌／例外分析 |
+| [`features/`](features/) | 個別功能機制說明 | 腳手架總覽（含 FAQ 與名詞附錄）、分散式快取、檔案上傳、健康監控、AI 日誌／例外分析、售後 Agent 示範系統 |
 | [`guides/`](guides/) | 開發 / 操作教學、how-to、流程指南 | VS Code 上手指南、新 CRUD 頁面、新專案啟動、EFCore、測試 |
 | [`operations/`](operations/) | 部署、維運、設定檔、上線檢查、CI/CD | 維護規範、部署安全清單、日誌與設定檔、CI-CD |
 | [`prd/`](prd/) | 產品需求文件（功能 PRD）| PRD 主控台、各能力 PRD |
@@ -50,6 +50,7 @@
 - [系統健康監控](features/系統健康監控.md)
 - [AI 日誌分析](features/AI日誌分析.md)
 - [AI 例外分析](features/AI例外分析.md)
+- [售後 Agent 示範系統（M0 計費接軌、M1 傳統流程已實作）](features/售後Agent示範系統.md)
 
 ### guides — 開發與操作指南
 - [VS Code 開發環境與新專案上手指南](guides/VS%20Code%20開發環境與新專案上手指南.md)
@@ -103,8 +104,9 @@
 - [稽核紀錄 PRD](prd/稽核紀錄-prd.md)
 - [寄信服務 PRD](prd/寄信服務-prd.md)
 - [日誌與例外處理 PRD（全系統共用規範）](prd/日誌與例外處理-prd.md)
-- [售後 Agent 展示系統設計（規劃中）](prd/售後Agent展示系統-設計.md)
+- [售後 Agent 展示系統設計（部分實作：M0、M1）](prd/售後Agent展示系統-設計.md)
 - [售後 Agent 示範系統企劃書（對外版，規劃中）](prd/售後Agent示範系統企劃書.md)
 - [售後 Agent 示範系統企劃規劃說明書（內部版，規劃中）](prd/售後Agent示範系統企劃規劃說明書.md)
+- [售後 Agent 展示系統 M0＋M1 實作計畫（已完成）](prd/售後Agent展示系統-M0M1實作計畫.md)
 
 ### changelog — 變更紀錄

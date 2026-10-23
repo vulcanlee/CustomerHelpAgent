@@ -102,6 +102,14 @@ public class MagicObjectHelper
     public const string 角色_團隊清單 = "團隊清單";
     public const string 角色_登出 = "登出";
 
+    /// <summary>售後展示：顧客端（我的訂單、申請售後、我的申請）。</summary>
+    public const string 角色_顧客商店 = "顧客商店";
+
+    /// <summary>售後展示：客服／店家端的群組。</summary>
+    public const string 角色_售後服務 = "售後服務";
+    public const string 角色_售後審核 = "售後審核";
+    public const string 角色_售後規則 = "售後規則管理";
+
     /// <summary>
     /// 監控與診斷群組（0.9.113 前名為「統計與分析」）。刻意不列入 <c>RolePermissionService.GetRoleListPermissionAllName()</c>：
     /// 不種 Permission 資料列、角色矩陣不顯示、任何角色都無法被授予；
@@ -130,6 +138,11 @@ public class MagicObjectHelper
     /// <summary>「系統設定與維運」子群組（0.9.113 起）的管理員專屬頁面；不授予任何角色的機制同 <see cref="角色_監控與診斷"/>。</summary>
     public const string 角色_排程作業 = "排程作業";
     public const string 使用者角色 = "使用者角色";
+
+    /// <summary>售後展示的示範角色名稱（<c>DemoAccountSeeder</c> 依名稱建立）。</summary>
+    public const string 顧客角色 = "顧客";
+    public const string 客服角色 = "客服人員";
+    public const string 店家角色 = "店家管理者";
 
     #endregion
 

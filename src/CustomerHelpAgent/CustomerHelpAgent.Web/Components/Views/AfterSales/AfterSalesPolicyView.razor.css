@@ -1,0 +1,16 @@
+.after-sales-policy-toolbar {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.after-sales-policy-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+/* 欄位多，窄螢幕讓表格自己橫向捲動而不是把整頁撐寬。 */
+.after-sales-policy-table-wrap {
+    overflow-x: auto;
+}

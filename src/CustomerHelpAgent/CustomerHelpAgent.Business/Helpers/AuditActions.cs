@@ -302,6 +302,17 @@ public static class AuditActions
         public const string Delete = "Backup.Delete";
     }
 
+    /// <summary>售後展示：顧客送出／補件、客服要求補件與審核、店家新增規則版本、下載申請照片。</summary>
+    public static class Shop
+    {
+        public const string RequestSubmit = "Shop.Request.Submit";
+        public const string RequestResubmit = "Shop.Request.Resubmit";
+        public const string RequestMoreInfo = "Shop.Request.MoreInfo";
+        public const string RequestDecide = "Shop.Request.Decide";
+        public const string PolicyAddVersion = "Shop.Policy.AddVersion";
+        public const string AttachmentDownload = "Shop.Attachment.Download";
+    }
+
     /// <summary>「系統參數」頁的修改與還原（0.9.98 起）。Detail 為 <c>key=…; old=…(來源); new=…(來源)</c>。</summary>
     public static class SystemParameter
     {

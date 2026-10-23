@@ -1,0 +1,185 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.shop-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.shop-form {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.shop-back-link {
+    align-items: center;
+    color: var(--shop-accent);
+    display: inline-flex;
+    font-weight: 600;
+    gap: 0.35rem;
+    justify-self: start;
+    text-decoration: none;
+}
+
+.shop-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.shop-empty,
+.shop-hint {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.shop-hint {
+    font-size: 0.875rem;
+}
+
+.shop-card {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+}
+
+/* 一步一張卡，前一步完成才出現下一步（傳統表單的節奏）。 */
+.shop-steps {
+    display: grid;
+    gap: 1rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.shop-step-title {
+    align-items: center;
+    color: var(--shop-text);
+    display: flex;
+    font-size: 1.1rem;
+    font-weight: 700;
+    gap: 0.6rem;
+    margin: 0;
+}
+
+.shop-step-no {
+    align-items: center;
+    background: var(--shop-accent);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-surface);
+    display: inline-flex;
+    flex-shrink: 0;
+    font-size: 0.875rem;
+    height: 1.75rem;
+    justify-content: center;
+    width: 1.75rem;
+}
+
+.shop-field {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.shop-label {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
+.shop-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.shop-choice {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    cursor: pointer;
+    font: inherit;
+    padding: 0.4rem 1rem;
+}
+
+.shop-choice:hover,
+.shop-choice:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+.shop-choice.is-selected {
+    background: var(--shop-accent);
+    border-color: var(--shop-accent);
+    color: var(--shop-surface);
+    font-weight: 600;
+}
+
+.shop-photo-list {
+    display: grid;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.shop-photo {
+    align-items: center;
+    background: var(--shop-tint);
+    border-radius: 16px;
+    color: var(--shop-text);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
+}
+
+.shop-done {
+    justify-items: center;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+}
+
+.shop-done-icon {
+    color: var(--shop-accent);
+}
+
+.shop-done-no {
+    color: var(--shop-text);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.shop-done-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.shop-link-button {
+    align-items: center;
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    display: inline-flex;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 0.9rem;
+    text-decoration: none;
+}
+
+.shop-link-button:hover,
+.shop-link-button:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+@media (max-width: 640.98px) {
+    .shop-card {
+        padding: 1rem;
+    }
+}

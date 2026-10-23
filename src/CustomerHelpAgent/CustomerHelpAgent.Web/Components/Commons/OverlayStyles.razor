@@ -1052,6 +1052,42 @@
         font-size: 0.85rem;
     }
 
+    /* 顧客「我的申請」的補件窗（售後展示 M1）：套 form-modal 骨架，只有三個欄位，收窄上限避免超寬螢幕拉成長條。 */
+    .form-modal.shop-resubmit-modal {
+        max-width: 960px !important;
+    }
+
+    /* 後台售後審核窗（售後展示 M1）：唯讀內容＋客服動作；訂單、規則、照片點開後會變長，所以在窗內捲動。 */
+    .after-sales-review-modal {
+        width: 880px !important;
+        max-width: 94vw !important;
+        top: 6vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .after-sales-review-modal .ant-modal-content {
+            max-height: 88vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .after-sales-review-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .after-sales-review-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /* 售後規則「新增版本」窗（售後展示 M1）：套 form-modal 骨架，欄位不多，收窄上限。 */
+    .form-modal.after-sales-policy-modal {
+        max-width: 1100px !important;
+    }
+
     /* about modal: compact, auto height。
        尺寸寫在這裡而不是 Modal 的 Width 參數，見速查表 §6.4。 */
     .about-modal {
