@@ -49,17 +49,56 @@ public class AgentSessionStore
     public async Task<Guid> CreateAsync(int customerUserId)
     {
         var sessionKey = Guid.NewGuid();
-        await SaveStateAsync(sessionKey, customerUserId, string.Empty, null);
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var now = Now;
+        context.AgentSessionRecord.Add(new AgentSessionRecord
+        {
+            SessionKey = sessionKey,
+            CustomerUserId = customerUserId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await context.SaveChangesAsync();
         logger.LogInformation("Agent session created. SessionKey={SessionKey}", sessionKey);
         return sessionKey;
     }
 
     /// <summary>
-    /// 存入序列化後的會話與本輪停止原因；不存在則建立。
-    /// SessionKey 已屬於別的顧客時拋 <see cref="InvalidOperationException"/>（不覆寫別人的會話）。
+    /// 存入序列化後的會話與本輪停止原因：以單一條件式更新（<c>StateVersion == expectedVersion</c>）寫入並把版本加 1。
+    /// 版本不符（另一個分頁已先存回）拋 <see cref="AgentSessionConflictException"/>，不覆寫；
+    /// 會話不存在或屬於別的顧客時拋 <see cref="InvalidOperationException"/>（不覆寫別人的會話）。
     /// </summary>
-    public Task SaveStateAsync(Guid sessionKey, int customerUserId, string stateJson, AgentStopReason stopReason)
-        => SaveStateAsync(sessionKey, customerUserId, stateJson, (AgentStopReason?)stopReason);
+    public async Task SaveStateAsync(Guid sessionKey, int customerUserId, string stateJson, AgentStopReason stopReason, int expectedVersion)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var now = Now;
+        var updated = await context.AgentSessionRecord
+            .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.StateVersion == expectedVersion)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.StateJson, stateJson)
+                .SetProperty(x => x.LastStopReason, (AgentStopReason?)stopReason)
+                .SetProperty(x => x.UpdatedAt, now)
+                .SetProperty(x => x.StateVersion, x => x.StateVersion + 1));
+        if (updated == 1)
+        {
+            return;
+        }
+
+        var owner = await context.AgentSessionRecord.AsNoTracking()
+            .Where(x => x.SessionKey == sessionKey)
+            .Select(x => (int?)x.CustomerUserId)
+            .FirstOrDefaultAsync();
+        if (owner != customerUserId)
+        {
+            logger.LogWarning("Agent session state rejected because the session is missing or belongs to another customer. SessionKey={SessionKey}", sessionKey);
+            throw new InvalidOperationException("這個對話不屬於目前登入的顧客。");
+        }
+
+        logger.LogWarning(
+            "Agent session state rejected because another tab saved it first. SessionKey={SessionKey}, ExpectedVersion={ExpectedVersion}",
+            sessionKey, expectedVersion);
+        throw new AgentSessionConflictException();
+    }
 
     public async Task CloseAsync(Guid sessionKey, int customerUserId)
     {
@@ -130,6 +169,27 @@ public class AgentSessionStore
     }
 
     /// <summary>
+    /// 作廢這個會話所有未決的確認卡（顧客改打字或開新對話）：單一條件式更新（<c>Approved == null</c> → false），
+    /// 另一個分頁已搶下的決定不會被改寫。有作廢任何一張回傳 true。
+    /// </summary>
+    public async Task<bool> VoidPendingConfirmationAsync(Guid sessionKey, int customerUserId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var now = Now;
+        var voided = await context.AgentConfirmation
+            .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.Approved == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Approved, false)
+                .SetProperty(x => x.DecidedAt, now));
+        if (voided > 0)
+        {
+            logger.LogInformation("Agent pending confirmation voided. SessionKey={SessionKey}, Count={Count}", sessionKey, voided);
+        }
+
+        return voided > 0;
+    }
+
+    /// <summary>
     /// 記錄顧客的決定。決定只寫第一次（之後再呼叫不會改變同意／拒絕與決定時間）；
     /// <paramref name="requestId"/> 有值時回填建立的售後申請 Id（同意後申請建立成功才會有）。
     /// </summary>
@@ -160,29 +220,4 @@ public class AgentSessionStore
             id, confirmation.Approved, confirmation.AfterSalesRequestId);
     }
 
-    private async Task SaveStateAsync(Guid sessionKey, int customerUserId, string stateJson, AgentStopReason? stopReason)
-    {
-        await using var context = await contextFactory.CreateDbContextAsync();
-        var record = await context.AgentSessionRecord.FirstOrDefaultAsync(x => x.SessionKey == sessionKey);
-        if (record is null)
-        {
-            record = new AgentSessionRecord
-            {
-                SessionKey = sessionKey,
-                CustomerUserId = customerUserId,
-                CreatedAt = Now,
-            };
-            context.AgentSessionRecord.Add(record);
-        }
-        else if (record.CustomerUserId != customerUserId)
-        {
-            logger.LogWarning("Agent session state rejected because the session belongs to another customer. SessionKey={SessionKey}", sessionKey);
-            throw new InvalidOperationException("這個對話不屬於目前登入的顧客。");
-        }
-
-        record.StateJson = stateJson;
-        record.LastStopReason = stopReason;
-        record.UpdatedAt = Now;
-        await context.SaveChangesAsync();
-    }
 }

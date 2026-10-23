@@ -1,0 +1,28 @@
+@* 展示模式提示列（1.0.5 起，MainLayout 與 ShopLayout 共用）：以示範帳號身分檢視中、故障模擬中、身分切換失敗。只在版面登入檢查通過後渲染。 *@
+@if (ShowBanner)
+{
+    <div class="demo-banner" role="status">
+        @if (isSwitched)
+        {
+            <span class="demo-banner-text">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="slideshow" />
+                <span>@($"展示模式：目前以 {displayName} 身分檢視")</span>
+            </span>
+            <button type="button" class="demo-banner-back" @onclick="SwitchBack">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="undo" />
+                <span>回到展示者</span>
+            </button>
+        }
+        @if (FaultActive)
+        {
+            <span class="demo-banner-fault">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span>故障模擬中</span>
+            </span>
+        }
+        @if (switchFailed)
+        {
+            <span class="demo-banner-error">身分切換失敗：票券無效、已過期或權限不符，請回展示控制台重新操作。</span>
+        }
+    </div>
+}

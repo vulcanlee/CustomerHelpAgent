@@ -44,7 +44,7 @@ public abstract class ShopViewTestBase : ComponentTestBase
         var time = TimeProvider.System;
         var settings = new SystemSettings();
         settings.ExternalFileSystem.AfterSalesFilePath = fileRoot;
-        var shopOrderService = new ShopOrderService(Factory, NullLogger<ShopOrderService>.Instance);
+        var shopOrderService = new ShopOrderService(Factory, TestDemoControl.Off(Factory), NullLogger<ShopOrderService>.Instance);
 
         // AntDesign 的 Select、TextArea 渲染後會向 JS 量自己的尺寸；Loose 模式回傳 null 會讓它們 NullReferenceException。
         JSInterop.Setup<AntDesign.JsInterop.DomRect>(_ => true).SetResult(new AntDesign.JsInterop.DomRect());
@@ -59,7 +59,7 @@ public abstract class ShopViewTestBase : ComponentTestBase
         Services.AddSingleton(new ProcessMetricService(Factory, time, NullLogger<ProcessMetricService>.Instance));
         Services.AddSingleton(new AfterSalesRequestService(
             Factory,
-            new AfterSalesPolicyService(Factory, audit, currentUser, time, NullLogger<AfterSalesPolicyService>.Instance),
+            new AfterSalesPolicyService(Factory, audit, currentUser, TestDemoControl.Off(Factory), time, NullLogger<AfterSalesPolicyService>.Instance),
             shopOrderService,
             new AfterSalesFileStore(Options.Create(settings), NullLogger<AfterSalesFileStore>.Instance),
             audit,

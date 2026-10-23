@@ -362,6 +362,7 @@ public sealed class LoggingConventionTests
             "DatabaseInitializerOptions.cs", // 設定
             "DatabaseInitializationLock.cs", // 由 DatabaseInitializer 傳入 logger（靜態輔助類別無法注入）
             "DemoSeedData.cs",              // 售後展示的示範資料定義（靜態、無 I/O）；寫入與日誌在兩個 Demo*Seeder
+            "DemoScenarios.cs",             // 展示劇本定義（靜態、無 I/O）；準備劇本與日誌在展示控制台（1.0.5 起）
 
             // ⚠️ 以下四支位在「系統例外紀錄」的記錄管線之內，**刻意不得注入 ILogger**。
             // 它們一旦用 ILogger 記錄自己的失敗，那筆記錄會再被管線收進來、再嘗試寫入、再失敗 ——
@@ -376,6 +377,7 @@ public sealed class LoggingConventionTests
             "ExceptionAlertService.cs",     // 在例外記錄管線內被呼叫；寄信失敗走 ILogger 會再被收成例外、再觸發告警
             "LoggingPipelineMonitor.cs",    // 由 NLog 內部事件與例外寫入器呼叫；在 NLog 內部事件裡用 logger 會死結或遞迴
             "BrowserScriptException.cs",    // 例外型別，無行為
+            "AgentSessionConflictException.cs", // 例外型別，無行為；拋出處（AgentSessionStore）已記錄（1.0.5 起）
             "RequestActorResolver.cs",      // 純函式：從 claims 取帳號與 UserId
             "SystemHealthModels.cs",        // 健康監控的模型
             "SystemHealthScoreCalculator.cs", // 純算術：由各項狀態算分數與燈號
@@ -386,6 +388,7 @@ public sealed class LoggingConventionTests
             "NotificationCategories.cs",    // 通知分類常數，無行為（0.9.100 起）
             "PasswordPolicy.cs",            // 密碼原則：純規則計算與雜湊，失敗由呼叫端記錄（0.9.101 起）
             "CookieClaims.cs",              // 登入 Cookie 的 claims 組裝，純函式（0.9.103 起）
+            "DemoClaims.cs",                // 展示身分切換的 claim 名稱常數，無行為（1.0.5 起）
             "ClientIpProvider.cs",          // 稽核來源 IP：持有 circuit 的 IP 並格式化，無 I/O；失敗由 circuit handler 記錄（0.9.117 起）
             "QrCodeImage.cs",               // 文字轉 QR Code 圖片，純函式（0.9.104 起）
             "SystemIdentity.cs",            // 例外告警服務（例外記錄管線內）使用它讀系統名稱；用 ILogger 會遞迴（0.9.98 起）

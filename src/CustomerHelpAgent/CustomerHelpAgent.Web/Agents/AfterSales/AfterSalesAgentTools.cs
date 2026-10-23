@@ -6,6 +6,7 @@ using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
 using CustomerHelpAgent.Share.Agents;
+using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Share.Shop;
 
@@ -42,6 +43,7 @@ public sealed class AfterSalesToolContext
 /// 工具參數沒有任何使用者識別欄位；模型多傳的引數會被 <see cref="AIFunctionFactory"/> 忽略。</item>
 /// <item>回傳一律是 <see cref="ToolOutcome"/> 信封（序列化成 <see cref="System.Text.Json.JsonElement"/>），只含投影 DTO 的欄位。</item>
 /// <item>寫入工具 <c>create_after_sales_request</c> 以 <see cref="ApprovalRequiredAIFunction"/> 包裝，執行時再以程式重核資格。</item>
+/// <item>展示的 <see cref="DemoFault.PermissionExpired"/> 只在這裡注入（身分檢查一律不通過 → <c>forbidden</c>）；其餘故障由業務服務注入。</item>
 /// </list>
 /// 權限以 <see cref="IPermissionChecker"/> 即時查資料庫，而不是 <c>AuthenticationStateHelper.CheckAccessPage</c>：
 /// 後者讀的是換頁時載入的 <c>CurrentUser.RoleList</c>，對話中途被收回權限要等下次換頁才會生效。
@@ -79,6 +81,7 @@ public sealed class AfterSalesAgentTools
     private readonly IPermissionChecker permissionChecker;
     private readonly CurrentUserService currentUserService;
     private readonly AgentPhotoInbox photoInbox;
+    private readonly DemoControlService demoControl;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<AfterSalesAgentTools> logger;
     private readonly AfterSalesToolContext context;
@@ -90,6 +93,7 @@ public sealed class AfterSalesAgentTools
         IPermissionChecker permissionChecker,
         CurrentUserService currentUserService,
         AgentPhotoInbox photoInbox,
+        DemoControlService demoControl,
         TimeProvider timeProvider,
         ILogger<AfterSalesAgentTools> logger,
         AfterSalesToolContext context)
@@ -100,6 +104,7 @@ public sealed class AfterSalesAgentTools
         this.permissionChecker = permissionChecker;
         this.currentUserService = currentUserService;
         this.photoInbox = photoInbox;
+        this.demoControl = demoControl;
         this.timeProvider = timeProvider;
         this.logger = logger;
         this.context = context;
@@ -119,6 +124,19 @@ public sealed class AfterSalesAgentTools
     /// 用來模擬送件拋例外、回查逾時。
     /// </summary>
     internal Func<string, CancellationToken, Task>? CreateStageHookForTesting { get; set; }
+
+    /// <summary>
+    /// Runner 組確認卡時的程式重查（1.0.5 起）：與工具同一個外框（逾時 → 身分與權限 → 本體），所以展示的權限過期、
+    /// 訂單逾時、規則服務停擺在這裡與工具一樣回 <c>forbidden</c>／<c>timeout</c>／<c>unavailable</c> 信封，
+    /// 不會讓頁面等到服務自己失敗、也不會在身分失效時照樣出卡。本體拿到已核對的顧客 Id 與逾時權杖，
+    /// 服務呼叫一律 <c>ObserveFault(...).WaitAsync(ct)</c>。
+    /// </summary>
+    internal Task<ToolOutcome> RunConfirmationCheckAsync(
+        Func<int, CancellationToken, Task<ToolOutcome>> body, CancellationToken cancellationToken)
+        => RunAsync(ConfirmationCheckName, body, cancellationToken);
+
+    /// <summary>組確認卡的程式重查在日誌裡的名稱（不是模型看得到的工具）。</summary>
+    internal const string ConfirmationCheckName = "confirmation_card_check";
 
     /// <summary>模型送來的問題類型（<c>size_exchange</c>…）轉成 <see cref="AfterSalesType"/>；Runner 組確認卡時共用同一份對照。</summary>
     internal static bool TryParseIssueType(string? issueType, out AfterSalesType type)
@@ -146,7 +164,7 @@ public sealed class AfterSalesAgentTools
         CancellationToken cancellationToken = default)
         => RunAsync(QueryMyOrdersName, async (customerUserId, ct) =>
         {
-            var orders = await shopOrderService.GetMyOrdersAsync(customerUserId).WaitAsync(ct);
+            var orders = await ObserveFault(shopOrderService.GetMyOrdersAsync(customerUserId)).WaitAsync(ct);
             var items = orders
                 .SelectMany(o => o.Items.Select(i => new AgentOrderItem(i.OrderItemId, o.OrderNo, i.ProductName, i.Color, i.Size, o.StatusText)))
                 .Where(x => MatchesColor(x.Color, color) && MatchesKeyword(x, keyword))
@@ -159,6 +177,7 @@ public sealed class AfterSalesAgentTools
     public Task<ToolOutcome> GetEffectivePolicyAsync(
         [Description(OrderItemIdDescription)] int orderItemId,
         [Description(IssueTypeDescription)] string issueType,
+        [Description("商品是否穿過；只在顧客明確說了有沒有穿過時才填，顧客沒說就不要填")] bool? isWorn = null,
         CancellationToken cancellationToken = default)
         => RunAsync(GetEffectivePolicyName, async (customerUserId, ct) =>
         {
@@ -183,7 +202,7 @@ public sealed class AfterSalesAgentTools
             }
 
             var eligibility = AfterSalesEligibility.Evaluate(
-                policy, order.DeliveredAt, isWorn: null, hasPhoto: photoInbox.Count(context.SessionKey) > 0, now, shippedAt);
+                policy, order.DeliveredAt, isWorn, hasPhoto: photoInbox.Count(context.SessionKey) > 0, now, shippedAt);
             return ToolOutcome.Ok(new AgentPolicyCard(
                 policy.Id,
                 policy.Code,
@@ -202,7 +221,7 @@ public sealed class AfterSalesAgentTools
         CancellationToken cancellationToken = default)
         => RunAsync(CheckVariantStockName, async (customerUserId, ct) =>
         {
-            var variants = await shopOrderService.GetVariantStockAsync(customerUserId, orderItemId).WaitAsync(ct);
+            var variants = await ObserveFault(shopOrderService.GetVariantStockAsync(customerUserId, orderItemId)).WaitAsync(ct);
             if (variants.Count == 0)
             {
                 return ItemNotFound();
@@ -223,7 +242,7 @@ public sealed class AfterSalesAgentTools
             }
 
             var order = target.Value.Order;
-            var detail = await shopOrderService.GetMyOrderDetailAsync(customerUserId, order.OrderId).WaitAsync(ct);
+            var detail = await ObserveFault(shopOrderService.GetMyOrderDetailAsync(customerUserId, order.OrderId)).WaitAsync(ct);
             if (detail is null)
             {
                 return ItemNotFound();
@@ -248,7 +267,7 @@ public sealed class AfterSalesAgentTools
         CancellationToken cancellationToken = default)
         => RunAsync(RequestPhotoUploadName, async (customerUserId, ct) =>
         {
-            var item = await shopOrderService.GetMyOrderItemAsync(customerUserId, orderItemId).WaitAsync(ct);
+            var item = await ObserveFault(shopOrderService.GetMyOrderItemAsync(customerUserId, orderItemId)).WaitAsync(ct);
             if (item is null)
             {
                 return ItemNotFound();
@@ -416,6 +435,23 @@ public sealed class AfterSalesAgentTools
     private DateTime Now() => timeProvider.GetLocalNow().DateTime;
 
     /// <summary>
+    /// 以 <c>WaitAsync</c> 等待服務工作前一律先經過這裡：逾時放棄等待後，服務工作仍會在背景跑完，
+    /// 稍後失敗（例如故障模擬的 <see cref="TimeoutException"/>）若沒人觀察，GC 時會觸發
+    /// <see cref="TaskScheduler.UnobservedTaskException"/>，被記成一筆 Error 甚至告警。這裡掛一個只讀取例外的接續，把它標為已觀察；
+    /// 等得到結果的呼叫端照常從 <c>await</c> 拿到例外。
+    /// </summary>
+    internal static TTask ObserveFault<TTask>(TTask task)
+        where TTask : Task
+    {
+        task.ContinueWith(
+            static x => _ = x.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        return task;
+    }
+
+    /// <summary>
     /// 所有工具的共同外框：逾時（<see cref="AfterSalesToolContext.ToolTimeout"/>）→ 身分與權限 → 工具本體。
     /// 呼叫端取消（<paramref name="cancellationToken"/>）照常拋出 <see cref="OperationCanceledException"/>；其他例外 → <see cref="ToolOutcomeStatus.Unavailable"/>。
     /// </summary>
@@ -426,7 +462,7 @@ public sealed class AfterSalesAgentTools
         timeout.CancelAfter(context.ToolTimeout);
         try
         {
-            var customerUserId = await ResolveCustomerAsync(toolName).WaitAsync(timeout.Token);
+            var customerUserId = await ObserveFault(ResolveCustomerAsync(toolName)).WaitAsync(timeout.Token);
             if (customerUserId is null)
             {
                 return ToolOutcome.Fail(ToolOutcomeStatus.Forbidden, "登入狀態已失效或沒有使用權限。");
@@ -434,7 +470,7 @@ public sealed class AfterSalesAgentTools
 
             if (BeforeServiceCallForTesting is { } beforeServiceCall)
             {
-                await beforeServiceCall(timeout.Token).WaitAsync(timeout.Token);
+                await ObserveFault(beforeServiceCall(timeout.Token)).WaitAsync(timeout.Token);
             }
 
             return await body(customerUserId.Value, timeout.Token);
@@ -453,9 +489,15 @@ public sealed class AfterSalesAgentTools
         }
     }
 
-    /// <summary>登入使用者 Id；未登入、不是會話擁有者，或已沒有「顧客商店」權限回 null。</summary>
+    /// <summary>登入使用者 Id；未登入、不是會話擁有者、已沒有「顧客商店」權限，或展示模擬權限過期時回 null。</summary>
     private async Task<int?> ResolveCustomerAsync(string toolName)
     {
+        if (demoControl.IsFaultActive(DemoFault.PermissionExpired))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}, ToolName={ToolName}", DemoFault.PermissionExpired, toolName);
+            return null;
+        }
+
         var userId = currentUserService.CurrentUser.Id;
         if (userId == 0 || userId != context.CustomerUserId)
         {
@@ -481,7 +523,7 @@ public sealed class AfterSalesAgentTools
     private async Task<(ShopOrderSummary Order, ShopOrderItemView Item)?> FindOwnedItemAsync(
         int customerUserId, int orderItemId, CancellationToken ct)
     {
-        var orders = await shopOrderService.GetMyOrdersAsync(customerUserId).WaitAsync(ct);
+        var orders = await ObserveFault(shopOrderService.GetMyOrdersAsync(customerUserId)).WaitAsync(ct);
         foreach (var order in orders)
         {
             var item = order.Items.FirstOrDefault(x => x.OrderItemId == orderItemId);
@@ -496,13 +538,13 @@ public sealed class AfterSalesAgentTools
     }
 
     private async Task<DateTime?> GetShippedAtAsync(int customerUserId, int orderId, CancellationToken ct)
-        => (await shopOrderService.GetMyOrderDetailAsync(customerUserId, orderId).WaitAsync(ct))?.Shipment?.ShippedAt;
+        => (await ObserveFault(shopOrderService.GetMyOrderDetailAsync(customerUserId, orderId)).WaitAsync(ct))?.Shipment?.ShippedAt;
 
     /// <summary>唯一生效的規則；查無或衝突時回對應的失敗信封。</summary>
     private async Task<(AfterSalesPolicyModel? Policy, ToolOutcome? Failure)> LookupPolicyAsync(
         AfterSalesType type, string productCategory, DateTime now, CancellationToken ct)
     {
-        var lookup = await policyService.GetEffectiveAsync(type, productCategory, now).WaitAsync(ct);
+        var lookup = await ObserveFault(policyService.GetEffectiveAsync(type, productCategory, now)).WaitAsync(ct);
         return lookup.Status switch
         {
             PolicyLookupStatus.Found => (lookup.Policies[0], null),
@@ -525,10 +567,10 @@ public sealed class AfterSalesAgentTools
             {
                 if (CreateStageHookForTesting is { } verifyHook)
                 {
-                    await verifyHook(VerifyStage, verifyTimeout.Token).WaitAsync(verifyTimeout.Token);
+                    await ObserveFault(verifyHook(VerifyStage, verifyTimeout.Token)).WaitAsync(verifyTimeout.Token);
                 }
 
-                var mine = await requestService.GetMyRequestsAsync(customerUserId).WaitAsync(verifyTimeout.Token);
+                var mine = await ObserveFault(requestService.GetMyRequestsAsync(customerUserId)).WaitAsync(verifyTimeout.Token);
                 if (mine.All(x => x.Id != requestId))
                 {
                     logger.LogWarning("Agent after-sales request could not be verified after submission. RequestId={RequestId}", requestId);

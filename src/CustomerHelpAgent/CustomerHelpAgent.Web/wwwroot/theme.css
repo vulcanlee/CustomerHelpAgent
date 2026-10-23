@@ -154,6 +154,9 @@
     --shop-source-memory-bg: var(--app-off-bg);
     --shop-source-program: var(--app-code-text);
     --shop-source-program-bg: var(--app-code-bg);
+
+    /* 時間軸的程式提醒列（AgentStepKind.Warning，1.0.5 起）標紅：沿用全站錯誤色。 */
+    --shop-step-warning: var(--app-error);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

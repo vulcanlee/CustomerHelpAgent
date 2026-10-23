@@ -197,11 +197,24 @@ public class AfterSalesRequestService
     }
 
     /// <summary>同一個訂單商品、同類型、仍在處理中（已提交／待補件）的申請編號；沒有回 null。</summary>
-    private static Task<string?> FindOpenRequestNoAsync(BackendDBContext context, int orderItemId, AfterSalesType type)
+    /// <summary>
+    /// 顧客本人這個訂單商品是否已有處理中（已提交／待補件）的同類申請；有就回申請編號，沒有回 null。
+    /// 與送件時的去重同一條規則；售後 Agent 在顯示確認卡前用它，避免顧客按下確認才被拒。
+    /// </summary>
+    public async Task<string?> GetOpenRequestNoAsync(int customerUserId, int orderItemId, AfterSalesType type)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await FindOpenRequestNoAsync(context, orderItemId, type, customerUserId);
+    }
+
+    /// <summary>同商品、同類型的處理中申請編號；<paramref name="customerUserId"/> 有值時只看該顧客的申請。</summary>
+    private static Task<string?> FindOpenRequestNoAsync(
+        BackendDBContext context, int orderItemId, AfterSalesType type, int? customerUserId = null)
         => context.AfterSalesRequest
             .AsNoTracking()
             .Where(x => x.SalesOrderItemId == orderItemId
                 && x.Type == type
+                && (customerUserId == null || x.CustomerUserId == customerUserId)
                 && (x.Status == AfterSalesStatus.Submitted || x.Status == AfterSalesStatus.NeedMoreInfo))
             .OrderBy(x => x.Id)
             .Select(x => (string?)x.RequestNo)

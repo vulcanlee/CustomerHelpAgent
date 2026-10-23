@@ -109,6 +109,48 @@
     padding: 0.6rem 1rem;
 }
 
+/* 回放中（1.0.5 起）：標題下的「回放中（錄製於 …）」標籤，與回放結束／中止的固定說明。 */
+.assistant-replay-badge {
+    align-items: center;
+    background: var(--shop-accent-soft);
+    border: 1px solid var(--shop-accent);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    display: inline-flex;
+    font-size: 0.85rem;
+    font-weight: 700;
+    gap: 0.3rem;
+    justify-self: start;
+    padding: 0.15rem 0.75rem;
+}
+
+.assistant-replay-end {
+    align-items: center;
+    background: var(--shop-tint);
+    border: 1px solid var(--shop-line);
+    border-radius: 14px;
+    color: var(--shop-text);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+}
+
+.assistant-replay-console {
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--shop-accent);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 700;
+    gap: 0.25rem;
+    padding: 0;
+    text-decoration: underline;
+}
+
 /* 窄螢幕：幕後面板接在對話下方；寬螢幕：左對話、右面板並排。 */
 .assistant-body {
     align-items: start;

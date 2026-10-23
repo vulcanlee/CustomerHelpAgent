@@ -23,6 +23,7 @@
   { "route": "/system-parameters", "title": "系統參數", "file": "system-parameters.md" },
   { "route": "/backups", "title": "系統備份", "file": "backups.md" },
   { "route": "/data-retention", "title": "資料保留與清理", "file": "data-retention.md" },
+  { "route": "/demo-console", "title": "展示控制台", "file": "demo-console.md" },
   { "route": "/announcements", "title": "公告管理", "file": "announcements.md" },
   { "route": "/prompt-templates", "title": "AI 提示詞", "file": "prompt-templates.md" }
 ]

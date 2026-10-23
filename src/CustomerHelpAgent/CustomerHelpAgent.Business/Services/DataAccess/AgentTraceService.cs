@@ -31,8 +31,11 @@ public class AgentTraceService
 
     private DateTime Now => timeProvider.GetLocalNow().DateTime;
 
-    /// <summary>開始一輪執行，回傳 RunId。資料庫失敗時照常拋出（沒有 run 就無從記錄）。</summary>
-    public async Task<int> StartRunAsync(Guid sessionKey, int customerUserId)
+    /// <summary>
+    /// 開始一輪執行，回傳 RunId。<paramref name="replayRecordingId"/>：回放中這一輪用的錄製（即時執行不傳）。
+    /// 資料庫失敗時照常拋出（沒有 run 就無從記錄）。
+    /// </summary>
+    public async Task<int> StartRunAsync(Guid sessionKey, int customerUserId, int? replayRecordingId = null)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         var run = new AgentRunTrace
@@ -40,6 +43,7 @@ public class AgentTraceService
             SessionKey = sessionKey,
             CustomerUserId = customerUserId,
             StartedAt = Now,
+            ReplayRecordingId = replayRecordingId,
         };
         context.AgentRunTrace.Add(run);
         await context.SaveChangesAsync();
@@ -117,7 +121,8 @@ public class AgentTraceService
                 x.EndedAt,
                 x.StopReason,
                 x.ModelCallCount,
-                x.ToolCallCount))
+                x.ToolCallCount,
+                x.ReplayRecordingId))
             .ToListAsync();
         return result;
     }
@@ -128,6 +133,21 @@ public class AgentTraceService
         return await context.AgentRunStep.AsNoTracking()
             .Where(x => x.AgentRunTraceId == runId)
             .OrderBy(x => x.Sequence).ThenBy(x => x.Id)
+            .Select(x => new AgentRunStepView(x.Sequence, x.Kind, x.Source, x.PlainText, x.RawJson, x.OccurredAt))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// 一個會話所有執行的步驟（依 run 的 <c>StartedAt</c>、Id，再依步驟 <c>Sequence</c>、Id），供重新整理頁面時還原對話與幕後面板。
+    /// 只取這位顧客的執行：別人的會話視同沒有紀錄。
+    /// </summary>
+    public async Task<IReadOnlyList<AgentRunStepView>> GetSessionStepsAsync(Guid sessionKey, int customerUserId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.AgentRunStep.AsNoTracking()
+            .Where(x => x.AgentRunTrace!.SessionKey == sessionKey && x.AgentRunTrace.CustomerUserId == customerUserId)
+            .OrderBy(x => x.AgentRunTrace!.StartedAt).ThenBy(x => x.AgentRunTraceId)
+            .ThenBy(x => x.Sequence).ThenBy(x => x.Id)
             .Select(x => new AgentRunStepView(x.Sequence, x.Kind, x.Source, x.PlainText, x.RawJson, x.OccurredAt))
             .ToListAsync();
     }

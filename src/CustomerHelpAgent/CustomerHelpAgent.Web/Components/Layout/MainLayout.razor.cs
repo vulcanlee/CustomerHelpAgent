@@ -45,6 +45,9 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     [Inject]
     private PageHelpService PageHelpService { get; set; } = default!;
 
+    [Inject]
+    private DemoControlService DemoControlService { get; set; } = default!;
+
     private const string DefaultPageTitle = "系統首頁";
     private const string DefaultUserDisplayName = "使用者";
 
@@ -217,6 +220,13 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     {
         isUserMenuOpen = false;
         NavigationManager.NavigateTo("/ChangePassword");
+    }
+
+    /// <summary>展示身分切換（1.0.5 起，管理員且示範模式開啟時才有這一項）：到展示控制台的身分切換區。</summary>
+    private void OnDemoIdentityClick()
+    {
+        isUserMenuOpen = false;
+        NavigationManager.NavigateTo("/demo-console#identity");
     }
 
     /// <summary>

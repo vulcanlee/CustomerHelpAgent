@@ -32,6 +32,20 @@
     margin: 0;
 }
 
+.backstage-faults {
+    align-items: center;
+    background: var(--shop-warn-bg);
+    border: 1px solid var(--shop-warn-line);
+    border-radius: 10px;
+    color: var(--shop-warn);
+    display: flex;
+    font-size: 0.85rem;
+    font-weight: 700;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0.35rem 0.6rem;
+}
+
 .backstage-legend {
     display: flex;
     flex-wrap: wrap;

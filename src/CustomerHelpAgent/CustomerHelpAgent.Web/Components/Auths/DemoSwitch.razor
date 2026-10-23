@@ -1,0 +1,8 @@
+@page "/Auths/DemoSwitch"
+@* 與換發 Cookie 頁相同：不套用 MainLayout（它會先跑 AuthenticationStateHelper.Check）；這一頁只換 Cookie 後立即導向。 *@
+@layout EmptyLayout
+
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [Authorize]
+
+<PageTitle>展示身分切換</PageTitle>

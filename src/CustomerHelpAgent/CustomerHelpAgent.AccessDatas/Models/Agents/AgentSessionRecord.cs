@@ -18,4 +18,9 @@ public class AgentSessionRecord
     public AgentStopReason? LastStopReason { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 會話狀態的樂觀版本（1.0.5 起）：每次存回 <see cref="StateJson"/> 加 1；存回時版本與讀入時不同（另一個分頁先存了）就拒絕覆寫。
+    /// </summary>
+    public int StateVersion { get; set; }
 }

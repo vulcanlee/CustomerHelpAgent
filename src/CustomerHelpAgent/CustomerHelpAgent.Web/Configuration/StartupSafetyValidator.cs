@@ -1,3 +1,4 @@
+using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Web.Auth;
 
 namespace CustomerHelpAgent.Web.Configuration;
@@ -78,6 +79,12 @@ public static class StartupSafetyValidator
                 errors.Add($"EmailSettings:PublicBaseUrl 在 Production 使用 Smtp 時必須是完整的 http(s) 網址（信中連結以它為準，不採用請求的 Host header），目前讀到的值：{actual}。"
                     + "請填使用者實際開啟系統的網址，例如 https://erp.example.com（只有 http 的環境可填 http://erp.example.com）；若暫不寄信，可將 EmailSettings:Provider 改回 None。");
             }
+        }
+
+        // 示範模式會開放一鍵重置（刪除申請與訂單）、故障模擬與身分切換，只能用在展示環境（1.0.5 起）。
+        if (bool.TryParse(configuration[$"{DemoSettings.SectionName}:Enabled"], out var demoEnabled) && demoEnabled)
+        {
+            errors.Add("DemoSettings:Enabled 不可在 Production 開啟：示範模式（一鍵重置示範資料、故障模擬、身分切換）只能用在展示環境，請改為 false。");
         }
 
         // AI 分析是 opt-in，而「有沒有填金鑰」就是那個開關：沒填等於功能關閉，

@@ -34,7 +34,7 @@ public sealed class AfterSalesReviewViewTests : ShopViewTestBase
 
         // 必須在第一次向 Services 取服務之前註冊。
         Services.AddSingleton(new AfterSalesPolicyService(
-            Factory, new RecordingAuditLogService(), new CurrentUserService(), TimeProvider.System, NullLogger<AfterSalesPolicyService>.Instance));
+            Factory, new RecordingAuditLogService(), new CurrentUserService(), TestDemoControl.Off(Factory), TimeProvider.System, NullLogger<AfterSalesPolicyService>.Instance));
 
         var service = Services.GetRequiredService<AfterSalesRequestService>();
         var submitted = service.SubmitAsync(CustomerId, new SubmitAfterSalesInput

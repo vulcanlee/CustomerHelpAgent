@@ -1,12 +1,12 @@
 ﻿# 售後 Agent 展示系統 — 設計文件
 
-- 文件版本：0.3
-- 文件狀態：部分實作（M0、M1、M2 已實作；M3–M6 規劃中）
-- 現行系統版本：1.0.4
+- 文件版本：0.4
+- 文件狀態：部分實作（M0、M1、M2、M3 已實作；M4–M6 規劃中）
+- 現行系統版本：1.0.5
 - 首次實作版本：1.0.2（M0）
-- 最後核對日期：2026/10/23
+- 最後核對日期：2026/10/24
 
-> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）、M1（1.0.3）與 M2（1.0.4）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)），內容屬「規劃中」，不代表系統已提供。
+> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）、M1（1.0.3）、M2（1.0.4）與 M3（1.0.5）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)），內容屬「規劃中」，不代表系統已提供。
 > 配套文件：[對外版企劃書](售後Agent示範系統企劃書.md)、[內部版企劃規劃說明書](售後Agent示範系統企劃規劃說明書.md)。
 ## 緣由（為什麼做）
 
@@ -190,9 +190,10 @@ AI 成本（新台幣）、Agent 停下詢問次數。並排呈現傳統 vs Agen
 | M5 | Handoff 切換＋長期記憶頁 | 交接事件出現在面板；刪除記憶後不再注入 |
 | M6 | 效益對照頁 | 以種子劇本跑兩種流程後數字合理、AI 成本與 TokenUsage 頁一致 |
 
-> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；**M2 已完成（1.0.4）**——`/shop/assistant` 單一售後 Agent（`AfterSalesAgentRunner`／`AfterSalesAgentGuard`／6 個受控工具）、`ApprovalRequiredAIFunction` 確認卡、幕後面板、`AgentSessionRecord` 會話持久化（migration `AddAgentRuntime`）、`/agent-runs` 後台紀錄頁，並補強 M1 服務（重複申請、目標規格、照片位元組上限、規則版本基準）；M3–M6 尚未實作。
+> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；**M2 已完成（1.0.4）**——`/shop/assistant` 單一售後 Agent（`AfterSalesAgentRunner`／`AfterSalesAgentGuard`／6 個受控工具）、`ApprovalRequiredAIFunction` 確認卡、幕後面板、`AgentSessionRecord` 會話持久化（migration `AddAgentRuntime`）、`/agent-runs` 後台紀錄頁，並補強 M1 服務（重複申請、目標規格、照片位元組上限、規則版本基準）；**M3 已完成（1.0.5）**——`DemoControlService` 七種故障模擬、`DemoResetService` 一鍵重置（固定編號）、`RecordingChatClient`／`ReplayChatClient` 錄製回放與金劇本、`/Auths/DemoSwitch` 一次性票券身分切換、`/demo-console` 展示控制台（migration `AddAgentSessionVersion`、`AddDemoControl`、`AddAgentRecording`），並補強 M2 Agent（確認卡去重、每輪步數總量、標紅、確認後下一輪、完整還原與多分頁防覆蓋）；M4–M6 尚未實作。
 > M1 實際狀態機為 `Submitted`／`NeedMoreInfo`／`Approved`／`Rejected`（§4.1 的「草稿／初審中／待人工／已完成」留待 M2、M4 視需要擴充），詳見 [售後 Agent 示範系統](../features/售後Agent示範系統.md) §4。
 > M2 實作與本文 §4.3 的差異：`track_shipment` 與 `check_variant_stock` 的參數是 `orderItemId`（不是 `orderId`／規格）；`ToolOutcome` 多了 `blocked`／`invalid` 兩種 status 與 `withheld_fields`；模型呼叫預設走 Responses API（`store=false`），因為實機推論模型在 Chat Completions 帶工具會被拒；`ChatClientAgent` 外加 `TracingChatClient` 與函式中介層 `AfterSalesAgentGuard`；§4.3「不確定即停」中「`not_found`／`timeout`／`conflict` 後模型仍下結論時面板標紅」**M2 未實作**（M2 改以程式封鎖寫入、逾時／權限／服務不可用以固定說明取代模型輸出來強制），延到 M3；實作與使用說明見 [售後 Agent 示範系統 §5](../features/售後Agent示範系統.md)。
+> M3 實作與本文 §4.5 的差異：故障列舉為 `DemoFault`（七種，另加「無適用規則」`PolicyNotFound`），狀態存 `DemoControlState` 單列，不叫 `FaultSimulationSetting`；「權限過期」只影響 Agent 工具（傳統流程的登入逾時由真實驗證機制處理），其餘故障 Agent 與傳統流程同受影響；回放以請求摘要（`ModelRequestDigest`）逐次比對，不符即 `ReplayDiverged`，顧客動作不符另有 `ReplayActionMismatch`（可重試）；`DemoSettings.Enabled=false` 時身分切換一律拒絕、控制台頁面全部停用，但選單項目仍顯示給管理員；Production 開啟示範模式拒絕啟動。§4.3「查無後直接下結論標紅」已於 M3 實作。詳見 [售後 Agent 示範系統 §6](../features/售後Agent示範系統.md)。
 
 **核准後的第一步**：把本設計存成 `docs/prd/售後Agent展示系統-設計.md`（UTF-8 含 BOM，更新 `docs/prd/README.md` 與 `docs/README.md` 索引），
 並寫出兩份企劃書初版（見 §8），再依 superpowers:writing-plans 為 M0＋M1 寫出逐步實作計畫（後續里程碑各自再寫），逐里程碑實作、驗證。

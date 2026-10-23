@@ -1,10 +1,10 @@
 ﻿# features — 功能機制
 
-- 文件版本：1.12
+- 文件版本：1.13
 - 文件狀態：維護中
-- 現行系統版本：1.0.4
+- 現行系統版本：1.0.5
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/10/23
+- 最後核對日期：2026/10/24
 
 本目錄收納個別功能機制的說明文件（跨功能共用的底層機制）。使用者可見的頁面能力見 [prd/](../prd/README.md)。
 
@@ -16,7 +16,7 @@
 | [系統健康監控](系統健康監控.md) | 14 項檢查、健康百分比、紅黃綠燈號、部署探針與最近 24 小時 WARN 以上日誌（頁面 PRD 見 [系統健康監控 PRD](../prd/系統健康監控-prd.md)）|
 | [AI 日誌分析](AI日誌分析.md) | 日誌送 Azure OpenAI／OpenAI 整理、Markdown 安全渲染、PDF 報告與內嵌中文字型（0.9.4）|
 | [AI 例外分析](AI例外分析.md) | 系統例外紀錄明細窗的 AI 分析報告、多輪追問、複製對話與 PDF（0.9.68；頁面 PRD 見 [系統例外紀錄 PRD](../prd/系統例外紀錄-prd.md)）|
-| [售後 Agent 示範系統](售後Agent示範系統.md) | Microsoft Agent Framework 示範；已實作 M0 計費接軌（`AgentChatClientFactory`／`AuditingChatClient`，1.0.2）、M1 模擬鞋服電商＋傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）與 M2 單一售後 Agent（`/shop/assistant` 線上客服、受控工具、確認卡、幕後面板、`/agent-runs` 執行紀錄，1.0.4）|
+| [售後 Agent 示範系統](售後Agent示範系統.md) | Microsoft Agent Framework 示範；已實作 M0 計費接軌（`AgentChatClientFactory`／`AuditingChatClient`，1.0.2）、M1 模擬鞋服電商＋傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）、M2 單一售後 Agent（`/shop/assistant` 線上客服、受控工具、確認卡、幕後面板、`/agent-runs` 執行紀錄，1.0.4）與 M3 展示控制（`/demo-console` 控制台、故障模擬、一鍵重置、錄製／回放、身分切換，1.0.5）|
 
 > 語系與本地化（`RequestLocalization`、`AntDesignLocaleFactory`、支援文化）不另立文件，見 [架構總覽](../architecture/架構總覽.md) 的「語系與本地化」小節。
 

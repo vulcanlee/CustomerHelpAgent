@@ -14,6 +14,11 @@
     <Folder Include="Services\Adapter\" />
   </ItemGroup>
 
+  <!-- 測試要縮短 DemoControlService.FaultDelay（internal set），不把它開放給正式程式修改。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="CustomerHelpAgent.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AutoMapper" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />

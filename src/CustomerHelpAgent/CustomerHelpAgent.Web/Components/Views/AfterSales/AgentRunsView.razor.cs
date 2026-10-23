@@ -15,7 +15,7 @@ namespace CustomerHelpAgent.Web.Components.Views.AfterSales;
 
 /// <summary>
 /// 後台「Agent 執行紀錄」（/agent-runs）：列出每一輪售後 Agent 執行（新到舊），點列開窗看與顧客幕後面板相同的步驟時間軸。
-/// 唯讀：不編輯、不刪除。
+/// 唯讀：不編輯、不刪除。回放的那一輪（<see cref="AgentRunSummary.IsReplay"/>，1.0.5 起）在「模式」欄標「回放」。
 /// </summary>
 public partial class AgentRunsView
 {

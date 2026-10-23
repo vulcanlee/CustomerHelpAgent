@@ -84,6 +84,11 @@ public static class ServiceCollectionExtensions
         // 售後 Agent 對話中上傳、尚未送出的照片（1.0.4 起，跨 circuit 共用記憶體）。
         // AfterSalesAgentTools 不註冊：它帶著每輪的 AfterSalesToolContext，由 Runner 以已註冊的服務逐輪建立。
         services.AddSingleton<AgentPhotoInbox>();
+        // 一鍵重置示範資料成功後一併清空（1.0.5 起）：與上面共用同一個實例。
+        services.AddSingleton<IDemoResetParticipant>(sp => sp.GetRequiredService<AgentPhotoInbox>());
+        // 回放游標（1.0.5 起，每個會話回放到錄製的哪裡）：一鍵重置示範資料時一併清空，與原服務共用同一個實例。
+        services.AddSingleton<ReplayCursorStore>();
+        services.AddSingleton<IDemoResetParticipant>(sp => sp.GetRequiredService<ReplayCursorStore>());
         // 售後 Agent 的執行底座：每次呼叫建一個 Agent，會話由 AgentSessionStore 還原（1.0.4 起）。
         services.AddScoped<AfterSalesAgentRunner>();
 
@@ -178,6 +183,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SoftDeletePurgeService>();
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
+        // 展示控制狀態（1.0.5 起）：故障模擬、即時／回放、幕後面板預設。Singleton＋記憶體快取，啟動時由 Program.cs 載入。
+        services.AddSingleton<DemoControlService>();
+        // 展示身分切換的一次性票券（1.0.5 起）：記憶體保存 60 秒；兌換與換發 Cookie 在 /Auths/DemoSwitch。
+        services.AddSingleton<DemoSwitchTicketService>();
+        // 一鍵重置示範資料（1.0.5 起）：刪除並重新寫入業務資料，保留歷史；記憶體狀態經 IDemoResetParticipant 清空。
+        services.AddScoped<DemoResetService>();
         services.AddScoped<AfterSalesPolicyService>();
         services.AddScoped<ShopOrderService>();
         // 售後申請（1.0.3 起）：照片實體檔一律經 AfterSalesFileStore（含根目錄檢查）；埋點失敗不中斷流程。
@@ -185,6 +196,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AfterSalesRequestService>();
         services.AddScoped<AgentTraceService>();
         services.AddScoped<AgentSessionStore>();
+        // 售後 Agent 會話錄製（1.0.5 起）：示範模式＋即時模式時由 Runner／RecordingChatClient 寫入；重置示範資料不刪。
+        services.AddScoped<AgentRecordingService>();
         services.AddScoped<ProcessMetricService>();
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();

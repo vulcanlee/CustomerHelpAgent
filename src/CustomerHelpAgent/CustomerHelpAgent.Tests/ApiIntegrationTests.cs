@@ -831,6 +831,46 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         StartupSafetyValidator.Validate(configuration, "Production");
     }
 
+    /// <summary>示範模式（一鍵重置、故障模擬、身分切換）不可在 Production 開啟。</summary>
+    [Theory]
+    [InlineData("true")]
+    [InlineData("True")]
+    public void Startup_ProductionWithDemoEnabled_Fails(string enabled)
+    {
+        var configuration = BuildProductionSafeConfiguration(new Dictionary<string, string?>
+        {
+            ["DemoSettings:Enabled"] = enabled,
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            StartupSafetyValidator.Validate(configuration, "Production"));
+
+        Assert.Contains("DemoSettings:Enabled", exception.Message);
+        Assert.Contains("示範模式", exception.Message);
+    }
+
+    [Fact]
+    public void Startup_ProductionWithDemoDisabled_Passes()
+    {
+        var configuration = BuildProductionSafeConfiguration(new Dictionary<string, string?>
+        {
+            ["DemoSettings:Enabled"] = "false",
+        });
+
+        StartupSafetyValidator.Validate(configuration, "Production");
+    }
+
+    [Fact]
+    public void Startup_DevelopmentWithDemoEnabled_Passes()
+    {
+        var configuration = BuildProductionSafeConfiguration(new Dictionary<string, string?>
+        {
+            ["DemoSettings:Enabled"] = "true",
+        });
+
+        StartupSafetyValidator.Validate(configuration, "Development");
+    }
+
     /// <summary>其餘設定都給安全值，讓測試只聚焦在傳入的那幾個鍵上。</summary>
     private static IConfiguration BuildProductionSafeConfiguration(Dictionary<string, string?> overrides)
     {
@@ -993,6 +1033,7 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     [InlineData(typeof(AfterSalesRequestService))]
     [InlineData(typeof(AgentTraceService))]
     [InlineData(typeof(AgentSessionStore))]
+    [InlineData(typeof(AgentRecordingService))]
     [InlineData(typeof(ProcessMetricService))]
     [InlineData(typeof(TeamService))]
     [InlineData(typeof(RoleViewService))]

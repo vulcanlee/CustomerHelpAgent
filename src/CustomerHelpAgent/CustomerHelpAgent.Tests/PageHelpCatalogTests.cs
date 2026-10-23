@@ -31,6 +31,7 @@ public sealed class PageHelpCatalogTests
         ["/Auths/ResetPassword"] = "NoFooterLayout 重設密碼頁，沒有頂欄",
         ["/Auths/RefreshSession"] = "換發 Cookie 的轉導頁，停留時間趨近於零",
         ["/Auths/TwoFactor"] = "NoFooterLayout 兩步驟驗證第二步，沒有頂欄",
+        ["/Auths/DemoSwitch"] = "技術頁，立即導向（展示身分切換換發 Cookie）",
         ["/shop"] = "顧客商店版面沒有頂欄操作說明按鈕",
         ["/shop/orders/{OrderId:int}"] = "顧客商店版面沒有頂欄操作說明按鈕",
         ["/shop/after-sales/new"] = "顧客商店版面沒有頂欄操作說明按鈕",

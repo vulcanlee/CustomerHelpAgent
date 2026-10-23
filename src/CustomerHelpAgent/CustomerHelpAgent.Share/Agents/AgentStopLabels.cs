@@ -6,6 +6,9 @@ namespace CustomerHelpAgent.Share.Agents;
 /// </summary>
 public static class AgentStopLabels
 {
+    /// <summary><see cref="AgentStepKind.Warning"/>：本輪有查無資料／逾時／規則衝突的工具結果，模型卻沒有追問就直接回覆。</summary>
+    public const string UncertainConclusionWarning = "模型在查無資料／逾時／規則衝突後直接下結論，請留意。";
+
     public static string Text(AgentStopReason reason, int? maxSteps = null, int? maxConsecutiveToolFailures = null) => reason switch
     {
         AgentStopReason.Answered => "本輪結束：Agent 已回覆。",
@@ -25,6 +28,9 @@ public static class AgentStopLabels
         AgentStopReason.QuotaExceeded => "本輪中止：已達 AI 用量上限。",
         AgentStopReason.ModelError => "本輪中止：模型呼叫失敗。",
         AgentStopReason.Canceled => "本輪已取消。",
+        AgentStopReason.ReplayDiverged => "回放中止：與錄製內容不同。",
+        AgentStopReason.ReplayFinished => "回放結束：錄製內容已播完。",
+        AgentStopReason.ReplayActionMismatch => "請送出錄製時的內容",
         _ => reason.ToString(),
     };
 }

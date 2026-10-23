@@ -17,7 +17,8 @@ public static class ReturnUrlGuard
         return IsLocalUrl(returnUrl) ? returnUrl! : DefaultUrl;
     }
 
-    private static bool IsLocalUrl(string? url)
+    /// <summary>是否為站內路徑（<see cref="Sanitize"/> 的判斷；呼叫端要自己決定不合法時的預設值時用）。</summary>
+    public static bool IsLocalUrl([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? url)
     {
         if (string.IsNullOrEmpty(url) || url[0] != '/')
         {

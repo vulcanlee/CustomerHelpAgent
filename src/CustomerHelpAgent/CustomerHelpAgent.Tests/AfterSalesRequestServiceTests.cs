@@ -111,8 +111,8 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var currentUser = new CurrentUserService { CurrentUser = new CurrentUser { Id = StaffUserId, Account = "agent1" } };
         return new AfterSalesRequestService(
             factory,
-            new AfterSalesPolicyService(factory, audit, currentUser, time, NullLogger<AfterSalesPolicyService>.Instance),
-            new ShopOrderService(factory, NullLogger<ShopOrderService>.Instance),
+            new AfterSalesPolicyService(factory, audit, currentUser, TestDemoControl.Off(factory), time, NullLogger<AfterSalesPolicyService>.Instance),
+            new ShopOrderService(factory, TestDemoControl.Off(factory), NullLogger<ShopOrderService>.Instance),
             CreateFileStore(),
             audit,
             currentUser,
@@ -393,6 +393,21 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Assert.True(FileRootIsEmpty());
         await using var ctx = NewContext();
         Assert.Equal(1, await ctx.AfterSalesRequest.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetOpenRequestNoAsync_OnlyOwnOpenRequestOfSameType()
+    {
+        var service = CreateService();
+        var first = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        Assert.True(first.Success, first.Message);
+
+        Assert.Equal(first.RequestNo, await service.GetOpenRequestNoAsync(alice, aliceItemId, AfterSalesType.SizeExchange));
+        Assert.Null(await service.GetOpenRequestNoAsync(bob, aliceItemId, AfterSalesType.SizeExchange));
+        Assert.Null(await service.GetOpenRequestNoAsync(alice, aliceItemId, AfterSalesType.ReturnRefund));
+
+        Assert.True((await service.DecideAsync(first.RequestId!.Value, approve: true, note: null)).Success);
+        Assert.Null(await service.GetOpenRequestNoAsync(alice, aliceItemId, AfterSalesType.SizeExchange));
     }
 
     [Fact]

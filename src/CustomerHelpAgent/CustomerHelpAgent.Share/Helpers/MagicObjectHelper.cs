@@ -90,6 +90,10 @@ public class MagicObjectHelper
     public const string 角色_資料保留與清理 = "資料保留與清理";
 
     /// <inheritdoc cref="角色_系統管理"/>
+    /// <remarks>售後展示控制台（1.0.5 起）；頁面另外只在示範模式（<c>DemoSettings:Enabled</c>）時可操作。</remarks>
+    public const string 角色_展示控制台 = "展示控制台";
+
+    /// <inheritdoc cref="角色_系統管理"/>
     public const string 角色_公告管理 = "公告管理";
 
     /// <inheritdoc cref="角色_系統管理"/>

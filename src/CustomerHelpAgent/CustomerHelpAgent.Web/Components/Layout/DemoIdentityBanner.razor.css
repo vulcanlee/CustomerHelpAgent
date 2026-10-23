@@ -1,0 +1,56 @@
+/* 展示模式提示列。顏色一律取 theme.css 的 --app-* 警示色（速查表 §6.9）。 */
+.demo-banner {
+    align-items: center;
+    background: var(--app-warn-bg);
+    border-bottom: 1px solid var(--app-warn-line);
+    color: var(--app-text);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem 1.5rem;
+}
+
+.demo-banner-text,
+.demo-banner-fault {
+    align-items: center;
+    display: inline-flex;
+    font-weight: 600;
+    gap: 0.35rem;
+}
+
+.demo-banner-fault {
+    border: 1px solid var(--app-warn);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-warn);
+    padding: 0.1rem 0.7rem;
+}
+
+.demo-banner-back {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--app-warn-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-text);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: 0.35rem;
+    padding: 0.2rem 0.85rem;
+}
+
+.demo-banner-back:hover,
+.demo-banner-back:focus-visible {
+    border-color: var(--app-warn);
+    color: var(--app-warn);
+}
+
+.demo-banner-error {
+    color: var(--app-warn);
+    font-weight: 600;
+}
+
+@media (max-width: 640.98px) {
+    .demo-banner {
+        padding: 0.5rem 1rem;
+    }
+}

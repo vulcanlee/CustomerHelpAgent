@@ -2,7 +2,10 @@ using CustomerHelpAgent.Share.Agents;
 
 namespace CustomerHelpAgent.Models.Agents;
 
-/// <summary>執行軌跡清單的一列（顧客姓名以關掉軟刪除過濾器的明確查詢取得）。</summary>
+/// <summary>
+/// 執行軌跡清單的一列（顧客姓名以關掉軟刪除過濾器的明確查詢取得）。
+/// <see cref="ReplayRecordingId"/>：回放的那一輪用的錄製（1.0.5 起），即時執行為 null；<see cref="IsReplay"/> 供清單標示「回放」。
+/// </summary>
 public sealed record AgentRunSummary(
     int Id,
     Guid SessionKey,
@@ -11,7 +14,11 @@ public sealed record AgentRunSummary(
     DateTime? EndedAt,
     AgentStopReason? StopReason,
     int ModelCallCount,
-    int ToolCallCount);
+    int ToolCallCount,
+    int? ReplayRecordingId = null)
+{
+    public bool IsReplay => ReplayRecordingId is not null;
+}
 
 /// <summary>執行軌跡的一個步驟（白話層 <see cref="PlainText"/>＋原始層 <see cref="RawJson"/>）。</summary>
 public sealed record AgentRunStepView(

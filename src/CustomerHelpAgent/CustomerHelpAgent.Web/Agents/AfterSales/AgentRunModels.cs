@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using CustomerHelpAgent.Models.Agents;
 using CustomerHelpAgent.Share.Agents;
 
 namespace CustomerHelpAgent.Web.Agents.AfterSales;
@@ -53,3 +54,13 @@ public sealed record AgentTurnResult(
     AgentStopReason StopReason,
     string? StopExplanation,
     string? CreatedRequestNo);
+
+/// <summary>
+/// 回放劇本（1.0.5 起，<c>AfterSalesAgentRunner.GetReplayScriptAsync</c>）：<see cref="IsReplay"/>＝目前是否回放中（畫面要明確標示「回放中」）；
+/// <see cref="NextTurn"/>＝下一個待執行的錄製動作（頁面據此帶入下一句、或只開放錄製時按的確認／取消），播完或不是回放時為 null；
+/// <see cref="RecordedAt"/>＝錄製建立的時間（頁面的「回放中（錄製於 …）」標籤），錄製已刪除或不是回放時為 null。
+/// </summary>
+public sealed record AgentReplayScript(bool IsReplay, AgentRecordedTurnView? NextTurn, DateTime? RecordedAt = null)
+{
+    public static AgentReplayScript NotReplay { get; } = new(false, null);
+}

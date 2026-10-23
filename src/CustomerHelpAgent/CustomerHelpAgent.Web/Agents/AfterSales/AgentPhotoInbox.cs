@@ -1,4 +1,5 @@
 using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
 
 namespace CustomerHelpAgent.Web.Agents.AfterSales;
@@ -7,9 +8,10 @@ namespace CustomerHelpAgent.Web.Agents.AfterSales;
 /// 顧客在 Agent 對話中上傳、尚未隨申請送出的照片（Singleton，只放記憶體：重啟即清空）。
 /// 張數與大小上限沿用 <see cref="AfterSalesRequestService.MaxFileCount"/>／<see cref="AfterSalesRequestService.MaxFileSize"/>；
 /// 格式仍以 <see cref="AfterSalesRequestService.SubmitAsync"/> 的檢查為準。
-/// ⚠️ 只有 <see cref="Take"/>／<see cref="Clear"/> 會移除，開新會話時要呼叫 <see cref="Clear"/>。
+/// ⚠️ 只有 <see cref="Take"/>／<see cref="Clear"/>／<see cref="ClearAll"/> 會移除，開新會話時要呼叫 <see cref="Clear"/>。
+/// 一鍵重置示範資料（<see cref="DemoResetService"/>）成功後經 <see cref="IDemoResetParticipant"/> 呼叫 <see cref="ClearAll"/>。
 /// </summary>
-public sealed class AgentPhotoInbox
+public sealed class AgentPhotoInbox : IDemoResetParticipant
 {
     private readonly Dictionary<Guid, List<(string FileName, byte[] Content)>> photos = [];
     private readonly Lock gate = new();
@@ -74,4 +76,15 @@ public sealed class AgentPhotoInbox
             photos.Remove(sessionKey);
         }
     }
+
+    /// <summary>清空所有會話的暫存照片（重置示範資料時：會話已全數刪除，這些照片不可能再隨申請送出）。</summary>
+    public void ClearAll()
+    {
+        lock (gate)
+        {
+            photos.Clear();
+        }
+    }
+
+    void IDemoResetParticipant.OnDemoDataReset() => ClearAll();
 }

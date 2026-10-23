@@ -313,6 +313,23 @@ public static class AuditActions
         public const string AttachmentDownload = "Shop.Attachment.Download";
     }
 
+    /// <summary>
+    /// 售後展示控制（1.0.5 起，只在 <c>DemoSettings:Enabled</c> 時發生）：一鍵重置示範資料、故障模擬與即時／回放切換、
+    /// 以示範帳號身分檢視與切回、設定金劇本。<c>DemoControlService</c> 是 Singleton 拿不到登入者，
+    /// <see cref="FaultChanged"/>／<see cref="ModeChanged"/> 由呼叫端（展示控制台）寫。
+    /// </summary>
+    public static class Demo
+    {
+        public const string Reset = "Demo.Reset";
+        public const string FaultChanged = "Demo.FaultChanged";
+        public const string ModeChanged = "Demo.ModeChanged";
+        public const string SwitchIdentity = "Demo.SwitchIdentity";
+        public const string SwitchBack = "Demo.SwitchBack";
+        public const string RecordingGolden = "Demo.RecordingGolden";
+        /// <summary>展示控制台刪除錄製（1.0.5 起；Detail 為 <c>recordingId=…</c>）。</summary>
+        public const string RecordingDelete = "Demo.RecordingDelete";
+    }
+
     /// <summary>「系統參數」頁的修改與還原（0.9.98 起）。Detail 為 <c>key=…; old=…(來源); new=…(來源)</c>。</summary>
     public static class SystemParameter
     {

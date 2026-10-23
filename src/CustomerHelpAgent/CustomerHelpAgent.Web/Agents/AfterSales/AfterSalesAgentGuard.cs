@@ -18,6 +18,8 @@ namespace CustomerHelpAgent.Web.Agents.AfterSales;
 /// 所以 Runner 在顯示確認卡前也會檢查 <see cref="WriteBlocked"/>；這裡是第二道防線。</item>
 /// <item><c>forbidden</c>／<c>timeout</c>／<c>unavailable</c> → 立即終止（<c>ctx.Terminate</c>），回覆改用程式的固定說明（<see cref="FixedReply"/>）。</item>
 /// <item><c>conflict</c> → 停止原因 <see cref="AgentStopReason.PolicyConflict"/>，不終止（讓模型說明轉人工）。</item>
+/// <item>本輪出現 <c>not_found</c>／<c>timeout</c>／<c>conflict</c>／<c>no_policy</c> 依工具記下，同一工具後續回 <c>ok</c> 即清除；
+/// 仍有未清除者時 <see cref="HadUncertainResult"/> 為 true（標紅用；寫入封鎖 <see cref="WriteBlocked"/> 不因此解除）。</item>
 /// <item><c>request_photo_upload</c> 成功 → 終止並等待上傳。</item>
 /// <item>工具連續失敗（非 ok，或拋例外）達 <see cref="Configuration.AfterSalesAgentSettings.MaxConsecutiveToolFailures"/> 次 → 終止。
 /// 工具都以信封回報失敗而不拋例外，所以 <c>FunctionInvokingChatClient</c> 自己的連續錯誤計數只涵蓋例外，這裡另外計算。</item>
@@ -40,6 +42,7 @@ public sealed class AfterSalesAgentGuard
     private readonly TimeProvider timeProvider;
     private readonly ILogger logger;
     private readonly List<AgentPolicyCard> policyCards = [];
+    private readonly HashSet<string> uncertainTools = [];
 
     public AfterSalesAgentGuard(int maxConsecutiveFailures, Func<AgentTraceEvent, Task> emit, TimeProvider timeProvider, ILogger logger)
     {
@@ -57,6 +60,12 @@ public sealed class AfterSalesAgentGuard
 
     /// <summary>本輪是否已封鎖寫入（出現過查無、無規則或規則衝突）。</summary>
     public bool WriteBlocked { get; private set; }
+
+    /// <summary>
+    /// 本輪是否仍有不確定的工具結果（查無、逾時、規則衝突、無規則）；同一工具之後回 <c>ok</c> 就清除該工具造成的不確定。
+    /// Runner 據此在模型直接下結論時發 <see cref="AgentStepKind.Warning"/>。
+    /// </summary>
+    public bool HadUncertainResult => uncertainTools.Count > 0;
 
     public int ToolCallCount { get; private set; }
 
@@ -120,8 +129,36 @@ public sealed class AfterSalesAgentGuard
             $"未執行建立申請（{BlockedMessage}）。", Serialize(blocked.ToJsonElement()));
     }
 
+    /// <summary>
+    /// Runner 組確認卡的程式重查失敗（<see cref="AfterSalesAgentTools.RunConfirmationCheckAsync"/> 回非 ok）：比照工具，
+    /// 權限 → <see cref="AgentStopReason.Forbidden"/>、逾時 → <see cref="AgentStopReason.Timeout"/>、其他 → <see cref="AgentStopReason.ServiceUnavailable"/>，
+    /// 回覆改用同一組固定說明。
+    /// </summary>
+    internal void StopOnConfirmationCheckFailure(ToolOutcome failed)
+    {
+        var (reason, fixedReply) = failed.Status switch
+        {
+            ToolOutcomeStatus.Forbidden => (AgentStopReason.Forbidden, ForbiddenExplanation),
+            ToolOutcomeStatus.Timeout => (AgentStopReason.Timeout, TimeoutExplanation),
+            _ => (AgentStopReason.ServiceUnavailable, UnavailableExplanation),
+        };
+        if (SetStop(reason, terminating: true))
+        {
+            FixedReply = fixedReply;
+        }
+    }
+
     private void Apply(FunctionInvocationContext context, string name, ToolOutcome outcome)
     {
+        if (outcome.Status is ToolOutcomeStatus.NotFound or ToolOutcomeStatus.Timeout or ToolOutcomeStatus.Conflict or ToolOutcomeStatus.NoPolicy)
+        {
+            uncertainTools.Add(name);
+        }
+        else if (outcome.Status == ToolOutcomeStatus.Ok)
+        {
+            uncertainTools.Remove(name);
+        }
+
         switch (outcome.Status)
         {
             case ToolOutcomeStatus.Ok:

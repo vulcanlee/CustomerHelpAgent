@@ -23,7 +23,7 @@ public sealed class ShopOrderServiceTests
     }
 
     private static ShopOrderService Create(SqliteConnection conn) =>
-        new(new TestDbContextFactory(conn), NullLogger<ShopOrderService>.Instance);
+        new(new TestDbContextFactory(conn), TestDemoControl.Off(new TestDbContextFactory(conn)), NullLogger<ShopOrderService>.Instance);
 
     private static MyUser User(string account) => new() { Account = account, Password = "x", Name = account };
 

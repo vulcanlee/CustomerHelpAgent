@@ -46,6 +46,7 @@ public sealed class AfterSalesPolicyServiceTests
         new TestDbContextFactory(conn),
         audit,
         new CurrentUserService { CurrentUser = new CurrentUser { Id = 7, Account = "merchant1" } },
+        TestDemoControl.Off(new TestDbContextFactory(conn)),
         new ManualTimeProvider(UtcNow),
         NullLogger<AfterSalesPolicyService>.Instance);
 

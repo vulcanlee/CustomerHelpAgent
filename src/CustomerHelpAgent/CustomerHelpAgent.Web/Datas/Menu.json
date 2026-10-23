@@ -188,6 +188,12 @@
             "name": "資料保留與清理",
             "icon": "auto_delete",
             "url": "/data-retention"
+          },
+          {
+            "id": 69,
+            "name": "展示控制台",
+            "icon": "slideshow",
+            "url": "/demo-console"
           }
         ]
       }

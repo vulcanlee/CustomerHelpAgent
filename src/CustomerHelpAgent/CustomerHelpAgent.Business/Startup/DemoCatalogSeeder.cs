@@ -42,6 +42,19 @@ public sealed class DemoCatalogSeeder : IDatabaseSeeder
             return;
         }
 
+        var catalog = await WriteCatalogAsync(dbContext, timeProvider.GetLocalNow().DateTime, cancellationToken);
+
+        logger.LogInformation(
+            "Seeded demo catalog. ProductCount={ProductCount}, OrderCount={OrderCount}, PolicyCount={PolicyCount}",
+            catalog.Products.Count, catalog.Orders.Count, catalog.Policies.Count);
+    }
+
+    /// <summary>
+    /// 以 <see cref="DemoSeedData.CreateCatalog"/> 建立示範目錄並寫入（含 <c>SaveChanges</c>；交易由呼叫端決定）。
+    /// 本 seeder 與一鍵重置（<c>DemoResetService</c>）共用。示範顧客以帳號查詢且不理會軟刪除（軟刪除的帳號仍掛著訂單）；找不到就拋例外。
+    /// </summary>
+    internal static async Task<DemoSeedData.DemoCatalog> WriteCatalogAsync(BackendDBContext dbContext, DateTime now, CancellationToken cancellationToken)
+    {
         var userIdByAccount = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var account in new[] { DemoSeedData.Customer1, DemoSeedData.Customer2 })
         {
@@ -55,15 +68,12 @@ public sealed class DemoCatalogSeeder : IDatabaseSeeder
                 ?? throw new InvalidOperationException($"找不到示範帳號「{account}」，無法建立示範訂單；DemoAccountSeeder 應先執行。");
         }
 
-        var catalog = DemoSeedData.CreateCatalog(timeProvider.GetLocalNow().DateTime, userIdByAccount);
+        var catalog = DemoSeedData.CreateCatalog(now, userIdByAccount);
         dbContext.Product.AddRange(catalog.Products);
         dbContext.SalesOrder.AddRange(catalog.Orders);
         dbContext.Shipment.AddRange(catalog.Shipments);
         dbContext.AfterSalesPolicy.AddRange(catalog.Policies);
         await dbContext.SaveChangesAsync(cancellationToken);
-
-        logger.LogInformation(
-            "Seeded demo catalog. ProductCount={ProductCount}, OrderCount={OrderCount}, PolicyCount={PolicyCount}",
-            catalog.Products.Count, catalog.Orders.Count, catalog.Policies.Count);
+        return catalog;
     }
 }

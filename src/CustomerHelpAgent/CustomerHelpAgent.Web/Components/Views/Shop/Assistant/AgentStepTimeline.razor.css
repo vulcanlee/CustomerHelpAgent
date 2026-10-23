@@ -26,6 +26,14 @@
     padding: 0.4rem 0.5rem;
 }
 
+/* 程式提醒（Warning）：整列標紅，與一般列一眼分得開。 */
+.backstage-row.is-warning {
+    border-left: 3px solid var(--shop-step-warning);
+    color: var(--shop-step-warning);
+    font-weight: 700;
+    padding-left: 0.5rem;
+}
+
 .backstage-line {
     align-items: baseline;
     display: grid;

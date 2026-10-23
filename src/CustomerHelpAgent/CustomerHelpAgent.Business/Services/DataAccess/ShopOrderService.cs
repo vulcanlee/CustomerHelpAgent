@@ -2,19 +2,30 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using CustomerHelpAgent.AccessDatas;
 using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
+using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.Business.Services.DataAccess;
 
-/// <summary>顧客訂單服務（唯讀）：只回傳登入顧客本人的訂單，且不會回傳收件人手機。</summary>
+/// <summary>
+/// 顧客訂單服務（唯讀）：只回傳登入顧客本人的訂單，且不會回傳收件人手機。
+/// 展示的故障模擬（<see cref="DemoControlService"/>，示範模式關閉時不生效）在這裡注入，Agent 與傳統流程同受影響：
+/// <see cref="DemoFault.OrderServiceTimeout"/>（所有讀取方法）、<see cref="DemoFault.OrdersNotFound"/>、<see cref="DemoFault.ShipmentAnomaly"/>。
+/// </summary>
 public class ShopOrderService
 {
+    internal const string AnomalyStatusText = "配送異常";
+    internal const string AnomalyEventDescription = "配送異常，物流中心查詢中";
+
     private readonly IDbContextFactory<BackendDBContext> contextFactory;
+    private readonly DemoControlService demoControl;
     private readonly ILogger<ShopOrderService> logger;
 
-    public ShopOrderService(IDbContextFactory<BackendDBContext> contextFactory, ILogger<ShopOrderService> logger)
+    public ShopOrderService(IDbContextFactory<BackendDBContext> contextFactory, DemoControlService demoControl, ILogger<ShopOrderService> logger)
     {
         this.contextFactory = contextFactory;
+        this.demoControl = demoControl;
         this.logger = logger;
     }
 
@@ -32,6 +43,11 @@ public class ShopOrderService
 
     public async Task<IReadOnlyList<ShopOrderSummary>> GetMyOrdersAsync(int customerUserId)
     {
+        if (await OrdersNotFoundFaultAsync())
+        {
+            return [];
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var orders = await context.SalesOrder
             .AsNoTracking()
@@ -57,6 +73,11 @@ public class ShopOrderService
 
     public async Task<ShopOrderDetail?> GetMyOrderDetailAsync(int customerUserId, int orderId)
     {
+        if (await OrdersNotFoundFaultAsync())
+        {
+            return null;
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var order = await context.SalesOrder
             .AsNoTracking()
@@ -86,6 +107,16 @@ public class ShopOrderService
                     .OrderBy(e => e.OccurredAt).ThenBy(e => e.Id)
                     .Select(e => new ShopShipmentEventView(e.OccurredAt, e.Location, e.Description))
                     .ToList());
+        if (shipmentView is not null && demoControl.IsFaultActive(DemoFault.ShipmentAnomaly))
+        {
+            // 只改讀出的結果，不寫回資料庫：關掉故障就恢復原狀。
+            logger.LogWarning("Demo fault injected. Fault={Fault}, OrderId={OrderId}", DemoFault.ShipmentAnomaly, order.Id);
+            shipmentView = shipmentView with
+            {
+                StatusText = AnomalyStatusText,
+                Events = [.. shipmentView.Events, new ShopShipmentEventView(demoControl.Now(), "物流中心", AnomalyEventDescription)],
+            };
+        }
 
         return new ShopOrderDetail(
             ToSummary(order, shipment?.ShippedAt),
@@ -96,6 +127,11 @@ public class ShopOrderService
 
     public async Task<ShopOrderItemView?> GetMyOrderItemAsync(int customerUserId, int orderItemId)
     {
+        if (await OrdersNotFoundFaultAsync())
+        {
+            return null;
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var item = await context.SalesOrderItem
             .AsNoTracking()
@@ -116,6 +152,11 @@ public class ShopOrderService
     /// </summary>
     public async Task<IReadOnlyList<(string Color, string Size)>> GetVariantOptionsAsync(int customerUserId, int orderItemId)
     {
+        if (await OrdersNotFoundFaultAsync())
+        {
+            return [];
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var productId = await FindOwnedProductIdAsync(context, customerUserId, orderItemId);
         if (productId is null)
@@ -135,6 +176,11 @@ public class ShopOrderService
     /// <summary>訂單商品所屬商品的全部規格與庫存（含目前這一個，依 Id 排序）。不是本人的訂單商品回空清單。</summary>
     public async Task<IReadOnlyList<ShopVariantStock>> GetVariantStockAsync(int customerUserId, int orderItemId)
     {
+        if (await OrdersNotFoundFaultAsync())
+        {
+            return [];
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var productId = await FindOwnedProductIdAsync(context, customerUserId, orderItemId);
         if (productId is null)
@@ -148,6 +194,28 @@ public class ShopOrderService
             .OrderBy(x => x.Id)
             .Select(x => new ShopVariantStock(x.Color, x.Size, x.Stock))
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// 每個讀取方法的開頭：<see cref="DemoFault.OrderServiceTimeout"/> 先等 <see cref="DemoControlService.FaultDelay"/> 再拋逾時；
+    /// 回傳 true 代表 <see cref="DemoFault.OrdersNotFound"/>（呼叫端回空結果）。訂單查無時規格查詢也一併回空（不是本人的訂單商品）。
+    /// </summary>
+    private async Task<bool> OrdersNotFoundFaultAsync()
+    {
+        if (demoControl.IsFaultActive(DemoFault.OrderServiceTimeout))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}", DemoFault.OrderServiceTimeout);
+            await Task.Delay(demoControl.FaultDelay);
+            throw new TimeoutException("訂單系統沒有回應（故障模擬）");
+        }
+
+        if (demoControl.IsFaultActive(DemoFault.OrdersNotFound))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}", DemoFault.OrdersNotFound);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>本人訂單商品所屬的商品 Id；不是本人的（或不存在）回 null。</summary>

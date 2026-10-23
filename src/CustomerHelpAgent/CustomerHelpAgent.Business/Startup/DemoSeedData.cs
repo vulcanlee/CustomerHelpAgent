@@ -64,6 +64,13 @@ public static class DemoSeedData
         new(Merchant1, "店長阿明", MagicObjectHelper.店家角色),
     ];
 
+    /// <summary>
+    /// 建立示範目錄（商品、規格、訂單、物流、售後規則）。⚠️ 每一列都帶<b>固定 Id</b>（1.0.5 起）：初次寫入與一鍵重置
+    /// 都經 <c>DemoCatalogSeeder.WriteCatalogAsync</c>，產生完全相同的 Id，錄製檔裡工具參數／結果的 <c>orderItemId</c> 等才能在重置後回放。
+    /// 編號：商品 1 慢跑鞋、2 外套；規格依建立順序 1–22（慢跑鞋 黑 38–44＝1–7、白 38–44＝8–14；外套 藏青 S/M/L/XL＝15–18、灰＝19–22）；
+    /// 訂單與明細 1–4（＝SO-DEMO-0001～0004，一張訂單一筆明細）；物流 1（訂單 4）、物流事件 1–3；售後規則 1–5（依下方順序）。
+    /// 售後申請與 Agent 相關資料表不固定 Id。新增或調整示範資料時只能往後加編號，不要改動既有編號。
+    /// </summary>
     /// <param name="now">本地時間的「現在」。</param>
     /// <param name="userIdByAccount">至少含 <see cref="Customer1"/>、<see cref="Customer2"/> 的使用者 Id。</param>
     public static DemoCatalog CreateCatalog(DateTime now, IReadOnlyDictionary<string, int> userIdByAccount)
@@ -139,7 +146,43 @@ public static class DemoSeedData
                 "訂單出貨後超過 3 天未送達可申請催件，客服將於 1 個工作天內回覆物流進度。", effectiveFrom),
         };
 
+        AssignFixedIds([shoes, jacket], orders, shipment, policies);
         return new DemoCatalog([shoes, jacket], orders, [shipment], policies);
+    }
+
+    /// <summary>依建立順序指定固定 Id（見 <see cref="CreateCatalog"/> 的編號說明）。</summary>
+    private static void AssignFixedIds(IReadOnlyList<Product> products, IReadOnlyList<SalesOrder> orders, Shipment shipment, IReadOnlyList<AfterSalesPolicy> policies)
+    {
+        var variantId = 0;
+        for (var i = 0; i < products.Count; i++)
+        {
+            products[i].Id = i + 1;
+            foreach (var variant in products[i].Variants)
+            {
+                variant.Id = ++variantId;
+            }
+        }
+
+        var itemId = 0;
+        for (var i = 0; i < orders.Count; i++)
+        {
+            orders[i].Id = i + 1;
+            foreach (var item in orders[i].Items)
+            {
+                item.Id = ++itemId;
+            }
+        }
+
+        shipment.Id = 1;
+        for (var i = 0; i < shipment.Events.Count; i++)
+        {
+            shipment.Events[i].Id = i + 1;
+        }
+
+        for (var i = 0; i < policies.Count; i++)
+        {
+            policies[i].Id = i + 1;
+        }
     }
 
     private static ProductVariant Variant(Product product, string color, string size)

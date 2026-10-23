@@ -14,7 +14,7 @@
     {
         var rowIndex = index;
         var item = Events[rowIndex];
-        <li class="backstage-row @(item.Kind == AgentStepKind.Stop ? "is-stop" : null)" data-kind="@item.Kind">
+        <li class="backstage-row @RowClass(item.Kind)" data-kind="@item.Kind">
             <div class="backstage-line">
                 <AgentSourceTag Source="@item.Source" />
                 <span class="backstage-text">@item.PlainText</span>

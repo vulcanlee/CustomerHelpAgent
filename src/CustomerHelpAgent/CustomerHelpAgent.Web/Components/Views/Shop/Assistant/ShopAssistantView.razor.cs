@@ -7,13 +7,17 @@ using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
+using CustomerHelpAgent.Models.Agents;
 using CustomerHelpAgent.Models.Shop;
 using CustomerHelpAgent.Share.Agents;
+using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Share.Shop;
 using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Agents.AfterSales;
 using CustomerHelpAgent.Web.Ai;
+using CustomerHelpAgent.Web.Auth;
+using CustomerHelpAgent.Web.Components.Auths;
 using CustomerHelpAgent.Web.Components.Commons;
 // MAF 1.25 也有同名的 Microsoft.Agents.AI.AgentSessionStore；這裡用的是本專案的資料服務。
 using AgentSessionStore = CustomerHelpAgent.Business.Services.DataAccess.AgentSessionStore;
@@ -28,9 +32,13 @@ namespace CustomerHelpAgent.Web.Components.Views.Shop.Assistant;
 /// <see cref="AiMarkdownRenderer.ToSafeHtml"/>）；程式產生的固定說明以系統訊息樣式呈現。</item>
 /// <item>規則卡與確認卡由工具結果／程式重查渲染，不採模型文字；確認卡未處理前輸入框停用。</item>
 /// <item>停止原因為等待上傳時出現照片上傳區（照片先放 <see cref="AgentPhotoInbox"/>，再續跑）。</item>
-/// <item>幕後面板：事件時間軸，開關偏好存 localStorage（讀寫失敗一律當作預設開）。</item>
+/// <item>幕後面板：事件時間軸，開關偏好存 localStorage（有存過就以它為準；沒有或讀不到時取 <see cref="DemoControlService.BackstageDefaultOn"/>）。</item>
+/// <item>回放（1.0.5 起，<see cref="AfterSalesAgentRunner.GetReplayScriptAsync"/>）：標題下顯示「回放中（錄製於 …）」；不檢查 AI 設定（回放不呼叫模型、不需金鑰）；
+/// 輸入框帶入錄製的下一句且唯讀，只能按送出；確認卡只開放錄製時按的那一個；上傳照片提示「請上傳任一張照片以繼續」（張數要與錄製時相同才能送出）。
+/// 動作與錄製不同（<see cref="AgentStopReason.ReplayActionMismatch"/>）只補一則系統訊息、畫面回到送出前；回放結束或中止顯示固定說明，
+/// 展示者（Cookie 帶 <see cref="DemoClaims.PresenterId"/>）另有「回到展示控制台」——經切回展示者的票券導過去（<c>/demo-console</c> 只限管理員）。</item>
 /// </list>
-/// 進頁時接續最新一個未關閉的會話並還原對話；每次送出、確認、取消、上傳各記一筆流程埋點（CaseKey＝會話識別碼）。
+/// 進頁時接續最新一個未關閉的會話並以執行軌跡還原對話與幕後面板；另一個分頁已先更新會話時，這一輪以系統訊息提示重新整理。每次送出、確認、取消、上傳各記一筆流程埋點（CaseKey＝會話識別碼）。
 /// </summary>
 public partial class ShopAssistantView : IDisposable
 {
@@ -73,6 +81,12 @@ public partial class ShopAssistantView : IDisposable
     public ProcessMetricService ProcessMetricService { get; set; } = default!;
 
     [Inject]
+    public DemoControlService DemoControlService { get; set; } = default!;
+
+    [Inject]
+    public DemoSwitchTicketService TicketService { get; set; } = default!;
+
+    [Inject]
     public ModalService ModalService { get; set; } = default!;
 
     [Inject]
@@ -112,6 +126,21 @@ public partial class ShopAssistantView : IDisposable
     /// <summary>本輪 <see cref="AgentStepKind.ModelReply"/> 事件的來源：程式產生的回覆以系統訊息樣式呈現。</summary>
     private AgentDataSource? turnReplySource;
 
+    /// <summary>上一輪因會話版本衝突（另一個分頁先存回）而沒有結果；說明已以系統訊息呈現。</summary>
+    private bool turnConflicted;
+
+    /// <summary>版本衝突的那一輪已建立的申請編號（確認送出後才衝突）；確認卡據此標成「已建立」。</summary>
+    private string? conflictRequestNo;
+
+    /// <summary>回放劇本：是否回放中、下一個錄製的動作；進頁、每輪結束與開新對話時重新取得。</summary>
+    private AgentReplayScript replayScript = AgentReplayScript.NotReplay;
+
+    /// <summary>這一輪回放中止或播完（<see cref="AgentStopReason.ReplayDiverged"/>／<see cref="AgentStopReason.ReplayFinished"/>）；開新對話時清除。</summary>
+    private AgentStopReason? replayStopReason;
+
+    /// <summary>展示者以示範帳號身分檢視中（示範模式開啟且 Cookie 帶展示者 claim）。</summary>
+    private bool isPresenter;
+
     private enum EntryKind
     {
         User,
@@ -143,12 +172,35 @@ public partial class ShopAssistantView : IDisposable
 
     private bool HasPendingCard => entries.Any(x => x.Kind == EntryKind.Confirmation && x.CardState is CardState.Pending or CardState.Submitting);
 
-    private bool CanType => loaded && sessionKey is not null && aiError is null && !busy && !HasPendingCard;
+    private bool CanType => loaded && sessionKey is not null && aiError is null && !busy && !HasPendingCard
+        && (!IsReplay || (ReplayEnd is null && ReplayNext?.Kind == AgentRecordedTurnKind.Send));
+
+    private bool IsReplay => replayScript.IsReplay;
+
+    private AgentRecordedTurnView? ReplayNext => replayScript.NextTurn;
+
+    /// <summary>回放已結束或中止：這一輪回報的停止原因，或錄製的動作已全部播完。</summary>
+    private AgentStopReason? ReplayEnd => !IsReplay ? null
+        : replayStopReason ?? (ReplayNext is null ? AgentStopReason.ReplayFinished : null);
+
+    private string ReplayBadgeText => replayScript.RecordedAt is { } recordedAt
+        ? $"回放中（錄製於 {recordedAt.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture)}）"
+        : "回放中";
+
+    /// <summary>回放中送出照片的張數要與錄製時相同（顧客訊息「（已上傳 N 張照片）」會送進模型請求，張數不同就對不上錄製）。</summary>
+    private bool ReplayPhotosReady => !IsReplay
+        || (ReplayEnd is null && ReplayNext is { Kind: AgentRecordedTurnKind.PhotosUploaded } next && sessionKey is { } key
+            && string.Equals(
+                string.Format(CultureInfo.InvariantCulture, AfterSalesAgentRunner.PhotosUploadedMessageFormat, PhotoInbox.Count(key) + pendingPhotos.Count),
+                next.CustomerText?.Trim(),
+                StringComparison.Ordinal));
 
     private string ComposerPlaceholder
         => aiError is not null ? "AI 服務尚未設定"
         : busy ? "客服處理中，請稍候…"
         : HasPendingCard ? "請先按下確認卡上的「確認送出」或「取消」"
+        : IsReplay && ReplayEnd is not null ? "回放已結束"
+        : IsReplay && ReplayNext?.Kind == AgentRecordedTurnKind.PhotosUploaded ? "請上傳任一張照片以繼續"
         : "輸入您的問題，例如：剛買的鞋尺碼不合適，想換大一碼";
 
     protected override async Task OnInitializedAsync()
@@ -172,22 +224,31 @@ public partial class ShopAssistantView : IDisposable
             return;
         }
 
-        aiError = ChatClientFactory.Validate();
-        if (aiError is not null)
-        {
-            Logger.LogWarning("Shop assistant opened while the AI service is not configured.");
-        }
+        var user = (await authStateProvider.GetAuthenticationStateAsync()).User;
+        isPresenter = DemoControlService.IsEnabled && user.HasClaim(x => x.Type == DemoClaims.PresenterId);
+        showBackstage = DemoControlService.BackstageDefaultOn;
 
         try
         {
             var key = await Runner.StartOrResumeAsync();
             await RestoreAsync(key);
             sessionKey = key;
+            await RefreshReplayAsync();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load the shop assistant conversation.");
             ViewNotification.UnexpectedError(NotificationService, "載入線上客服失敗，請重新整理頁面。", ex);
+        }
+
+        // 回放不呼叫模型、不需要金鑰：只在不是回放時檢查 AI 設定。
+        if (!IsReplay)
+        {
+            aiError = ChatClientFactory.Validate();
+            if (aiError is not null)
+            {
+                Logger.LogWarning("Shop assistant opened while the AI service is not configured.");
+            }
         }
 
         loaded = true;
@@ -202,15 +263,17 @@ public partial class ShopAssistantView : IDisposable
 
         try
         {
-            if (await JS.InvokeAsync<string?>("localStorage.getItem", BackstageStorageKey) == "0")
+            // 本機存過偏好就以它為準；沒有存過維持展示控制台的預設。
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", BackstageStorageKey);
+            if (saved is "0" or "1" && showBackstage != (saved == "1"))
             {
-                showBackstage = false;
+                showBackstage = saved == "1";
                 StateHasChanged();
             }
         }
         catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
         {
-            // 隱私模式或被封鎖時 localStorage 會拋例外：維持預設（開）。
+            // 隱私模式或被封鎖時 localStorage 會拋例外：維持預設。
             Logger.LogDebug(ex, "Shop assistant backstage preference could not be read; using the default.");
         }
     }
@@ -223,7 +286,10 @@ public partial class ShopAssistantView : IDisposable
         runCancellation.Dispose();
     }
 
-    /// <summary>以會話內容還原對話（顧客與 Agent 的文字、最後一張未決的確認卡）；最後停在等待上傳時重新顯示上傳區。</summary>
+    /// <summary>
+    /// 以執行軌跡還原對話（顧客的話、每輪顧客當時看到的回覆／程式說明、停止說明、規則卡、最後一張未決的確認卡）與幕後面板；
+    /// 呈現方式與即時回合的 <see cref="ApplyResult"/> 相同。最後停在等待上傳時重新顯示上傳區。
+    /// </summary>
     private async Task RestoreAsync(Guid key)
     {
         foreach (var item in await Runner.GetHistoryAsync(key))
@@ -231,17 +297,18 @@ public partial class ShopAssistantView : IDisposable
             switch (item.Kind)
             {
                 case AgentStepKind.UserMessage:
-                    entries.Add(new ChatEntry { Kind = EntryKind.User, Text = item.PlainText });
+                    entries.Add(new ChatEntry { Kind = EntryKind.User, Text = item.Text });
                     break;
-                case AgentStepKind.ModelReply:
-                    entries.Add(AgentEntry(item.PlainText));
+                case AgentStepKind.TurnResult:
+                    AddReplyEntries(item.Text, item.IsProgramReply, item.StopExplanation, item.PolicyCards);
                     break;
-                case AgentStepKind.ConfirmationShown when item.RawJson is not null:
-                    entries.Add(new ChatEntry { Kind = EntryKind.Confirmation, Card = ConfirmationCard.FromJson(item.RawJson), CardState = CardState.Pending });
+                case AgentStepKind.ConfirmationShown when item.PendingCard is { } card:
+                    entries.Add(new ChatEntry { Kind = EntryKind.Confirmation, Card = card, CardState = CardState.Pending });
                     break;
             }
         }
 
+        traceEvents = [.. await Runner.GetTraceEventsAsync(key)];
         var record = await SessionStore.GetAsync(key, CustomerId);
         awaitingPhotos = !HasPendingCard && record?.LastStopReason == AgentStopReason.AwaitingPhotoUpload;
     }
@@ -268,7 +335,8 @@ public partial class ShopAssistantView : IDisposable
 
     private async Task OnConfirmCardAsync(ChatEntry entry, bool approve)
     {
-        if (busy || aiError is not null || entry.Card is not { } card || entry.CardState != CardState.Pending || sessionKey is not { } key)
+        if (busy || aiError is not null || entry.Card is not { } card || entry.CardState != CardState.Pending || sessionKey is not { } key
+            || (IsReplay && ReplayNext?.Kind != (approve ? AgentRecordedTurnKind.Confirm : AgentRecordedTurnKind.Reject)))
         {
             return;
         }
@@ -278,13 +346,21 @@ public partial class ShopAssistantView : IDisposable
         await RecordAsync(key, approve ? ProcessMetricActions.AgentConfirm : ProcessMetricActions.AgentReject);
         var result = await RunTurnAsync(null, ct => Runner.ConfirmAsync(key, card.ConfirmationId, approve, OnEventAsync, OnTextDeltaAsync, ct));
 
-        entry.RequestNo = result?.CreatedRequestNo;
+        // 回放中按了和錄製時不同的選擇：Runner 沒有處理這張卡，維持未決。
+        if (result?.StopReason == AgentStopReason.ReplayActionMismatch)
+        {
+            entry.CardState = CardState.Pending;
+            return;
+        }
+
+        // 版本衝突時沒有結果，但申請可能已建立：卡片一定要標成已建立，不可顯示成沒送出。
+        entry.RequestNo = result?.CreatedRequestNo ?? conflictRequestNo;
         entry.CardState = !approve ? CardState.Canceled
             : entry.RequestNo is not null ? CardState.Created
             : CardState.NotCreated;
 
-        // 這一輪沒有結果（例外已另行通知）：卡片寫「請看下方的說明」，對話裡要有那則說明。
-        if (approve && result is null && !disposed)
+        // 這一輪沒有結果（例外已另行通知）：卡片寫「請看下方的說明」，對話裡要有那則說明（版本衝突時已有衝突說明，不重複）。
+        if (approve && result is null && !disposed && !turnConflicted)
         {
             entries.Add(SystemEntry(NotSubmittedExplanation));
         }
@@ -298,7 +374,7 @@ public partial class ShopAssistantView : IDisposable
     /// <summary>把選好的照片放進暫存區，再請 Agent 續跑（申請送出時才隨申請寫入）。</summary>
     private async Task OnSendPhotosAsync()
     {
-        if (busy || aiError is not null || pendingPhotos.Count == 0 || sessionKey is not { } key)
+        if (busy || aiError is not null || pendingPhotos.Count == 0 || !ReplayPhotosReady || sessionKey is not { } key)
         {
             return;
         }
@@ -345,7 +421,9 @@ public partial class ShopAssistantView : IDisposable
             pendingPhotos.Clear();
             awaitingPhotos = false;
             draft = string.Empty;
+            replayStopReason = null;
             Logger.LogInformation("Shop assistant started a new conversation. SessionKey={SessionKey}", sessionKey);
+            await RefreshReplayAsync();
         }
         catch (Exception ex)
         {
@@ -368,23 +446,46 @@ public partial class ShopAssistantView : IDisposable
         }
     }
 
-    /// <summary>執行一輪：先放顧客泡泡與串流預覽，完成後依結果重繪。失敗回 null（已通知）。</summary>
+    /// <summary>
+    /// 執行一輪：先放顧客泡泡與串流預覽，完成後依結果重繪。失敗回 null（已通知）。結束時重新取得回放劇本（帶入下一句）。
+    /// 回放中動作與錄製不同時這一輪沒有執行：拿掉顧客泡泡、還原上傳區，只補一則系統訊息。
+    /// </summary>
     private async Task<AgentTurnResult?> RunTurnAsync(string? userText, Func<CancellationToken, Task<AgentTurnResult>> run)
     {
         busy = true;
+        var wasAwaitingPhotos = awaitingPhotos;
         awaitingPhotos = false;
         turnReplySource = null;
+        turnConflicted = false;
+        conflictRequestNo = null;
         streaming = new StringBuilder();
         lastDeltaRender = TimeProvider.GetTimestamp();
+        ChatEntry? userEntry = null;
         if (userText is not null)
         {
-            entries.Add(new ChatEntry { Kind = EntryKind.User, Text = userText });
+            userEntry = new ChatEntry { Kind = EntryKind.User, Text = userText };
+            entries.Add(userEntry);
         }
 
         try
         {
             var result = await run(runCancellation.Token);
-            if (!disposed)
+            if (disposed)
+            {
+                return result;
+            }
+
+            if (result.StopReason == AgentStopReason.ReplayActionMismatch)
+            {
+                if (userEntry is not null)
+                {
+                    entries.Remove(userEntry);
+                }
+
+                awaitingPhotos = wasAwaitingPhotos;
+                entries.Add(SystemEntry(result.ReplyText));
+            }
+            else
             {
                 ApplyResult(result);
             }
@@ -395,6 +496,15 @@ public partial class ShopAssistantView : IDisposable
         {
             // 已離開頁面：沒有畫面可以通知。
             Logger.LogDebug(ex, "Shop assistant turn ended after the view was disposed.");
+            return null;
+        }
+        catch (AgentSessionConflictException ex)
+        {
+            // 另一個分頁已先更新這段對話：這一輪沒有存回。以系統訊息呈現（重新整理後還原的也是這則說明）。
+            Logger.LogWarning(ex, "Shop assistant turn was not saved because the conversation was updated in another tab.");
+            entries.Add(SystemEntry(ex.Message));
+            turnConflicted = true;
+            conflictRequestNo = ex.CreatedRequestNo;
             return null;
         }
         catch (InvalidOperationException ex)
@@ -414,28 +524,54 @@ public partial class ShopAssistantView : IDisposable
         {
             busy = false;
             streaming = null;
+            if (!disposed)
+            {
+                await RefreshReplayAsync();
+            }
         }
+    }
+
+    /// <summary>重新取得回放劇本並帶入下一句（不是回放時不動輸入框）。取不到只記錄，維持原狀。</summary>
+    private async Task RefreshReplayAsync()
+    {
+        if (sessionKey is not { } key)
+        {
+            return;
+        }
+
+        try
+        {
+            replayScript = await Runner.GetReplayScriptAsync(key);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Shop assistant could not load the replay script.");
+            return;
+        }
+
+        if (IsReplay)
+        {
+            draft = ReplayEnd is null && ReplayNext is { Kind: AgentRecordedTurnKind.Send } next ? next.CustomerText ?? string.Empty : string.Empty;
+        }
+    }
+
+    /// <summary>展示者回到展示控制台：互動元件換不了 Cookie，取一張切回展示者的票券整頁導到切換頁（成功後導到 <c>/demo-console</c>）。</summary>
+    private void BackToConsole()
+    {
+        if (!isPresenter)
+        {
+            return;
+        }
+
+        var ticket = TicketService.IssueSwitchBack(CustomerId);
+        Logger.LogInformation("Shop assistant switching back to the demo presenter after replay. UserId={UserId}", CustomerId);
+        NavigationManager.NavigateTo(DemoSwitch.UrlFor(ticket), forceLoad: true);
     }
 
     /// <summary>串流的文字只是預覽：以最終的 <see cref="AgentTurnResult.ReplyText"/> 重繪。</summary>
     private void ApplyResult(AgentTurnResult result)
     {
-        var programReply = turnReplySource != AgentDataSource.Conversation;
-        if (!string.IsNullOrWhiteSpace(result.ReplyText))
-        {
-            entries.Add(programReply ? SystemEntry(result.ReplyText) : AgentEntry(result.ReplyText));
-        }
-
-        // 模型有回覆、程式另有停止說明（步數上限、規則衝突…）時補一則系統訊息；程式回覆本身就是說明，不重複。
-        if (!programReply && result.StopExplanation is { } explanation && explanation != result.ReplyText)
-        {
-            entries.Add(SystemEntry(explanation));
-        }
-
-        if (result.PolicyCards.Count > 0)
-        {
-            entries.Add(new ChatEntry { Kind = EntryKind.PolicyCards, PolicyCards = result.PolicyCards });
-        }
+        AddReplyEntries(result.ReplyText, turnReplySource != AgentDataSource.Conversation, result.StopExplanation, result.PolicyCards);
 
         if (result.Confirmation is { } card)
         {
@@ -443,6 +579,30 @@ public partial class ShopAssistantView : IDisposable
         }
 
         awaitingPhotos = result.StopReason == AgentStopReason.AwaitingPhotoUpload;
+        if (result.StopReason is AgentStopReason.ReplayDiverged or AgentStopReason.ReplayFinished)
+        {
+            replayStopReason = result.StopReason;
+        }
+    }
+
+    /// <summary>一輪的回覆（程式說明以系統訊息呈現）、另附的停止說明與規則卡；即時回合與還原共用。</summary>
+    private void AddReplyEntries(string replyText, bool programReply, string? stopExplanation, IReadOnlyList<AgentPolicyCard> policyCards)
+    {
+        if (!string.IsNullOrWhiteSpace(replyText))
+        {
+            entries.Add(programReply ? SystemEntry(replyText) : AgentEntry(replyText));
+        }
+
+        // 模型有回覆、程式另有停止說明（步數上限、規則衝突…）時補一則系統訊息；程式回覆本身就是說明，不重複。
+        if (!programReply && stopExplanation is { } explanation && explanation != replyText)
+        {
+            entries.Add(SystemEntry(explanation));
+        }
+
+        if (policyCards.Count > 0)
+        {
+            entries.Add(new ChatEntry { Kind = EntryKind.PolicyCards, PolicyCards = policyCards });
+        }
     }
 
     /// <summary>Runner 的事件可能來自其他執行緒：一律回到渲染器的同步內容再改狀態。</summary>

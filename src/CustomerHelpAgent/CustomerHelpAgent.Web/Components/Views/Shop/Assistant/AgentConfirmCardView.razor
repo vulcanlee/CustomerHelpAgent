@@ -33,11 +33,11 @@
         case CardState.Pending:
             <footer class="agent-confirm-actions">
                 <p class="agent-confirm-hint">按下「確認送出」前不會建立申請。</p>
-                <button type="button" class="agent-confirm-button is-primary" data-action="confirm" disabled="@Disabled" @onclick="OnConfirm">
+                <button type="button" class="agent-confirm-button is-primary" data-action="confirm" disabled="@(Disabled || ConfirmDisabled)" @onclick="OnConfirm">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="check" />
                     <span>確認送出</span>
                 </button>
-                <button type="button" class="agent-confirm-button" data-action="cancel" disabled="@Disabled" @onclick="OnCancel">
+                <button type="button" class="agent-confirm-button" data-action="cancel" disabled="@(Disabled || CancelDisabled)" @onclick="OnCancel">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="close" />
                     <span>取消</span>
                 </button>
@@ -87,6 +87,14 @@
 
     [Parameter]
     public bool Disabled { get; set; }
+
+    /// <summary>只停用「確認送出」（回放中錄製時按的是取消）。</summary>
+    [Parameter]
+    public bool ConfirmDisabled { get; set; }
+
+    /// <summary>只停用「取消」（回放中錄製時按的是確認送出）。</summary>
+    [Parameter]
+    public bool CancelDisabled { get; set; }
 
     [Parameter]
     public EventCallback OnConfirm { get; set; }

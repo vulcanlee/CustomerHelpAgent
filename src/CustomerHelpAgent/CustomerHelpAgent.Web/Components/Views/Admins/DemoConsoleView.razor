@@ -1,0 +1,288 @@
+@using CustomerHelpAgent.Business.Startup
+@using CustomerHelpAgent.Models.Agents
+@using CustomerHelpAgent.Share.Demo
+@using CustomerHelpAgent.Share.Helpers
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div class="demo-console">
+        <div class="demo-console-toolbar">
+            <span class="demo-console-hint">展示前在這裡準備劇本：一鍵重置資料、設定故障與模式、切換成示範帳號。故障、模式與幕後面板預設是全站共用的一份。</span>
+            <ToolbarIconButton Title="重新整理" Icon="refresh" OnClick="@(async () => await OnRefreshAsync())" />
+        </div>
+
+        @if (!DemoControlService.IsEnabled)
+        {
+            <div class="alert alert-warning demo-console-disabled" role="alert">
+                示範模式未開啟（設定檔 DemoSettings:Enabled = false）：這一頁的功能全部停用。正式環境不可開啟示範模式。
+            </div>
+        }
+
+        @* 目前狀態：模式、啟用中的故障、上次重置。 *@
+        <div class="demo-console-status">
+            <span class="demo-console-status-item">
+                <span class="demo-console-label">模式</span>
+                @if (DemoControlService.Mode == DemoMode.Replay)
+                {
+                    <StatusPill Text="@($"回放中（#{DemoControlService.ActiveRecordingId}）")" Tone="StatusTone.Warning" />
+                }
+                else
+                {
+                    <StatusPill Text="即時" Tone="StatusTone.Positive" />
+                }
+            </span>
+            <span class="demo-console-status-item">
+                <span class="demo-console-label">故障模擬</span>
+                @if (DemoControlService.ActiveFaults.Count == 0)
+                {
+                    <span class="demo-console-muted">無</span>
+                }
+                else
+                {
+                    @foreach (var fault in DemoFaultLabels.Ordered.Where(DemoControlService.IsFaultActive))
+                    {
+                        <span class="demo-console-fault-badge">
+                            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="warning" />
+                            @DemoFaultLabels.Name(fault)
+                        </span>
+                    }
+                }
+            </span>
+            <span class="demo-console-status-item">
+                <span class="demo-console-label">上次重置</span>
+                <span>@(lastResetAt is { } at ? at.ToString("yyyy/MM/dd HH:mm:ss") : "沒有紀錄")</span>
+            </span>
+        </div>
+
+        @* 劇本 *@
+        <section class="demo-console-section">
+            <h3 class="demo-console-heading">劇本</h3>
+            <p class="demo-console-muted">
+                「準備此劇本」會重置示範資料、只開這個劇本的故障、依目前模式準備（回放用這個劇本的金劇本），再切換成劇本帳號打開線上客服。
+                顧客要說的話照下方的順序輸入。
+            </p>
+            <div class="demo-console-scenarios">
+                @foreach (var scenario in DemoScenarios.All)
+                {
+                    <div class="demo-console-scenario" data-code="@scenario.Code">
+                        <div class="demo-console-scenario-head">
+                            <span class="demo-console-scenario-code">@scenario.Code</span>
+                            <span class="demo-console-scenario-title">@scenario.Title</span>
+                        </div>
+                        <div class="demo-console-muted">帳號：@scenario.Account</div>
+                        @if (scenario.Faults.Count > 0)
+                        {
+                            <div class="demo-console-scenario-faults">
+                                @foreach (var fault in scenario.Faults)
+                                {
+                                    <StatusPill Text="@DemoFaultLabels.Name(fault)" Tone="StatusTone.Warning" />
+                                }
+                            </div>
+                        }
+                        <div class="demo-console-label">顧客說</div>
+                        <ol class="demo-console-lines">
+                            @foreach (var line in scenario.CustomerLines)
+                            {
+                                <li>「@line」</li>
+                            }
+                        </ol>
+                        <div class="demo-console-label">講解重點</div>
+                        <ul class="demo-console-points">
+                            @foreach (var point in scenario.TalkingPoints)
+                            {
+                                <li>@point</li>
+                            }
+                        </ul>
+                        <div class="demo-console-scenario-foot">
+                            <Button Type="@ButtonType.Primary" Class="demo-console-prepare" Disabled="@Locked"
+                                    OnClick="@(async () => await OnPrepareScenarioAsync(scenario))">
+                                準備此劇本
+                            </Button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        @* 故障模擬 *@
+        <section class="demo-console-section">
+            <div class="demo-console-section-head">
+                <h3 class="demo-console-heading">故障模擬</h3>
+                <Button Class="demo-console-clear-faults" Disabled="@(Locked || DemoControlService.ActiveFaults.Count == 0)"
+                        OnClick="@(async () => await OnClearFaultsAsync())">
+                    全部關閉
+                </Button>
+            </div>
+            <p class="demo-console-muted">開啟後立即對所有人生效；Agent 與傳統頁面同受影響（權限過期只影響 Agent）。展示完記得關閉。</p>
+            <div class="demo-console-faults">
+                @foreach (var fault in DemoFaultLabels.Ordered)
+                {
+                    <div class="demo-console-fault" data-fault="@fault">
+                        <Switch Value="@DemoControlService.IsFaultActive(fault)" Disabled="@Locked"
+                                OnChange="@(async (bool on) => await OnFaultToggleAsync(fault, on))" />
+                        <div>
+                            <div class="demo-console-fault-name">@DemoFaultLabels.Name(fault)</div>
+                            <div class="demo-console-muted">@DemoFaultLabels.Description(fault)</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        @* 示範資料 *@
+        <section class="demo-console-section">
+            <h3 class="demo-console-heading">示範資料</h3>
+            <div class="demo-console-row">
+                <Button Danger Class="demo-console-reset" Disabled="@Locked" OnClick="@(async () => await OnResetAsync())">
+                    一鍵重置示範資料
+                </Button>
+                <span class="demo-console-muted">
+                    上次重置：@(lastResetAt is { } resetAt ? resetAt.ToString("yyyy/MM/dd HH:mm:ss") : "沒有紀錄")。
+                    會刪除所有業務資料並中斷進行中的對話；紀錄與錄製保留。
+                </span>
+            </div>
+        </section>
+
+        @* 模式 *@
+        <section class="demo-console-section">
+            <h3 class="demo-console-heading">即時／回放</h3>
+            @if (aiError is not null)
+            {
+                <div class="alert alert-warning demo-console-alert" role="alert">
+                    AI 模型尚未設定（@aiError）：即時模式無法對話，只能用回放。
+                </div>
+            }
+            <div class="demo-console-row">
+                <RadioGroup TValue="DemoMode" Value="@DemoControlService.Mode" Disabled="@Locked"
+                            ValueChanged="@(async (DemoMode mode) => await OnModeChangedAsync(mode))">
+                    <Radio Value="@DemoMode.Live">即時（呼叫 AI 模型並自動錄製）</Radio>
+                    <Radio Value="@DemoMode.Replay">回放（重播錄製的模型回應）</Radio>
+                </RadioGroup>
+            </div>
+            <div class="demo-console-row">
+                <span class="demo-console-label">回放的錄製</span>
+                <Select TItem="int?" TItemValue="int?" Value="@selectedRecordingId" Disabled="@(Locked || recordingOptions.Count == 0)"
+                        Placeholder="@("還沒有錄製")" Style="width: 100%; max-width: 520px;"
+                        ValueChanged="@(async (int? id) => await OnReplayRecordingChangedAsync(id))">
+                    @foreach (var option in recordingOptions)
+                    {
+                        <SelectOption TItemValue="int?" TItem="int?" Value="@option.Id" Label="@RecordingOptionLabel(option)" />
+                    }
+                </Select>
+            </div>
+            <p class="demo-console-muted">
+                回放不呼叫 AI 模型、不計 Token，但工具照常執行（會真的建立申請）；顧客畫面會標示「回放中」。
+                「準備此劇本」在回放模式下改用該劇本的金劇本；劇本還沒有金劇本時改用即時。
+            </p>
+        </section>
+
+        @* 錄製清單 *@
+        <section class="demo-console-section">
+            <div class="demo-console-section-head">
+                <h3 class="demo-console-heading">錄製清單</h3>
+                <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting" OnClick="@(async () => await OnBatchDeleteAsync())" />
+            </div>
+            <p class="demo-console-muted">即時模式的每一段顧客對話都會自動錄製。把表現好的一段設為劇本的「金劇本」，回放時就用它。</p>
+
+            @if (goldenTarget is { } target)
+            {
+                <div class="demo-console-golden-picker">
+                    <span>要把「#@target.Id @target.Title」設為哪個劇本的金劇本？同一劇本原本的金劇本會改為一般錄製。</span>
+                    <div class="demo-console-golden-choices">
+                        @foreach (var scenario in DemoScenarios.All)
+                        {
+                            <span data-code="@scenario.Code">
+                                <Button Class="demo-console-golden-choice" Disabled="@Locked" OnClick="@(async () => await OnSetGoldenAsync(scenario.Code))">
+                                    @scenario.Code @scenario.Title
+                                </Button>
+                            </span>
+                        }
+                        <Button OnClick="OnCancelGolden">取消</Button>
+                    </div>
+                </div>
+            }
+
+            <div class="demo-console-table-wrap">
+                <Table TItem="AgentRecordingSummary"
+                       Class="demo-console-table"
+                       RemoteDataSource="true"
+                       DataSource="@recordings"
+                       Size="TableSize.Small"
+                       RowClassName="@(_ => "demo-console-recording-row")"
+                       OnChange="OnTableChange"
+                       @bind-PageIndex="_pageIndex"
+                       @bind-PageSize="_pageSize"
+                       @bind-Total="_total"
+                       @bind-SelectedRows="selectedRows">
+                    <ColumnDefinitions>
+                        <Selection />
+                        <Column TData="DateTime" Title="時間" Width="150">@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</Column>
+                        <Column TData="string" Title="標題">
+                            <div>#@context.Id @context.Title</div>
+                            <div class="demo-console-muted">@context.CustomerName · @context.TurnCount 個動作 · @context.CallCount 次模型呼叫</div>
+                        </Column>
+                        <Column TData="string" Title="劇本" Width="120">
+                            @if (context.ScenarioCode is { } scenarioCode)
+                            {
+                                <span>@scenarioCode</span>
+                            }
+                            @if (context.IsGolden)
+                            {
+                                <StatusPill Text="金劇本" Tone="StatusTone.Positive" />
+                            }
+                        </Column>
+                        <Column TData="string" Title="模型" Width="150">@(string.IsNullOrEmpty(context.ModelName) ? "—" : context.ModelName)</Column>
+                        <Column TData="string" Title="成本" Width="110" Align="ColumnAlign.Right">@CostText(context.TotalCostTwd)</Column>
+                        <ActionColumn Title="操作" Width="100">
+                            <Space>
+                                <SpaceItem>
+                                    <CrudActionButton Title="設為金劇本" Icon="star" Disabled="@Locked" OnClick="@(() => OnPickGolden(context))" />
+                                </SpaceItem>
+                                <SpaceItem>
+                                    <CrudActionButton Title="刪除" Icon="delete" Danger Disabled="@Locked"
+                                                      OnClick="@(async () => await OnDeleteRecordingAsync(context))" />
+                                </SpaceItem>
+                            </Space>
+                        </ActionColumn>
+                    </ColumnDefinitions>
+                </Table>
+            </div>
+        </section>
+
+        @* 身分切換（使用者選單「切換展示身分」連到這裡）。 *@
+        <section class="demo-console-section" id="identity">
+            <h3 class="demo-console-heading">身分切換</h3>
+            <p class="demo-console-muted">免密碼切換成示範帳號（略過該帳號的登入與兩步驟驗證）；畫面上方會出現「回到展示者」。只限管理員、只在示範模式。</p>
+            <div class="demo-console-identities">
+                @foreach (var account in DemoSeedData.Accounts)
+                {
+                    <div class="demo-console-identity-card">
+                        <div class="demo-console-fault-name">@account.Name</div>
+                        <div class="demo-console-muted">@account.Account · @account.RoleName</div>
+                        <Button Class="demo-console-identity" Disabled="@Locked" OnClick="@(() => OnSwitchIdentity(account))">以此身分檢視</Button>
+                    </div>
+                }
+            </div>
+        </section>
+
+        @* 幕後面板預設 *@
+        <section class="demo-console-section">
+            <h3 class="demo-console-heading">幕後面板預設</h3>
+            <div class="demo-console-row">
+                <Switch Value="@DemoControlService.BackstageDefaultOn" Disabled="@Locked" CheckedChildren="開" UnCheckedChildren="關"
+                        OnChange="@(async (bool on) => await OnBackstageDefaultChangedAsync(on))" />
+                <span class="demo-console-muted">顧客線上客服頁的幕後面板（Agent 每一步查了什麼、程式擋了什麼）一開始是否打開。</span>
+            </div>
+        </section>
+    </div>
+}

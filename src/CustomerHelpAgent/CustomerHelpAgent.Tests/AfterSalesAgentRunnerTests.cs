@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -9,12 +11,14 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using CustomerHelpAgent.AccessDatas;
+using CustomerHelpAgent.AccessDatas.Models;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Others;
 using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Agents;
+using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Shop;
 using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Agents.AfterSales;
@@ -96,9 +100,11 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
     private AfterSalesAgentRunner CreateRunner(
         Func<AiSettings, AgentApiStyle, IChatClient>? innerClientFactory = null,
         int? userId = null,
-        IDbContextFactory<BackendDBContext>? sessionStoreFactory = null)
+        IDbContextFactory<BackendDBContext>? sessionStoreFactory = null,
+        DemoControlService? demo = null)
     {
         var time = new ManualTimeProvider(UtcNow);
+        demo ??= TestDemoControl.Off(factory);
         var currentUser = new CurrentUserService
         {
             CurrentUser = userId is { } id && id != customer1
@@ -108,8 +114,8 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         var audit = new RecordingAuditLogService();
         var systemSettings = new SystemSettings();
         systemSettings.ExternalFileSystem.AfterSalesFilePath = fileRoot;
-        var policyService = new AfterSalesPolicyService(factory, audit, currentUser, time, NullLogger<AfterSalesPolicyService>.Instance);
-        var orderService = new ShopOrderService(factory, NullLogger<ShopOrderService>.Instance);
+        var policyService = new AfterSalesPolicyService(factory, audit, currentUser, demo, time, NullLogger<AfterSalesPolicyService>.Instance);
+        var orderService = new ShopOrderService(factory, demo, NullLogger<ShopOrderService>.Instance);
         var requestService = new AfterSalesRequestService(
             factory,
             policyService,
@@ -148,6 +154,9 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
             requestService,
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             inbox,
+            demo,
+            new AgentRecordingService(factory, time, NullLogger<AgentRecordingService>.Instance),
+            new ReplayCursorStore(),
             currentUser,
             new StaticOptionsMonitor<AfterSalesAgentSettings>(settings),
             time,
@@ -271,6 +280,37 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Confirm_AfterDemoReset_IsRejectedAndCreatesNothing()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        Assert.True(inbox.Add(key, "pending.jpg", new byte[8]));
+        var systemSettings = new SystemSettings();
+        systemSettings.ExternalFileSystem.AfterSalesFilePath = fileRoot;
+        var reset = new DemoResetService(
+            factory,
+            new AfterSalesFileStore(Options.Create(systemSettings), NullLogger<AfterSalesFileStore>.Instance),
+            Options.Create(new DemoSettings { Enabled = true, DemoUserPassword = "demo1234" }),
+            new ManualTimeProvider(UtcNow),
+            new RecordingAuditLogService(),
+            new CurrentUserService { CurrentUser = new CurrentUser { Id = 1, Account = "support" } },
+            [inbox],
+            NullLogger<DemoResetService>.Instance);
+        Assert.True((await reset.ResetAsync()).Success);
+
+        // 會話已刪除：開著的頁面按下舊確認卡或再送出，Runner 拒絕（畫面以提醒顯示訊息），不呼叫模型、不建立申請。
+        var calls = model.CallCount;
+        var confirm = await Assert.ThrowsAsync<InvalidOperationException>(() => ConfirmAsync(runner, key, card.ConfirmationId, approve: true));
+        var send = await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(CreateRunner(), key, "還在嗎"));
+
+        Assert.Contains("找不到這段對話", confirm.Message);
+        Assert.Contains("找不到這段對話", send.Message);
+        Assert.Equal(calls, model.CallCount);
+        Assert.Equal(0, await RequestCountAsync());
+        Assert.Equal(0, inbox.Count(key));
+        Assert.NotEqual(key, await CreateRunner().StartOrResumeAsync());
+    }
+
+    [Fact]
     public async Task Confirm_Rejected_NoRequestCreated()
     {
         var (runner, key, card) = await ReachConfirmationAsync();
@@ -342,7 +382,7 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
 
         Assert.Equal(AgentStopReason.Answered, next.StopReason);
         Assert.Contains(model.Requests[^1], m => m.Text.Contains(requestNo, StringComparison.Ordinal));
-        Assert.Contains(await CreateRunner().GetHistoryAsync(key), e => e.Kind == AgentStepKind.ModelReply && e.PlainText.Contains(requestNo, StringComparison.Ordinal));
+        Assert.Contains(await CreateRunner().GetHistoryAsync(key), e => e.Kind == AgentStepKind.TurnResult && e.Text.Contains(requestNo, StringComparison.Ordinal));
         Assert.Equal(1, await RequestCountAsync());
     }
 
@@ -487,11 +527,157 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         Assert.Equal(
             [
                 (AgentStepKind.UserMessage, "你好"),
-                (AgentStepKind.ModelReply, "您好，請問需要什麼協助？"),
+                (AgentStepKind.TurnResult, "您好，請問需要什麼協助？"),
                 (AgentStepKind.UserMessage, "我想換尺碼"),
-                (AgentStepKind.ModelReply, "好的，請問是哪一雙？"),
+                (AgentStepKind.TurnResult, "好的，請問是哪一雙？"),
             ],
-            history.Select(x => (x.Kind, x.PlainText)));
+            history.Select(x => (x.Kind, x.Text)));
+        Assert.All(history.Where(x => x.Kind == AgentStepKind.TurnResult), x => Assert.False(x.IsProgramReply));
+    }
+
+    [Fact]
+    public async Task History_RestoresProgramReplyAsSystemAndPolicyCards()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("get_effective_policy", new() { ["orderItemId"] = white41, ["issueType"] = "quality_issue" });
+        model.Call("request_photo_upload", new() { ["orderItemId"] = white41, ["reason"] = "請拍攝開膠處" });
+        var result = await SendAsync(runner, key, "白色那雙開膠了");
+        Assert.Equal(AgentStopReason.AwaitingPhotoUpload, result.StopReason);
+
+        var history = await CreateRunner().GetHistoryAsync(key);
+
+        Assert.Equal([AgentStepKind.UserMessage, AgentStepKind.TurnResult], history.Select(x => x.Kind));
+        Assert.Equal("白色那雙開膠了", history[0].Text);
+        var reply = history[1];
+        Assert.True(reply.IsProgramReply);
+        Assert.Equal(AgentDataSource.Program, reply.Source);
+        Assert.Equal(result.ReplyText, reply.Text);
+        Assert.Equal("QUALITY-ISSUE", Assert.Single(reply.PolicyCards).Code);
+        Assert.Equal(Assert.Single(result.PolicyCards), reply.PolicyCards[0], new PolicyCardComparer());
+    }
+
+    [Fact]
+    public async Task History_FixedReplyTurn_DoesNotShowReplacedModelText()
+    {
+        settings.ToolTimeoutSeconds = 1;
+        var runner = CreateRunner();
+        runner.ConfigureToolsForTesting = tools => tools.BeforeServiceCallForTesting = ct => Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        var key = await runner.StartOrResumeAsync();
+        model.Respond(new ChatMessage(ChatRole.Assistant,
+        [
+            new TextContent("查無資料。"),
+            new FunctionCallContent("call-timeout", "query_my_orders", new Dictionary<string, object?>()),
+        ]));
+        var result = await SendAsync(runner, key, "我的鞋子訂單呢？");
+        Assert.Equal(AgentStopReason.Timeout, result.StopReason);
+
+        var history = await CreateRunner().GetHistoryAsync(key);
+
+        Assert.DoesNotContain(history, x => x.Text.Contains("查無資料", StringComparison.Ordinal));
+        var reply = Assert.Single(history, x => x.Kind == AgentStepKind.TurnResult);
+        Assert.True(reply.IsProgramReply);
+        Assert.Equal(result.ReplyText, reply.Text);
+    }
+
+    [Fact]
+    public async Task TraceEvents_RestoreBackstage()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("query_my_orders", []);
+        model.Reply("請問是黑 40 還是白 41？");
+        await SendAsync(runner, key, "剛買的鞋尺碼不合適，想換大一碼");
+        model.Reply("好的，我來查規則。");
+        await SendAsync(CreateRunner(), key, "黑色那雙");
+
+        var restored = await CreateRunner().GetTraceEventsAsync(key);
+
+        Assert.Equal(
+            events.Select(e => (e.Kind, e.Source, e.PlainText, e.RawJson)),
+            restored.Select(e => (e.Kind, e.Source, e.PlainText, e.RawJson)));
+        Assert.Equal(2, restored.Count(e => e.Kind == AgentStepKind.TurnResult));
+        Assert.Equal(AgentStepKind.TurnResult, restored[^1].Kind);
+        Assert.Empty(await CreateRunner(userId: customer2).GetTraceEventsAsync(key));
+    }
+
+    [Fact]
+    public async Task Send_WhenSessionUpdatedByAnotherTab_ThrowsConflictAndKeepsOtherTabsState()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        string? otherState = null;
+        // 這一分頁讀到會話、還沒存回之前，另一個分頁完成了一整輪並存回（版本已前進）。
+        var hooked = new HookedDbContextFactory(factory)
+        {
+            BeforeCreateAsync = async n =>
+            {
+                if (n == 3)
+                {
+                    model.Reply("另一個分頁的回覆。");
+                    await SendAsync(CreateRunner(), key, "另一個分頁");
+                    await using var db = factory.CreateDbContext();
+                    otherState = (await db.AgentSessionRecord.SingleAsync(x => x.SessionKey == key)).StateJson;
+                }
+            },
+        };
+        model.Reply("這個分頁的回覆。");
+
+        var ex = await Assert.ThrowsAsync<AgentSessionConflictException>(
+            () => SendAsync(CreateRunner(sessionStoreFactory: hooked), key, "這個分頁"));
+
+        Assert.Equal("這段對話已在其他分頁更新，請重新整理頁面。", ex.Message);
+        await using (var db = factory.CreateDbContext())
+        {
+            Assert.Equal(otherState, (await db.AgentSessionRecord.SingleAsync(x => x.SessionKey == key)).StateJson);
+        }
+
+        // 還原時這一輪顯示的是衝突說明（與當時畫面一致），不是沒存進會話的模型回覆。
+        var history = await CreateRunner().GetHistoryAsync(key);
+        Assert.DoesNotContain(history, x => x.Text == "這個分頁的回覆。");
+        Assert.Contains(history, x => x.Kind == AgentStepKind.TurnResult && x.IsProgramReply && x.Text == ex.Message);
+    }
+
+    [Fact]
+    public async Task Confirm_ThenVersionConflict_ExceptionCarriesRequestNo()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        // 申請寫入後、存回會話前，另一個分頁先存回了（版本前進）。
+        model.Fallback = _ =>
+        {
+            using var db = factory.CreateDbContext();
+            db.AgentSessionRecord.Where(x => x.SessionKey == key)
+                .ExecuteUpdate(s => s.SetProperty(x => x.StateVersion, x => x.StateVersion + 1));
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "已送出。"));
+        };
+
+        var ex = await Assert.ThrowsAsync<AgentSessionConflictException>(() => ConfirmAsync(runner, key, card.ConfirmationId, approve: true));
+
+        var requestNo = Assert.IsType<string>(ex.CreatedRequestNo);
+        Assert.Matches(RequestNoPattern, requestNo);
+        Assert.Contains(requestNo, ex.Message, StringComparison.Ordinal);
+        Assert.Contains("這段對話已在其他分頁更新，請重新整理頁面。", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(1, await RequestCountAsync());
+    }
+
+    [Fact]
+    public async Task History_LegacySessionWithoutTurnResult_FallsBackToSessionText()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Reply("您好，請問需要什麼協助？");
+        await SendAsync(runner, key, "你好");
+        await using (var db = factory.CreateDbContext())
+        {
+            // 1.0.5 之前的會話：軌跡裡沒有 TurnResult。
+            await db.AgentRunStep.Where(x => x.Kind == AgentStepKind.TurnResult).ExecuteDeleteAsync();
+        }
+
+        var history = await CreateRunner().GetHistoryAsync(key);
+
+        Assert.Equal(
+            [(AgentStepKind.UserMessage, "你好"), (AgentStepKind.TurnResult, "您好，請問需要什麼協助？")],
+            history.Select(x => (x.Kind, x.Text)));
     }
 
     [Fact]
@@ -502,7 +688,8 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         var history = await CreateRunner().GetHistoryAsync(key);
 
         var shown = Assert.Single(history, x => x.Kind == AgentStepKind.ConfirmationShown);
-        var restored = ConfirmationCard.FromJson(shown.RawJson!);
+        Assert.Same(shown, history[^1]);
+        var restored = shown.PendingCard!;
         Assert.Equal(card with { Facts = [] }, restored with { Facts = [] });
         Assert.Equal(card.Facts, restored.Facts);
     }
@@ -781,13 +968,424 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Card_WhenOpenRequestExists_NotShownAndModelToldWhy()
+    {
+        const string requestNo = "AS202610230099";
+        await using (var db = factory.CreateDbContext())
+        {
+            // 先前（例如傳統表單）已送出、仍在處理中的同商品同類申請。
+            db.AfterSalesRequest.Add(new AfterSalesRequest
+            {
+                RequestNo = requestNo,
+                CaseKey = Guid.NewGuid(),
+                CustomerUserId = customer1,
+                SalesOrderItemId = black40,
+                Type = AfterSalesType.SizeExchange,
+                Status = AfterSalesStatus.Submitted,
+                Channel = AfterSalesChannel.Traditional,
+                TargetSize = "41",
+                Description = "尺寸偏小",
+                CreatedAt = new DateTime(2026, 10, 22, 9, 0, 0),
+                UpdatedAt = new DateTime(2026, 10, 22, 9, 0, 0),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("create_after_sales_request", SizeExchangeArgs());
+        model.Reply("這雙鞋已經有處理中的換尺碼申請，可以到「我的申請」查看。");
+        var result = await SendAsync(runner, key, "黑色那雙 40 碼想換 41，沒穿過");
+
+        Assert.Null(result.Confirmation);
+        Assert.Equal(AgentStopReason.Answered, result.StopReason);
+        Assert.Equal(1, await RequestCountAsync());
+        Assert.Contains(model.Requests[^1].SelectMany(m => m.Contents).OfType<FunctionResultContent>(),
+            r => (r.Result?.ToString() ?? string.Empty).Contains($"這個商品已有處理中的同類申請（{requestNo}）", StringComparison.Ordinal));
+        Assert.Contains(events, e => e.Kind == AgentStepKind.ProgramCheck && e.PlainText.Contains(requestNo, StringComparison.Ordinal));
+        await using var check = factory.CreateDbContext();
+        Assert.False(await check.AgentConfirmation.AnyAsync());
+    }
+
+    [Fact]
+    public async Task TurnBudget_AcrossRejectedSubRuns_StopsAtLimit()
+    {
+        settings.MaxSteps = 3;
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        // 換尺碼沒有目標尺碼：程式重核失敗、不出卡，拒絕後續跑（3 次）；之後模型一直呼叫工具。
+        var noTarget = new Dictionary<string, object?> { ["orderItemId"] = black40, ["issueType"] = "size_exchange", ["description"] = "想換" };
+        model.Call("create_after_sales_request", noTarget);
+        model.Call("create_after_sales_request", noTarget);
+        model.Call("create_after_sales_request", noTarget);
+        model.Fallback = _ => ScriptedAgentModel.FunctionCall("query_my_orders", []);
+
+        var result = await SendAsync(runner, key, "幫我換大一碼");
+
+        Assert.Equal(AgentStopReason.StepLimitReached, result.StopReason);
+        Assert.False(string.IsNullOrWhiteSpace(result.ReplyText));
+        Assert.True(model.CallCount <= settings.MaxSteps + 1, $"模型被呼叫 {model.CallCount} 次，超過每輪上限 {settings.MaxSteps + 1}。");
+        var trace = new AgentTraceService(factory, TimeProvider.System, NullLogger<AgentTraceService>.Instance);
+        var run = Assert.Single((await trace.GetRunsAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Result);
+        Assert.Equal(model.CallCount, run.ModelCallCount);
+        Assert.Equal(AgentStopReason.StepLimitReached, run.StopReason);
+
+        // 會話仍可接續：留在會話裡未回覆的核准請求由框架自動拒絕。
+        model.Fallback = null;
+        model.Reply("好的，有需要再告訴我。");
+        var next = await SendAsync(runner, key, "那算了");
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+    }
+
+    [Fact]
+    public async Task QuotaBlockedCall_NotCountedAsModelCall()
+    {
+        quota.Block = new AiQuotaLimitStatus(
+            AiQuotaScope.User, AiQuotaPeriod.Daily, 50, 51.25, new DateTime(2026, 10, 23), new DateTime(2026, 10, 24));
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+
+        var result = await SendAsync(runner, key, "你好");
+
+        Assert.Equal(AgentStopReason.QuotaExceeded, result.StopReason);
+        var trace = new AgentTraceService(factory, TimeProvider.System, NullLogger<AgentTraceService>.Instance);
+        var run = Assert.Single((await trace.GetRunsAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Result);
+        Assert.Equal(0, run.ModelCallCount);
+    }
+
+    [Fact]
+    public async Task NotFound_ThenModelConcludes_EmitsWarning()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("query_my_orders", new() { ["color"] = "紅色" });
+        model.Reply("您沒有紅色的訂單。");
+
+        var result = await SendAsync(runner, key, "紅色那雙換大一碼");
+
+        Assert.Equal(AgentStopReason.Answered, result.StopReason);
+        var warning = Assert.Single(events, e => e.Kind == AgentStepKind.Warning);
+        Assert.Equal(AgentDataSource.Program, warning.Source);
+        Assert.Contains("直接下結論", warning.PlainText);
+        var kinds = events.Select(e => e.Kind).ToList();
+        Assert.True(kinds.IndexOf(AgentStepKind.Warning) < kinds.IndexOf(AgentStepKind.Stop));
+    }
+
+    [Fact]
+    public async Task NotFound_ThenModelAsks_NoWarning()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("query_my_orders", new() { ["color"] = "紅色" });
+        model.Reply("找不到紅色的訂單，請問是哪一雙鞋呢？");
+
+        var result = await SendAsync(runner, key, "紅色那雙換大一碼");
+
+        Assert.Equal(AgentStopReason.AwaitingUserReply, result.StopReason);
+        Assert.DoesNotContain(events, e => e.Kind == AgentStepKind.Warning);
+    }
+
+    [Fact]
+    public async Task NextTurnAfterApprove_Works()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        model.Reply("已為您送出換尺碼申請。");
+        var confirmed = await ConfirmAsync(runner, key, card.ConfirmationId, approve: true);
+        var requestNo = confirmed.CreatedRequestNo!;
+        Assert.Matches(RequestNoPattern, requestNo);
+
+        model.Reply("不客氣，申請處理中。");
+        var next = await SendAsync(runner, key, "謝謝");
+
+        Assert.NotEqual(AgentStopReason.ModelError, next.StopReason);
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+        Assert.Equal("不客氣，申請處理中。", next.ReplyText);
+        Assert.Contains(model.Requests[^1].SelectMany(m => m.Contents).OfType<FunctionResultContent>(),
+            r => (r.Result?.ToString() ?? string.Empty).Contains(requestNo, StringComparison.Ordinal));
+        Assert.Equal(1, await RequestCountAsync());
+    }
+
+    [Fact]
+    public async Task NextTurnAfterReject_Works()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        model.Reply("好的，已為您取消。");
+        var canceled = await ConfirmAsync(runner, key, card.ConfirmationId, approve: false);
+        Assert.Equal(AgentStopReason.Answered, canceled.StopReason);
+
+        model.Reply("好的，有需要再告訴我。");
+        var next = await SendAsync(runner, key, "那先不用了");
+
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+        Assert.Equal("好的，有需要再告訴我。", next.ReplyText);
+        Assert.Contains(model.Requests[^1], m => m.Text.Contains("已為您取消", StringComparison.Ordinal));
+        Assert.Equal(0, await RequestCountAsync());
+    }
+
+    [Fact]
+    public async Task NextTurnAfterApprove_FromRestoredSession_Works()
+    {
+        var (_, key, card) = await ReachConfirmationAsync();
+        model.Reply("已為您送出換尺碼申請。");
+        var confirmed = await ConfirmAsync(CreateRunner(), key, card.ConfirmationId, approve: true);
+        var requestNo = confirmed.CreatedRequestNo!;
+        Assert.Matches(RequestNoPattern, requestNo);
+
+        model.Reply("不客氣。");
+        var next = await SendAsync(CreateRunner(), key, "謝謝");
+
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+        Assert.Contains(model.Requests[^1].SelectMany(m => m.Contents).OfType<FunctionResultContent>(),
+            r => (r.Result?.ToString() ?? string.Empty).Contains(requestNo, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FlagshipB_PhotoUpload_ThenContinue_Works()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("request_photo_upload", new() { ["orderItemId"] = white41, ["reason"] = "請拍攝開膠處" });
+        var waiting = await SendAsync(runner, key, "白色那雙開膠了");
+        Assert.Equal(AgentStopReason.AwaitingPhotoUpload, waiting.StopReason);
+
+        Assert.True(inbox.Add(key, "crack.jpg", [1, 2, 3]));
+        model.Reply("收到照片了，請問鞋子有穿過嗎？");
+        var resumed = await runner.NotifyPhotosUploadedAsync(key, OnEvent, OnDelta, CancellationToken.None);
+        Assert.Equal(AgentStopReason.AwaitingUserReply, resumed.StopReason);
+
+        model.Reply("了解，我來幫您查詢規則。");
+        var next = await SendAsync(CreateRunner(), key, "穿過一次");
+
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+        Assert.Contains(model.Requests[^1], m => m.Role == ChatRole.User && m.Text == "（已上傳 1 張照片）");
+    }
+
+    [Fact]
+    public async Task Card_DedupeAfterRealConfirm_NotShown()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        model.Reply("已為您送出換尺碼申請。");
+        var requestNo = (await ConfirmAsync(runner, key, card.ConfirmationId, approve: true)).CreatedRequestNo!;
+        Assert.Matches(RequestNoPattern, requestNo);
+
+        model.Call("create_after_sales_request", SizeExchangeArgs());
+        model.Reply($"這雙鞋已經有處理中的換尺碼申請（{requestNo}）。");
+        var again = await SendAsync(runner, key, "再幫我申請一次換 41");
+
+        Assert.Equal(AgentStopReason.Answered, again.StopReason);
+        Assert.Null(again.Confirmation);
+        Assert.Contains(model.Requests[^1].SelectMany(m => m.Contents).OfType<FunctionResultContent>(),
+            r => (r.Result?.ToString() ?? string.Empty).Contains($"這個商品已有處理中的同類申請（{requestNo}）", StringComparison.Ordinal));
+        Assert.Equal(1, await RequestCountAsync());
+        await using var db = factory.CreateDbContext();
+        Assert.Single(await db.AgentConfirmation.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Conflict_ThenModelSuggestsHuman_NoWarning()
+    {
+        await using (var db = factory.CreateDbContext())
+        {
+            // 再加一條同類、同時生效的規則，製造衝突。
+            db.AfterSalesPolicy.Add(new AfterSalesPolicy
+            {
+                Code = "SIZE-EXCHANGE-SHOES",
+                Type = AfterSalesType.SizeExchange,
+                Category = ProductCategories.Shoes,
+                Title = "鞋類換尺碼",
+                Content = "另一條規則",
+                Source = "測試",
+                Version = 1,
+                EffectiveFrom = new DateTime(2026, 1, 1),
+                CreatedAt = new DateTime(2026, 1, 1),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("get_effective_policy", new() { ["orderItemId"] = black40, ["issueType"] = "size_exchange" });
+        model.Reply("這個問題目前有多條規則同時適用，建議轉人工客服為您處理。");
+
+        var result = await SendAsync(runner, key, "黑色那雙想換 41");
+
+        Assert.Equal(AgentStopReason.PolicyConflict, result.StopReason);
+        Assert.Contains(events, e => e.Kind == AgentStepKind.ToolResult && e.RawJson!.Contains("\"status\":\"conflict\"", StringComparison.Ordinal));
+        Assert.DoesNotContain(events, e => e.Kind == AgentStepKind.Warning);
+    }
+
+    [Fact]
+    public async Task NotFound_ThenSameToolOk_ThenConclusion_NoWarning()
+    {
+        var runner = CreateRunner();
+        var key = await runner.StartOrResumeAsync();
+        model.Call("query_my_orders", new() { ["color"] = "紅色" });
+        model.Call("query_my_orders", []);
+        model.Reply("您有黑色 40 碼與白色 41 碼兩雙鞋。");
+
+        var result = await SendAsync(runner, key, "紅色那雙換大一碼");
+
+        Assert.Equal(AgentStopReason.Answered, result.StopReason);
+        Assert.Contains(events, e => e.Kind == AgentStepKind.ToolResult && e.RawJson!.Contains("\"status\":\"not_found\"", StringComparison.Ordinal));
+        Assert.DoesNotContain(events, e => e.Kind == AgentStepKind.Warning);
+    }
+
     /// <summary>以 Server-Sent Events 格式回傳串流（每個元素是一行 <c>data:</c>）。</summary>
+    /// <summary>
+    /// 模型直接提出建立申請（沒有先查詢），組確認卡的程式重查遇到故障：與工具同一個外框（逾時、身分與權限），
+    /// 失敗時以 Guard 的固定說明與停止原因收尾，不顯示確認卡、不寫入。
+    /// </summary>
+    private async Task<(AgentTurnResult Result, TimeSpan Elapsed, Guid Key, AfterSalesAgentRunner Runner)> CardUnderFaultAsync(DemoFault fault)
+    {
+        var demo = TestDemoControl.Create(factory, enabled: true);
+        await demo.SetFaultAsync(fault, true);
+        var runner = CreateRunner(demo: demo);
+        var key = await runner.StartOrResumeAsync();
+        model.Call("create_after_sales_request", SizeExchangeArgs());
+        model.Fallback = _ => new ChatResponse(new ChatMessage(ChatRole.Assistant, "查無資料，您沒有這筆訂單。"));
+
+        var watch = Stopwatch.StartNew();
+        var result = await SendAsync(runner, key, "黑色那雙 40 碼想換 41，沒穿過");
+        watch.Stop();
+
+        Assert.Null(result.Confirmation);
+        Assert.Equal(result.StopExplanation, result.ReplyText);
+        Assert.Equal(1, model.CallCount);
+        Assert.Equal(0, await RequestCountAsync());
+        await using (var db = factory.CreateDbContext())
+        {
+            Assert.False(await db.AgentConfirmation.AnyAsync());
+        }
+
+        Assert.DoesNotContain(events, e => e.Kind == AgentStepKind.ConfirmationShown);
+        await demo.SetFaultAsync(fault, false);
+        return (result, watch.Elapsed, key, runner);
+    }
+
+    [Fact]
+    public async Task Card_UnderOrderTimeoutFault_ReturnsTimeoutExplanationQuickly()
+    {
+        // 故障模擬的訂單讀取要等 30 秒（預設）才失敗；組卡的重查必須以工具逾時（1 秒）放棄等待。
+        settings.ToolTimeoutSeconds = 1;
+
+        var (result, elapsed, _, _) = await CardUnderFaultAsync(DemoFault.OrderServiceTimeout);
+
+        Assert.Equal(AgentStopReason.Timeout, result.StopReason);
+        Assert.Equal(AfterSalesAgentGuard.TimeoutExplanation, result.ReplyText);
+        Assert.Contains("不代表您沒有這筆訂單", result.ReplyText);
+        Assert.True(elapsed < TimeSpan.FromSeconds(10), $"組卡重查花了 {elapsed}，沒有受工具逾時約束。");
+    }
+
+    [Fact]
+    public async Task Card_UnderPolicyUnavailableFault_ReturnsUnavailable()
+    {
+        var (result, _, _, _) = await CardUnderFaultAsync(DemoFault.PolicyServiceUnavailable);
+
+        Assert.Equal(AgentStopReason.ServiceUnavailable, result.StopReason);
+        Assert.Equal(AfterSalesAgentGuard.UnavailableExplanation, result.ReplyText);
+    }
+
+    [Fact]
+    public async Task Card_UnderPermissionExpiredFault_NoCardForbidden()
+    {
+        var (result, _, key, runner) = await CardUnderFaultAsync(DemoFault.PermissionExpired);
+
+        Assert.Equal(AgentStopReason.Forbidden, result.StopReason);
+        Assert.Equal(AfterSalesAgentGuard.ForbiddenExplanation, result.ReplyText);
+
+        // 會話仍可接續：留在會話裡未回覆的核准請求由框架自動拒絕。
+        model.Fallback = null;
+        model.Reply("好的，有需要再告訴我。");
+        var next = await SendAsync(runner, key, "那算了");
+        Assert.Equal(AgentStopReason.Answered, next.StopReason);
+        Assert.Equal(0, await RequestCountAsync());
+    }
+
+    [Fact]
+    public async Task Confirm_WhenApprovalRequestMissingFromSession_FailsClosed()
+    {
+        var (runner, key, card) = await ReachConfirmationAsync();
+        // 模擬上一輪存回會話失敗：會話裡沒有這張卡的核准請求。
+        await using (var db = factory.CreateDbContext())
+        {
+            var row = await db.AgentSessionRecord.SingleAsync(x => x.SessionKey == key);
+            Assert.Contains(card.ApprovalRequestId, row.StateJson!, StringComparison.Ordinal);
+            var state = JsonNode.Parse(row.StateJson!)!;
+            RemoveObjectsWithValue(state, card.ApprovalRequestId);
+            row.StateJson = state.ToJsonString();
+            Assert.DoesNotContain(card.ApprovalRequestId, row.StateJson, StringComparison.Ordinal);
+            await db.SaveChangesAsync();
+        }
+
+        var calls = model.CallCount;
+        model.Reply("已為您送出換尺碼申請。");
+        var result = await ConfirmAsync(runner, key, card.ConfirmationId, approve: true);
+
+        Assert.Equal("這張確認卡已失效，請重新送出您的需求。", result.ReplyText);
+        Assert.Null(result.CreatedRequestNo);
+        Assert.Null(result.Confirmation);
+        Assert.Equal(calls, model.CallCount);
+        Assert.Equal(0, await RequestCountAsync());
+        await using var check = factory.CreateDbContext();
+        var confirmation = await check.AgentConfirmation.SingleAsync();
+        Assert.False(confirmation.Approved);
+        Assert.Null(confirmation.AfterSalesRequestId);
+        Assert.DoesNotContain(await runner.GetHistoryAsync(key), x => x.PendingCard is not null);
+    }
+
+    /// <summary>移除 JSON 樹中任何直接含有指定字串值的物件（陣列元素）。</summary>
+    private static void RemoveObjectsWithValue(JsonNode node, string value)
+    {
+        switch (node)
+        {
+            case JsonArray array:
+                for (var i = array.Count - 1; i >= 0; i--)
+                {
+                    if (array[i] is JsonObject item
+                        && item.Any(p => p.Value is JsonValue v && v.TryGetValue<string>(out var text) && text == value))
+                    {
+                        array.RemoveAt(i);
+                    }
+                    else if (array[i] is { } child)
+                    {
+                        RemoveObjectsWithValue(child, value);
+                    }
+                }
+
+                break;
+
+            case JsonObject obj:
+                foreach (var property in obj.ToList())
+                {
+                    if (property.Value is { } child)
+                    {
+                        RemoveObjectsWithValue(child, value);
+                    }
+                }
+
+                break;
+        }
+    }
+
     private static HttpResponseMessage Sse(params string[] events)
         => new(HttpStatusCode.OK)
         {
             Content = new StringContent(
                 string.Concat(events.Select(e => $"data: {e}\n\n")), Encoding.UTF8, "text/event-stream"),
         };
+
+    /// <summary>規則卡含清單欄位，記錄相等比較的是參考；這裡逐欄比對內容。</summary>
+    private sealed class PolicyCardComparer : IEqualityComparer<AgentPolicyCard>
+    {
+        public bool Equals(AgentPolicyCard? x, AgentPolicyCard? y)
+            => x is not null && y is not null
+                && x with { UnmetReasons = [], MissingInfo = [] } == y with { UnmetReasons = [], MissingInfo = [] }
+                && x.UnmetReasons.SequenceEqual(y.UnmetReasons)
+                && x.MissingInfo.SequenceEqual(y.MissingInfo);
+
+        public int GetHashCode(AgentPolicyCard obj) => obj.PolicyId;
+    }
 
     private static void AssertSubsequence(IReadOnlyList<AgentStepKind> expected, IReadOnlyList<AgentStepKind> actual)
     {

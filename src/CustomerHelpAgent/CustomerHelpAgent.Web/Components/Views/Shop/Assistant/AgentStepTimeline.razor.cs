@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Web.Agents.AfterSales;
 
 namespace CustomerHelpAgent.Web.Components.Views.Shop.Assistant;
@@ -27,6 +28,14 @@ public partial class AgentStepTimeline
         // 清單被換掉（開新對話、換一筆紀錄）時，展開的列號已經對不上了。
         expandedRows.RemoveWhere(index => index >= Events.Count);
     }
+
+    /// <summary>停止列底色、程式提醒（<see cref="AgentStepKind.Warning"/>）標紅；其他列沒有額外樣式。</summary>
+    private static string? RowClass(AgentStepKind kind) => kind switch
+    {
+        AgentStepKind.Stop => "is-stop",
+        AgentStepKind.Warning => "is-warning",
+        _ => null,
+    };
 
     /// <summary>JSON 排版後顯示（中文不跳脫）；不是 JSON 就原樣顯示。</summary>
     private static string FormatRaw(string raw)

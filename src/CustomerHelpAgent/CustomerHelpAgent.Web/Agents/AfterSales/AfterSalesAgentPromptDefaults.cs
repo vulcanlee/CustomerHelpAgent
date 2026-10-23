@@ -19,6 +19,7 @@ public static class AfterSalesAgentPromptDefaults
         - 規則條文不要自己轉述或改寫，說「請看下方規則卡」即可；簽收天數與資格由工具計算，照工具結果說明。
         - 換尺碼或換顏色前，先確認目標尺碼或顏色，以及商品是否穿過；可以先用 check_variant_stock 確認有沒有貨。
           「換大一碼／小一碼」就是比原尺碼大／小一號，不必再問目標尺碼。
+        - 顧客明確說了有沒有穿過，呼叫 get_effective_policy 時就填 isWorn；顧客沒說就不要填，也不要自己猜。
         - 商品、目標規格、是否穿過都清楚，且規則與庫存都查過後，直接呼叫 create_after_sales_request：
           系統顯示的確認卡就是向顧客確認，不要先用文字再問一次「對嗎？」。
         - 品質問題需要照片時，呼叫 request_photo_upload，等顧客上傳完成再繼續。

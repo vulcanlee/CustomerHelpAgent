@@ -11,6 +11,7 @@ using AntDesign;
 using CustomerHelpAgent.Dtos.Commons;
 using CustomerHelpAgent.Business.Repositories;
 using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Helpers;
@@ -397,6 +398,12 @@ namespace CustomerHelpAgent.Web
                 // （告警會讀告警門檻與系統名稱）。不合法的覆寫會被略過並標示，不會讓啟動失敗。
                 app.Services.GetRequiredService<SystemParameterRuntime>()
                     .LoadAsync(CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+
+                // 載入展示控制狀態（1.0.5 起，故障模擬、即時／回放）。必須在 migration 之後；示範模式關閉時不讀資料庫。
+                app.Services.GetRequiredService<DemoControlService>()
+                    .LoadAsync()
                     .GetAwaiter()
                     .GetResult();
 

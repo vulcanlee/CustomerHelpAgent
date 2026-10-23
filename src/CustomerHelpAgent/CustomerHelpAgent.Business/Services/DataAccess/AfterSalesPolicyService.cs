@@ -7,18 +7,26 @@ using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
 using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Shop;
 
 namespace CustomerHelpAgent.Business.Services.DataAccess;
 
-/// <summary>售後政策服務：以新增版本取代就地編輯，並提供「某時點生效規則」查詢。</summary>
+/// <summary>
+/// 售後政策服務：以新增版本取代就地編輯，並提供「某時點生效規則」查詢。
+/// 展示的故障模擬（<see cref="DemoControlService"/>，示範模式關閉時不生效）注入在 <see cref="GetEffectiveAsync"/>，Agent 與傳統流程同受影響。
+/// </summary>
 public class AfterSalesPolicyService
 {
     private const string StaleBaseVersionMessage = "規則已被其他人更新，請重新整理後再新增版本。";
 
+    /// <summary><see cref="DemoFault.PolicyConflict"/> 合成版本的標題後綴（合成版本 Id 為 0，不寫入資料庫）。</summary>
+    internal const string ConflictTitleSuffix = "（衝突版本）";
+
     private readonly IDbContextFactory<BackendDBContext> contextFactory;
     private readonly IAuditLogService auditLogService;
     private readonly CurrentUserService currentUserService;
+    private readonly DemoControlService demoControl;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<AfterSalesPolicyService> logger;
 
@@ -26,12 +34,14 @@ public class AfterSalesPolicyService
         IDbContextFactory<BackendDBContext> contextFactory,
         IAuditLogService auditLogService,
         CurrentUserService currentUserService,
+        DemoControlService demoControl,
         TimeProvider timeProvider,
         ILogger<AfterSalesPolicyService> logger)
     {
         this.contextFactory = contextFactory;
         this.auditLogService = auditLogService;
         this.currentUserService = currentUserService;
+        this.demoControl = demoControl;
         this.timeProvider = timeProvider;
         this.logger = logger;
     }
@@ -53,8 +63,25 @@ public class AfterSalesPolicyService
         RequiresPhoto = x.RequiresPhoto,
     };
 
+    /// <summary>
+    /// 某時點生效的規則。故障模擬（優先序由上而下）：<see cref="DemoFault.PolicyServiceUnavailable"/> 拋 <see cref="InvalidOperationException"/>；
+    /// <see cref="DemoFault.PolicyNotFound"/> 回查無；<see cref="DemoFault.PolicyConflict"/> 在真實結果之後多一筆合成的衝突版本
+    /// （真實結果查無時維持查無：沒有可衝突的規則）。
+    /// </summary>
     public async Task<PolicyLookupResult> GetEffectiveAsync(AfterSalesType type, string productCategory, DateTime at)
     {
+        if (demoControl.IsFaultActive(DemoFault.PolicyServiceUnavailable))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}, PolicyType={PolicyType}", DemoFault.PolicyServiceUnavailable, type);
+            throw new InvalidOperationException("規則服務暫時無法使用（故障模擬）");
+        }
+
+        if (demoControl.IsFaultActive(DemoFault.PolicyNotFound))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}, PolicyType={PolicyType}", DemoFault.PolicyNotFound, type);
+            return new PolicyLookupResult(PolicyLookupStatus.NoPolicy, []);
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync();
         var rows = await context.AfterSalesPolicy
             .AsNoTracking()
@@ -66,6 +93,12 @@ public class AfterSalesPolicyService
             .ToListAsync();
 
         var policies = rows.Select(ToModel).ToList();
+        if (policies.Count > 0 && demoControl.IsFaultActive(DemoFault.PolicyConflict))
+        {
+            logger.LogWarning("Demo fault injected. Fault={Fault}, PolicyType={PolicyType}", DemoFault.PolicyConflict, type);
+            policies.Add(SyntheticConflictOf(policies[0]));
+        }
+
         var status = policies.Count switch
         {
             0 => PolicyLookupStatus.NoPolicy,
@@ -78,6 +111,16 @@ public class AfterSalesPolicyService
         }
 
         return new PolicyLookupResult(status, policies);
+    }
+
+    /// <summary><see cref="DemoFault.PolicyConflict"/> 的合成版本：同代碼、下一版、Id 0（不存在於資料庫，不可拿來寫入申請）。</summary>
+    private static AfterSalesPolicyModel SyntheticConflictOf(AfterSalesPolicyModel current)
+    {
+        var synthetic = current.Clone();
+        synthetic.Id = 0;
+        synthetic.Title = current.Title + ConflictTitleSuffix;
+        synthetic.Version = current.Version + 1;
+        return synthetic;
     }
 
     public async Task<List<AfterSalesPolicyModel>> GetVersionsAsync(bool includeExpired)

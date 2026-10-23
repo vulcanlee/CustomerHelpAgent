@@ -1,4 +1,6 @@
 @using CustomerHelpAgent.Business.Services.DataAccess
+@using CustomerHelpAgent.Share.Agents
+@using CustomerHelpAgent.Share.Demo
 
 @* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
 @if (!isAccessChecked)
@@ -21,6 +23,14 @@ else
             <div class="assistant-heading">
                 <h1 class="assistant-title">線上客服</h1>
                 <p class="assistant-hint">AI 客服會查您的訂單與售後規則；建立申請前一定會先請您確認。</p>
+                @if (IsReplay)
+                {
+                    @* 回放中一定要明確標示：回覆是錄製的內容，不是模型當場產生的。 *@
+                    <span class="assistant-replay-badge" role="status">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="replay" />
+                        <span data-role="replay-badge">@ReplayBadgeText</span>
+                    </span>
+                }
             </div>
             <div class="assistant-tools">
                 <button type="button" role="switch" class="assistant-switch @(showBackstage ? "is-on" : null)"
@@ -85,6 +95,8 @@ else
                                 case EntryKind.Confirmation when entry.Card is not null:
                                     <AgentConfirmCardView Card="entry.Card" State="entry.CardState" RequestNo="@entry.RequestNo"
                                                           Disabled="@(busy || aiError is not null)"
+                                                          ConfirmDisabled="@(IsReplay && ReplayNext?.Kind != AgentRecordedTurnKind.Confirm)"
+                                                          CancelDisabled="@(IsReplay && ReplayNext?.Kind != AgentRecordedTurnKind.Reject)"
                                                           OnConfirm="() => OnConfirmCardAsync(entry, true)"
                                                           OnCancel="() => OnConfirmCardAsync(entry, false)" />
                                     break;
@@ -101,11 +113,30 @@ else
                     </div>
                 </div>
 
+                @if (ReplayEnd is { } replayEnd)
+                {
+                    <div class="assistant-replay-end" role="status" data-role="replay-end">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="stop_circle" />
+                        <span>@AgentStopLabels.Text(replayEnd)</span>
+                        @if (isPresenter)
+                        {
+                            <button type="button" class="assistant-replay-console" data-action="back-to-console" @onclick="BackToConsole">
+                                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="slideshow" />
+                                <span>回到展示控制台</span>
+                            </button>
+                        }
+                    </div>
+                }
+
                 @if (awaitingPhotos)
                 {
                     <div class="chat-photos" data-role="photo-upload">
                         <span class="chat-photos-label">上傳照片</span>
                         <p class="chat-photos-hint">請拍清楚有問題的地方，最多 @AfterSalesRequestService.MaxFileCount 張，每張 10 MB 以內（jpg、png、webp）。</p>
+                        @if (IsReplay)
+                        {
+                            <p class="chat-photos-hint" data-role="replay-photo-hint">請上傳任一張照片以繼續</p>
+                        }
                         <InputFile OnChange="OnPhotosSelectedAsync" multiple accept="@ShopPhotoPicker.Accept" disabled="@busy" />
                         @if (pendingPhotos.Count > 0)
                         {
@@ -121,7 +152,7 @@ else
                         }
                         <div>
                             <button type="button" class="chat-send" data-action="send-photos"
-                                    disabled="@(busy || aiError is not null || pendingPhotos.Count == 0)" @onclick="OnSendPhotosAsync">
+                                    disabled="@(busy || aiError is not null || pendingPhotos.Count == 0 || !ReplayPhotosReady)" @onclick="OnSendPhotosAsync">
                                 <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="upload" />
                                 <span>送出照片</span>
                             </button>
@@ -131,7 +162,7 @@ else
 
                 <form class="chat-composer" data-role="composer" @onsubmit="OnSendAsync">
                     <input type="text" class="chat-input" aria-label="輸入訊息" maxlength="@MaxMessageLength"
-                           placeholder="@ComposerPlaceholder" disabled="@(!CanType)"
+                           placeholder="@ComposerPlaceholder" disabled="@(!CanType)" readonly="@IsReplay"
                            @bind="draft" @bind:event="oninput" />
                     @* 送出鈕不依「是否有輸入」停用：預設按鈕停用時，瀏覽器不會以 Enter 送出表單（打完字立刻按 Enter 會被吃掉）；空白訊息由 OnSendAsync 忽略。 *@
                     <button type="submit" class="chat-send" data-action="send" disabled="@(!CanType)">

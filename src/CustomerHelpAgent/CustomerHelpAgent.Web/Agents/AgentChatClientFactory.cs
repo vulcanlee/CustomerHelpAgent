@@ -57,6 +57,9 @@ public sealed class AgentChatClientFactory
 
     public string? Validate() => AiChatEndpoint.Validate(aiOptions.CurrentValue);
 
+    /// <summary>設定的模型（<c>AiSettings:Model</c>，Azure 為部署名稱）；錄製在回應沒有帶模型名稱時用它。</summary>
+    public string ConfiguredModel => aiOptions.CurrentValue.Model;
+
     public IChatClient Create(
         string operation,
         Guid conversationId,

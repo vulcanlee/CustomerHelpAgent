@@ -19,5 +19,11 @@ public class AgentRunTrace
     public int ModelCallCount { get; set; }
     public int ToolCallCount { get; set; }
 
+    /// <summary>
+    /// 回放（1.0.5 起）：這一輪用哪一份錄製（<see cref="AgentRecording.Id"/>）重播模型回應、沒有呼叫模型；即時執行為 null。
+    /// 刻意不設外鍵：錄製刪除後仍看得出這一輪是回放。
+    /// </summary>
+    public int? ReplayRecordingId { get; set; }
+
     public List<AgentRunStep> Steps { get; set; } = [];
 }

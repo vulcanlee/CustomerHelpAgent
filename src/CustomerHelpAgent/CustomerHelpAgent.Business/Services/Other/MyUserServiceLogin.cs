@@ -85,6 +85,16 @@ public class MyUserServiceLogin
         return item is { Status: true } ? item : null;
     }
 
+    /// <summary>以帳號取回仍可使用的帳號；查無此人或已停用時回 null（展示身分切換用，1.0.5 起）。</summary>
+    public async Task<MyUser?> GetActiveUserByAccountAsync(string account)
+    {
+        MyUser? item = await context.MyUser
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Account == account);
+
+        return item is { Status: true } ? item : null;
+    }
+
     public async Task<LoginAttemptResult> LoginAsync(string username, string password)
     {
         Logger.LogInformation("Login attempt started for Account={Account}.", username);

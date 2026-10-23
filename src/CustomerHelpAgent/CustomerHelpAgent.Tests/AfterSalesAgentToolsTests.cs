@@ -94,8 +94,8 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
         };
         var settings = new SystemSettings();
         settings.ExternalFileSystem.AfterSalesFilePath = fileRoot;
-        var policyService = new AfterSalesPolicyService(factory, audit, currentUser, time, NullLogger<AfterSalesPolicyService>.Instance);
-        var orderService = new ShopOrderService(factory, NullLogger<ShopOrderService>.Instance);
+        var policyService = new AfterSalesPolicyService(factory, audit, currentUser, TestDemoControl.Off(factory), time, NullLogger<AfterSalesPolicyService>.Instance);
+        var orderService = new ShopOrderService(factory, TestDemoControl.Off(factory), NullLogger<ShopOrderService>.Instance);
         var requestService = new AfterSalesRequestService(
             factory,
             policyService,
@@ -112,6 +112,7 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             currentUser,
             inbox,
+            TestDemoControl.Off(factory),
             time,
             NullLogger<AfterSalesAgentTools>.Instance,
             context ?? new AfterSalesToolContext { CustomerUserId = customer1, SessionKey = sessionKey });
@@ -218,6 +219,35 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
         Assert.Contains("是否穿過", card.GetProperty("missing_info").EnumerateArray().Select(x => x.GetString()));
         Assert.Empty(card.GetProperty("unmet_reasons").EnumerateArray());
         Assert.Equal(DemoSeedData.PolicySource, card.GetProperty("source").GetString());
+    }
+
+    [Fact]
+    public async Task GetEffectivePolicy_WithIsWorn_NoLongerMissingWornInfo()
+    {
+        var black40 = await ItemIdAsync("SO-DEMO-0001");
+        var tools = CreateTools();
+
+        var (unworn, _) = await InvokeAsync(tools, "get_effective_policy", new()
+        {
+            ["orderItemId"] = black40,
+            ["issueType"] = "size_exchange",
+            ["isWorn"] = false,
+        });
+        var (worn, _) = await InvokeAsync(tools, "get_effective_policy", new()
+        {
+            ["orderItemId"] = black40,
+            ["issueType"] = "size_exchange",
+            ["isWorn"] = true,
+        });
+
+        Assert.Equal(ToolOutcomeStatus.Ok, unworn.Status);
+        Assert.Empty(Data(unworn).GetProperty("missing_info").EnumerateArray());
+        Assert.Empty(Data(unworn).GetProperty("unmet_reasons").EnumerateArray());
+        Assert.DoesNotContain("是否穿過", Data(worn).GetProperty("missing_info").EnumerateArray().Select(x => x.GetString()));
+        Assert.NotEmpty(Data(worn).GetProperty("unmet_reasons").EnumerateArray());
+        var description = Function(tools, "get_effective_policy").JsonSchema
+            .GetProperty("properties").GetProperty("isWorn").GetProperty("description").GetString();
+        Assert.Contains("明確", description);
     }
 
     [Fact]

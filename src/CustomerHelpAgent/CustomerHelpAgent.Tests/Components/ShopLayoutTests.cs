@@ -1,9 +1,14 @@
+using System.Globalization;
+using System.Security.Claims;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using CustomerHelpAgent.Business.Services.Other;
+using CustomerHelpAgent.Share.Helpers;
+using CustomerHelpAgent.Web.Auth;
 using CustomerHelpAgent.Web.Components.Layout;
 
 namespace CustomerHelpAgent.Tests.Components;
@@ -87,5 +92,73 @@ public sealed class ShopLayoutTests : ComponentTestBase
     private sealed class PendingAuthenticationStateProvider : AuthenticationStateProvider
     {
         public override Task<AuthenticationState> GetAuthenticationStateAsync() => new TaskCompletionSource<AuthenticationState>().Task;
+    }
+}
+
+/// <summary>
+/// 展示身分切換的提示列（1.0.5 起）：Cookie 帶展示者 claim 時，顧客版面頂端顯示「展示模式」與「回到展示者」；
+/// 按下去取一張切回票券、整頁導向 <c>/Auths/DemoSwitch</c>。跑完真的登入檢查（<see cref="ShopViewTestBase"/>）。
+/// </summary>
+public sealed class ShopLayoutDemoBannerTests : ShopViewTestBase
+{
+    private readonly DemoSwitchTicketService tickets = new(TimeProvider.System, NullLogger<DemoSwitchTicketService>.Instance);
+
+    public ShopLayoutDemoBannerTests()
+    {
+        Services.AddSingleton(TestDemoControl.Create(Factory, enabled: true));
+        Services.AddSingleton(tickets);
+    }
+
+    [Fact]
+    public void ShopLayout_PresenterClaim_ShowsBackButton()
+    {
+        UsePrincipal(presenterId: 4242);
+
+        var cut = Render<ShopLayout>();
+        cut.WaitForAssertion(() => Assert.Contains("展示模式：目前以 顧客一 身分檢視", cut.Markup, StringComparison.Ordinal));
+
+        cut.Find("button.demo-banner-back").Click();
+
+        var uri = new Uri(Services.GetRequiredService<NavigationManager>().Uri);
+        Assert.Equal("/Auths/DemoSwitch", uri.AbsolutePath);
+        Assert.StartsWith("?ticket=", uri.Query, StringComparison.Ordinal);
+        var ticket = Uri.UnescapeDataString(uri.Query["?ticket=".Length..]);
+        Assert.True(tickets.TryRedeem(ticket, out var redeemed));
+        Assert.Equal(new DemoSwitchTicket(CustomerId, DemoSwitchPurpose.SwitchBack, null), redeemed);
+    }
+
+    [Fact]
+    public void ShopLayout_WithoutPresenterClaim_HidesBanner()
+    {
+        UsePrincipal(presenterId: null);
+
+        var cut = Render<ShopLayout>();
+        cut.WaitForAssertion(() => Assert.Contains("示範鞋服商店", cut.Markup, StringComparison.Ordinal));
+
+        Assert.Empty(cut.FindAll("button.demo-banner-back"));
+        Assert.DoesNotContain("展示模式", cut.Markup, StringComparison.Ordinal);
+    }
+
+    private void UsePrincipal(int? presenterId)
+    {
+        using var context = Factory.CreateDbContext();
+        var stamp = context.MyUser.AsNoTracking().Single(x => x.Id == CustomerId).SecurityStamp;
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Sid, CustomerId.ToString(CultureInfo.InvariantCulture)),
+            new(MagicObjectHelper.SecurityStampClaimType, stamp),
+        };
+        if (presenterId is { } id)
+        {
+            claims.Add(new(DemoClaims.PresenterId, id.ToString(CultureInfo.InvariantCulture)));
+            claims.Add(new(DemoClaims.PresenterStamp, "presenter-stamp"));
+        }
+
+        Services.AddSingleton<AuthenticationStateProvider>(new StaticAuthenticationStateProvider(new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))));
+    }
+
+    private sealed class StaticAuthenticationStateProvider(ClaimsPrincipal principal) : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(principal));
     }
 }

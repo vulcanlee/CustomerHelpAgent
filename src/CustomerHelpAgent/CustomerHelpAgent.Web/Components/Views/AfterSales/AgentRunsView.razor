@@ -32,6 +32,19 @@ else
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
                 <Column TData="DateTime" Title="時間">@context.StartedAt.ToString("yyyy/MM/dd HH:mm:ss")</Column>
+                @* 回放的那一輪沒有呼叫模型（重播錄製的回應），要和即時執行分得出來。 *@
+                <Column TData="string" Title="模式">
+                    @if (context.IsReplay)
+                    {
+                        <span class="agent-runs-replay-tag" title="@($"使用錄製 #{context.ReplayRecordingId} 的回應，未呼叫模型")">
+                            <StatusPill Text="回放" Tone="StatusTone.Warning" />
+                        </span>
+                    }
+                    else
+                    {
+                        <span>即時</span>
+                    }
+                </Column>
                 <Column TData="string" DataIndex="@nameof(AgentRunSummary.CustomerName)" Title="顧客" />
                 <Column TData="string" Title="停止原因">@StopText(context.StopReason)</Column>
                 <Column TData="int" DataIndex="@nameof(AgentRunSummary.ModelCallCount)" Title="模型呼叫數" />
@@ -51,6 +64,10 @@ else
         {
             <p class="agent-runs-summary">
                 @current.CustomerName　·　@current.StartedAt.ToString("yyyy/MM/dd HH:mm:ss")　·　@StopText(current.StopReason)
+                @if (current.IsReplay)
+                {
+                    <span>　·　回放（錄製 #@current.ReplayRecordingId，未呼叫模型）</span>
+                }
             </p>
             <AgentStepTimeline Events="@steps" EmptyText="這一輪沒有留下任何步驟。" />
         }

@@ -47,6 +47,25 @@ public sealed class AgentRunsViewTests : ShopViewTestBase
     }
 
     [Fact]
+    public async Task AgentRuns_ReplayRun_ShowsReplayTag()
+    {
+        GrantPermission();
+        var live = await traceService.StartRunAsync(Guid.NewGuid(), CustomerId);
+        await traceService.EndRunAsync(live, AgentStopReason.Answered, 1, 0);
+        var replayed = await traceService.StartRunAsync(Guid.NewGuid(), CustomerId, replayRecordingId: 7);
+        await traceService.EndRunAsync(replayed, AgentStopReason.Answered, 1, 0);
+
+        var cut = Render<AgentRunsView>();
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr.agent-runs-row").Count));
+        var rows = cut.FindAll("tr.agent-runs-row");
+        // 新到舊：先回放、後即時。
+        var replayTag = Assert.Single(rows[0].QuerySelectorAll(".agent-runs-replay-tag"));
+        Assert.Equal("回放", replayTag.TextContent.Trim());
+        Assert.Empty(rows[1].QuerySelectorAll(".agent-runs-replay-tag"));
+    }
+
+    [Fact]
     public void AgentRuns_WithoutPermission_ShowsDenied()
     {
         var cut = Render<AgentRunsView>();

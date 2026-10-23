@@ -55,6 +55,10 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<AgentRunTrace> AgentRunTrace { get; set; }
     public virtual DbSet<AgentRunStep> AgentRunStep { get; set; }
     public virtual DbSet<AgentConfirmation> AgentConfirmation { get; set; }
+    public virtual DbSet<DemoControlState> DemoControlState { get; set; }
+    public virtual DbSet<AgentRecording> AgentRecording { get; set; }
+    public virtual DbSet<AgentRecordedTurn> AgentRecordedTurn { get; set; }
+    public virtual DbSet<AgentRecordedCall> AgentRecordedCall { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -368,6 +372,34 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<AgentConfirmation>(entity =>
         {
             entity.HasIndex(x => x.SessionKey);
+        });
+        #endregion
+
+        #region 售後展示控制與錄製（1.0.5 起）
+        // 固定單列（Id = 1），由 DemoControlService 讀寫；Id 不自動產生。
+        modelBuilder.Entity<DemoControlState>(entity =>
+        {
+            entity.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        // 錄製：SessionKey、CustomerUserId 刻意不設外鍵（重置刪掉會話後錄製仍在）；動作與呼叫屬於錄製（刪錄製一併刪）。
+        modelBuilder.Entity<AgentRecording>(entity =>
+        {
+            entity.HasIndex(x => x.SessionKey).IsUnique();
+            // 同一劇本只能有一個金劇本：AgentRecordingService.SetGoldenAsync 先降級舊的，這個部分唯一索引是第二道防線。
+            entity.HasIndex(x => x.ScenarioCode).IsUnique().HasFilter("\"IsGolden\" = 1");
+        });
+
+        modelBuilder.Entity<AgentRecordedTurn>(entity =>
+        {
+            entity.HasOne(x => x.AgentRecording).WithMany(x => x.Turns).HasForeignKey(x => x.AgentRecordingId);
+            entity.HasIndex(x => new { x.AgentRecordingId, x.Sequence });
+        });
+
+        modelBuilder.Entity<AgentRecordedCall>(entity =>
+        {
+            entity.HasOne(x => x.AgentRecording).WithMany(x => x.Calls).HasForeignKey(x => x.AgentRecordingId);
+            entity.HasIndex(x => new { x.AgentRecordingId, x.Sequence });
         });
         #endregion
 

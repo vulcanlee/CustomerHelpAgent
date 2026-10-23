@@ -47,12 +47,18 @@
                              aria-label="使用者操作">
                             <button type="button" class="user-menu-item" role="menuitem" @onclick="OnProfileClick">個人資料</button>
                             <button type="button" class="user-menu-item" role="menuitem" @onclick="OnChangePasswordClick">變更密碼</button>
+                            @if (CurrentUserIsAdmin && DemoControlService.IsEnabled)
+                            {
+                                <button type="button" class="user-menu-item" role="menuitem" @onclick="OnDemoIdentityClick">切換展示身分</button>
+                            }
                             <button type="button" class="user-menu-item" role="menuitem" @onclick="OnAboutClick">關於</button>
                             <button type="button" class="user-menu-item" role="menuitem" @onclick="OnLogoutClickAsync">登出</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <DemoIdentityBanner />
 
             <AnnouncementBanner />
 

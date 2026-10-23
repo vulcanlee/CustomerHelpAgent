@@ -11,6 +11,13 @@
             <span>幕後面板</span>
         </h2>
         <p class="backstage-hint">Agent 每一步做了什麼、資料從哪裡來。</p>
+        @if (ActiveFaultText is { Length: > 0 } faults)
+        {
+            <p class="backstage-faults" role="status">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span data-role="backstage-faults">@($"故障模擬中：{faults}")</span>
+            </p>
+        }
         <ul class="backstage-legend" aria-label="來源標色">
             @foreach (var source in LegendOrder)
             {
