@@ -1,0 +1,29 @@
+{
+  // 更名專案時，dotnet.defaultSolution 的路徑必須一併更新。
+  "dotnet.defaultSolution": "src/CustomerHelpAgent/CustomerHelpAgent.slnx",
+
+  // docs/**/*.md 必須是 UTF-8 含 BOM，提交前在本機以 scripts/Test-DocsEncoding.ps1 檢查（專案沒有 CI）。
+  "files.encoding": "utf8",
+  "[markdown]": {
+    "files.encoding": "utf8bom"
+  },
+
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true,
+    "**/.playwright-cli": true,
+    "**/output": true
+  },
+
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.formatOnSave": true,
+
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}

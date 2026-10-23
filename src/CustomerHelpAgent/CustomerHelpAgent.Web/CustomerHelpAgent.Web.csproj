@@ -1,0 +1,82 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>93aff4dd-e822-4569-ac29-89f53416029e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AntDesign" />
+    <PackageReference Include="BlazorMaterialIcons" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="QRCoder" />
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
+    <PackageReference Include="NLog.Web.AspNetCore" />
+    <PackageReference Include="PDFsharp-MigraDoc" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <!-- 覆蓋 MimeKit 遞移帶入的弱點版本，原因與移除條件見 Directory.Packages.props。 -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CustomerHelpAgent.Business\CustomerHelpAgent.Business.csproj" />
+  </ItemGroup>
+
+  <!--
+    PDF 報告的中文字型。用 EmbeddedResource 而非 CopyToOutputDirectory：publish、
+    單檔發行與容器化都不會漏檔，測試專案也能直接由組件讀取。LogicalName 明寫，
+    避免 MSBuild 依資料夾與檔名中的「-」推導出意外的資源名稱。
+    來源、產生方式與「為何只有 Regular」見 Fonts\README.md。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\NotoSansTC-Regular.ttf" LogicalName="CustomerHelpAgent.Web.Fonts.NotoSansTC-Regular.ttf" />
+  </ItemGroup>
+
+  <!--
+    登入、忘記密碼、重設密碼三頁與共用外框 AuthShell 共用同一個 scoped CSS 識別碼（0.9.60 起）。
+    外觀規則全部寫在 Login.razor.css；其餘三個 .razor.css 只是讓元件取得同一個 scope 屬性，
+    這樣同一份規則就能套用到四個元件的標記上，不必複製 400 行樣式或改寫成 ::deep。
+    ⚠️ 新增共用外框的頁面時要加進這裡，並附上自己的 .razor.css（可以只有註解）。
+  -->
+  <ItemGroup>
+    <None Update="Components\Auths\Login.razor.css" CssScope="b-auth-shell" />
+    <None Update="Components\Auths\AuthShell.razor.css" CssScope="b-auth-shell" />
+    <None Update="Components\Auths\ForgotPassword.razor.css" CssScope="b-auth-shell" />
+    <None Update="Components\Auths\ResetPassword.razor.css" CssScope="b-auth-shell" />
+    <None Update="Components\Auths\TwoFactor.razor.css" CssScope="b-auth-shell" />
+  </ItemGroup>
+
+  <!--
+    頁面使用說明（Datas/Help/*.md，由 Datas/HelpTopics.json 索引）。
+    Web SDK 預設只複製 *.json，.md 必須明寫；漏了不會編譯失敗，只會在 publish 後
+    讓每一頁的說明都變成佔位內容。由 PageHelpCatalogTests 守門。
+  -->
+  <ItemGroup>
+    <Content Include="Datas\Help\**\*.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- 慣例守門測試需要讀取 SidebarMenuService.MenuPermissionMap 等宣告式登錄表。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="CustomerHelpAgent.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Components\Dialogs\" />
+    <Folder Include="Datas\" />
+  </ItemGroup>
+
+</Project>

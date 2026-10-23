@@ -1,0 +1,42 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+
+namespace CustomerHelpAgent.Dtos.Models;
+
+/// <summary>__Display__的新增與修改（Web API；由 scripts/New-CrudModule.ps1 產生）。</summary>
+public class __Name__CreateUpdateDto
+{
+    /// <summary>
+    /// 樂觀並行的版本號。PUT 必填：請帶上 GET 取得的值；與資料庫目前的值不同代表別人已先修改，回 409。POST 會忽略這個欄位。
+    /// </summary>
+    [JsonPropertyName("concurrencyStamp")]
+    public string? ConcurrencyStamp { get; set; }
+
+    /// <summary>唯一代碼（修改時與路由的 id 相同；新增時由資料庫配號）。</summary>
+    [JsonPropertyName("id")]
+    public int? Id { get; set; }
+
+    [Required(ErrorMessage = "名稱 不可為空白")]
+    [StringLength(100, ErrorMessage = "名稱長度不可超過 100 字元")]
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(2000, ErrorMessage = "描述長度不可超過 2000 字元")]
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+#IF TEAMS
+
+    /// <summary>團隊（多值，以換行分隔；未設定表示公開）。</summary>
+    [JsonPropertyName("teams")]
+    public string? Teams { get; set; }
+#ENDIF
+
+    [JsonPropertyName("isEnabled")]
+    public bool IsEnabled { get; set; } = true;
+
+    [JsonPropertyName("createdAt")]
+    public DateTime? CreatedAt { get; set; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+}

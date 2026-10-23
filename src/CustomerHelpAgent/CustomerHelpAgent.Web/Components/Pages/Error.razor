@@ -1,0 +1,39 @@
+@page "/Error"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@inject ILogger<Error> Logger
+
+<PageTitle>系統錯誤</PageTitle>
+
+<h1 class="text-danger">系統發生未預期的錯誤</h1>
+<p>錯誤已記錄，請稍後再試；若持續發生，請聯絡系統管理員。</p>
+
+@if (ShowTraceCode)
+{
+    @* 錯誤追蹤碼（LOG-10）：與日誌檔、系統例外紀錄的追蹤碼相同，管理員可用它找到這次請求。 *@
+    <p>
+        <strong>錯誤追蹤碼：</strong><code>@TraceCode</code>
+    </p>
+}
+
+@code{
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? TraceCode { get; set; }
+    private bool ShowTraceCode => !string.IsNullOrEmpty(TraceCode);
+
+    protected override void OnInitialized()
+    {
+        // 0.9.78 之前顯示 Activity.Current?.Id（W3C 格式），但日誌記的是 TraceIdentifier，兩者對不上。
+        // UseHttpRequestLogging 已把 TraceIdentifier 換成錯誤追蹤碼，且重新執行 /Error 時沿用同一個碼。
+        TraceCode = HttpContext?.TraceIdentifier;
+
+        // 這頁先前一行日誌都不寫：使用者看到錯誤畫面，日誌上卻毫無痕跡。
+        // 記在 Warning 而非 Error、且不帶例外物件：真正的例外與堆疊已由請求 middleware
+        // 以 Error 記過，這裡只是標記「使用者確實看到了錯誤畫面」，靠 TraceId 與那筆對上。
+        Logger.LogWarning(
+            "Error page displayed to the user. TraceId={TraceId}",
+            TraceCode);
+    }
+}

@@ -1,0 +1,447 @@
+using AntDesign;
+using AntDesign.TableModels;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
+using CustomerHelpAgent.Business.Helpers;
+using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Business.Services.Other;
+using CustomerHelpAgent.Models.AdapterModel;
+using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Helpers;
+using CustomerHelpAgent.Web.Components.Commons;
+using CustomerHelpAgent.Web.Export;
+
+namespace CustomerHelpAgent.Web.Components.Views.__Plural__;
+
+/// <summary>
+/// __Display__（由 scripts/New-CrudModule.ps1 產生）：清單、搜尋、排序、新增、修改、刪除（可還原）、永久刪除、匯出 Excel。
+#IF ADMIN
+/// 管理員專屬：權限鍵刻意不進角色矩陣，以 CheckIsAdmin 判斷（AdminOnlyPermissionTests、MenuPermissionConsistencyTests 守門）。
+#ELSE
+/// 頁面權限鍵必須與 SidebarMenuService.MenuPermissionMap 該選單的鍵一致（MenuPermissionConsistencyTests 守門）。
+#ENDIF
+/// </summary>
+public partial class __Name__ViewView
+{
+    /// <summary>匯出 Excel 的欄位。</summary>
+    internal static readonly IReadOnlyList<ExportColumn<__Name__AdapterModel>> ExportColumns =
+    [
+        new("名稱", x => x.Name, Width: 24),
+        new("描述", x => x.Description, Width: 40),
+#IF TEAMS
+        new("團隊", x => x.TeamsText, Width: 24),
+#ENDIF
+        new("啟用", x => x.IsEnabled, Width: 8),
+        new("建立時間", x => x.CreatedAt, TabularExport.DateTimeFormat, 18),
+        new("更新時間", x => x.UpdatedAt, TabularExport.DateTimeFormat, 18),
+        new("刪除時間", x => x.DeletedAt, TabularExport.DateTimeFormat, 18),
+        new("刪除者", x => x.DeletedBy, Width: 14),
+    ];
+
+    private readonly ILogger<__Name__ViewView> logger;
+    private readonly __Name__Service __name__Service;
+#IF TEAMS
+    private readonly TeamService teamService;
+    private readonly IRecordAccessScopeProvider accessScope;
+#ENDIF
+    private readonly ModalService modalService;
+    private readonly NotificationService notificationService;
+
+    private List<__Name__AdapterModel> records = [];
+    private IEnumerable<__Name__AdapterModel> selectedRows = [];
+    private bool batchDeleting;
+#IF TEAMS
+    private List<string> availableTeams = [];
+    private RecordAccessScope currentScope = new(false, []);
+#ENDIF
+    private int _pageIndex = 1;
+    private int _pageSize = MagicObjectHelper.PageSize;
+    private int _total;
+    private string searchText = string.Empty;
+    private string sortField = string.Empty;
+    private string sortDirection = "None";
+    private bool showDeleted;
+    private string RoleMessage = string.Empty;
+    private bool isAccessChecked;
+
+    private string modalTitle = "__Item__維護";
+    private bool modalVisible;
+    private bool isNewRecordMode;
+    private __Name__AdapterModel CurrentRecord = new();
+    public EditContext? LocalEditContext { get; set; }
+
+    /// <summary>未儲存變更偵測：開窗時 Capture、按取消／儲存時比對（不要改用 EditContext.IsModified()，AntDesign 的輸入元件不會通知它）。</summary>
+    private readonly FormDirtyTracker dirtyTracker = new();
+
+    [Inject]
+    public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
+
+    [Inject]
+    public AuthenticationStateProvider authStateProvider { get; set; } = default!;
+
+    [Inject]
+    public NavigationManager NavigationManager { get; set; } = default!;
+
+    [Inject]
+    public IJSRuntime JSRuntime { get; set; } = default!;
+
+    [Inject]
+    public IAuditLogService AuditLogService { get; set; } = default!;
+
+    [Inject]
+    public CurrentUserService CurrentUserService { get; set; } = default!;
+
+    public __Name__ViewView(
+        ILogger<__Name__ViewView> logger,
+        __Name__Service __name__Service,
+#IF TEAMS
+        TeamService teamService,
+        IRecordAccessScopeProvider accessScope,
+#ENDIF
+        ModalService modalService,
+        NotificationService notificationService)
+    {
+        this.logger = logger;
+        this.__name__Service = __name__Service;
+#IF TEAMS
+        this.teamService = teamService;
+        this.accessScope = accessScope;
+#ENDIF
+        this.modalService = modalService;
+        this.notificationService = notificationService;
+    }
+#IF TEAMS
+
+    /// <summary>表單「團隊」的選項：管理員是全部；其他人只有自己範圍內的團隊（含下屬部門）加上這筆原本就有的。伺服器端會再檢查。</summary>
+    private IEnumerable<string> AssignableTeams => currentScope.IsAdmin
+        ? availableTeams
+        : availableTeams.Where(t => currentScope.Teams.Contains(t, StringComparer.OrdinalIgnoreCase) || CurrentRecord.Teams.Contains(t, StringComparer.OrdinalIgnoreCase));
+#ENDIF
+
+    protected override async Task OnInitializedAsync()
+    {
+        var checkResult = await AuthenticationStateHelper.Check(authStateProvider, NavigationManager);
+        if (checkResult != AuthenticationCheckResult.Succeeded)
+        {
+            return;
+        }
+
+        isAccessChecked = true;
+
+#IF ADMIN
+        if (AuthenticationStateHelper.CheckIsAdmin() == false)
+#ELSE
+        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.__PermConst__) == false)
+#ENDIF
+        {
+            RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("__Route__");
+            logger.LogWarning("__Name__ view denied because the current user lacks the page permission.");
+            return;
+        }
+
+#IF TEAMS
+        availableTeams = await teamService.GetAllEnabledNamesAsync();
+        currentScope = await accessScope.GetAsync();
+#ENDIF
+        await ReloadAsync();
+    }
+
+    private DataRequest CurrentRequest() => new()
+    {
+        Search = searchText,
+        SortField = sortField,
+        SortDescending = sortDirection == "Descending" ? true : sortDirection == "Ascending" ? false : (bool?)null,
+        CurrentPage = _pageIndex,
+        PageSize = _pageSize,
+    };
+
+    private async Task ReloadAsync()
+    {
+        // 換頁、排序、搜尋、切換與刪除後都會走到這裡：勾選只在目前這一頁有效。
+        selectedRows = [];
+        var request = CurrentRequest();
+        var result = showDeleted ? await __name__Service.GetDeletedAsync(request) : await __name__Service.GetAsync(request);
+        records = result.Result.ToList();
+        _total = result.Count;
+        StateHasChanged();
+    }
+
+    private async Task OnTableChange(QueryModel<__Name__AdapterModel> args)
+    {
+        _pageIndex = args.PageIndex;
+        if (args.SortModel?.Any() == true)
+        {
+            var sortModel = TableSortHelper.GetCurrentSortModel(args.SortModel);
+            sortDirection = sortModel.SortDirection.ToString() ?? string.Empty;
+            sortField = TableSortHelper.ResolveSortFieldName(sortModel);
+        }
+        else
+        {
+            sortField = string.Empty;
+            sortDirection = "None";
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task OnSearchAsync()
+    {
+        _pageIndex = 1;
+        await ReloadAsync();
+        await ViewAudit.WriteSearchAsync(AuditLogService, CurrentUserService, AuditActions.__Name__.Search, "__Name__",
+            AuditSearchCondition.Text("keyword", searchText), AuditSearchCondition.Of("showDeleted", showDeleted));
+    }
+
+    private async Task OnRefreshAsync()
+    {
+        await ReloadAsync();
+        ViewNotification.Warning(notificationService, "已更新最新資料");
+    }
+
+    private async Task OnToggleDeletedAsync()
+    {
+        showDeleted = !showDeleted;
+        _pageIndex = 1;
+        await ReloadAsync();
+    }
+
+    /// <summary>匯出 Excel：與清單同一個查詢（含搜尋、排序、「顯示已刪除」），超過 <see cref="BusinessExports.MaxRows"/> 筆不匯出。</summary>
+    private async Task OnExportExcelAsync()
+    {
+        try
+        {
+            var outcome = await BusinessExports.BuildAsync(
+                r => showDeleted ? __name__Service.GetDeletedAsync(r) : __name__Service.GetAsync(r),
+                CurrentRequest(), "__Item__", "__RouteKey__", ExportColumns);
+            if (outcome.Error is { } error)
+            {
+                ViewNotification.Caution(notificationService, error);
+                return;
+            }
+
+            await JSRuntime.DownloadAsync(outcome.FileName!, outcome.Content!, TabularExport.XlsxContentType);
+            await BusinessExports.WriteAuditAsync(AuditLogService, CurrentUserService, AuditActions.__Name__.Export, "__Name__", outcome.Rows, showDeleted);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "__Name__ export failed.");
+            ViewNotification.UnexpectedError(notificationService, $"匯出失敗：{ex.GetType().Name}。", ex);
+        }
+    }
+#IF TEAMS
+
+    /// <summary>一律指派新清單：CurrentRecord 是 MemberwiseClone 出來的，直接異動原清單會連帶改到表格上那一列。</summary>
+    private void OnRecordTeamsChanged(IEnumerable<string> values) => CurrentRecord.Teams = values?.ToList() ?? [];
+#ENDIF
+
+    private Task OnAddAsync()
+    {
+        CurrentRecord = new();
+        isNewRecordMode = true;
+        modalTitle = "新增__Item__";
+        // ⚠️ 必須是開窗前的最後一步：任何預設值都要先塞完，否則會被當成使用者的變更。
+        dirtyTracker.Capture(CurrentRecord);
+        modalVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnEditAsync(__Name__AdapterModel record)
+    {
+        isNewRecordMode = false;
+        modalTitle = "修改__Item__";
+        CurrentRecord = record.Clone();
+        dirtyTracker.Capture(CurrentRecord);
+        modalVisible = true;
+        await ViewAudit.WriteAsync(AuditLogService, CurrentUserService, AuditActions.__Name__.View, "__Name__",
+            record.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), $"name={record.Name}");
+    }
+
+    /// <summary>
+    /// 「儲存」。⚠️ 第一行的 modalVisible = true 不可移動、也不可在它之前 await（AntDesign 已先送出 VisibleChanged(false)）；
+    /// 之後的開關一律由 FormModalFlow 的回傳值決定。
+    /// </summary>
+    private async Task OnModalOKHandleAsync(MouseEventArgs args)
+    {
+        modalVisible = true;
+        modalVisible = await FormModalFlow.RunOkAsync(SaveAsync, logger, notificationService, "儲存__Item__時發生未預期的錯誤，請稍後再試或聯絡系統管理員。");
+    }
+
+    /// <summary>實際存檔。回傳 true 表示已完成、可以關窗；驗證失敗或使用者中止都 return false。</summary>
+    private async Task<bool> SaveAsync()
+    {
+        if (LocalEditContext?.Validate() == false)
+        {
+            foreach (var error in LocalEditContext.GetValidationMessages())
+            {
+                ViewNotification.ValidationError(notificationService, error);
+            }
+
+            return false;
+        }
+
+        if (isNewRecordMode == false && dirtyTracker.IsDirty(CurrentRecord) == false)
+        {
+            ViewNotification.Info(notificationService, "沒有任何變更，未進行儲存。");
+            return true;
+        }
+
+        if (await FormEditConfirm.AskSaveAsync(modalService) == false)
+        {
+            return false;
+        }
+
+        var check = isNewRecordMode
+            ? await __name__Service.BeforeAddCheckAsync(CurrentRecord)
+            : await __name__Service.BeforeUpdateCheckAsync(CurrentRecord);
+        if (!check.Success)
+        {
+            ViewNotification.Error(notificationService, check.Message);
+            return false;
+        }
+
+        var result = isNewRecordMode
+            ? await __name__Service.AddAsync(CurrentRecord)
+            : await __name__Service.UpdateAsync(CurrentRecord);
+        if (!result.Success)
+        {
+            ViewNotification.Error(notificationService, result.Message);
+            return false;
+        }
+
+        ViewNotification.Warning(notificationService, isNewRecordMode ? "新增成功" : "修改成功");
+        await ReloadAsync();
+        dirtyTracker.Clear();
+        return true;
+    }
+
+    /// <summary>取消／✕／ESC：有未儲存變更時先問過使用者。⚠️ 第一行不可移動；args 可能是 null。</summary>
+    private async Task OnModalCancelHandleAsync(MouseEventArgs args)
+    {
+        modalVisible = true;
+        modalVisible = await FormModalFlow.ConfirmCloseAsync(modalService, dirtyTracker.IsDirty(CurrentRecord));
+        if (modalVisible == false)
+        {
+            dirtyTracker.Clear();
+        }
+    }
+
+    public void OnEditContestChanged(EditContext context) => LocalEditContext = context;
+
+    /// <summary>點狀態標籤切換啟用／停用：停用先確認，啟用直接切換；只改狀態，不經修改窗。</summary>
+    private async Task OnToggleEnabledAsync(__Name__AdapterModel record)
+    {
+        try
+        {
+            var enable = !record.IsEnabled;
+            if (!enable && !await ConfirmDialog.AskAsync(modalService, "停用__Item__", $"要停用「{record.Name}」嗎？", "停用"))
+            {
+                return;
+            }
+
+            await ShowResultAsync(await __name__Service.SetEnabledAsync(record.Id, enable), $"已{(enable ? "啟用" : "停用")}「{record.Name}」");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception while changing __name__ status.");
+            ViewNotification.UnexpectedError(notificationService, "切換__Item__狀態時發生未預期的錯誤，請稍後再試或聯絡系統管理員。", ex);
+        }
+    }
+
+    private async Task OnDeleteAsync(__Name__AdapterModel record)
+    {
+        try
+        {
+            if (!await ConfirmDialog.AskSoftDeleteRecordAsync(modalService))
+            {
+                return;
+            }
+
+            await ShowResultAsync(await __name__Service.DeleteAsync(record.Id), "刪除成功");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception while deleting __name__.");
+            ViewNotification.UnexpectedError(notificationService, "刪除__Item__時發生未預期的錯誤，請稍後再試或聯絡系統管理員。", ex);
+        }
+    }
+
+    /// <summary>「刪除選取」：逐筆走單筆刪除（規則與稽核相同），能刪的刪、刪不掉的列出原因。</summary>
+    private async Task OnBatchDeleteAsync()
+    {
+        try
+        {
+            var items = selectedRows.ToList();
+            if (items.Count == 0 || !await BatchDelete.AskAsync(modalService, items.Select(x => x.Name).ToList(), restorable: true))
+            {
+                return;
+            }
+
+            batchDeleting = true;
+            var outcome = await BatchDelete.RunAsync(items, x => x.Id.ToString(), x => x.Name,
+                x => __name__Service.DeleteAsync(x.Id), logger);
+            BatchDelete.Notify(notificationService, outcome);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception while batch deleting __name__.");
+            ViewNotification.UnexpectedError(notificationService, "刪除__Item__時發生未預期的錯誤，請稍後再試或聯絡系統管理員。", ex);
+        }
+        finally
+        {
+            batchDeleting = false;
+        }
+    }
+
+    private async Task OnRestoreAsync(__Name__AdapterModel record)
+    {
+        try
+        {
+            if (!await ConfirmDialog.AskAsync(modalService, "確認還原", $"要還原「{record.Name}」嗎？", "還原"))
+            {
+                return;
+            }
+
+            await ShowResultAsync(await __name__Service.RestoreAsync(record.Id), "還原成功");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception while restoring __name__.");
+            ViewNotification.UnexpectedError(notificationService, "還原__Item__時發生未預期的錯誤，請稍後再試或聯絡系統管理員。", ex);
+        }
+    }
+
+    private async Task OnPurgeAsync(__Name__AdapterModel record)
+    {
+        try
+        {
+            if (!await ConfirmDialog.AskDestructiveAsync(modalService, "永久刪除", $"永久刪除「{record.Name}」後無法復原。確定要永久刪除嗎？", "永久刪除"))
+            {
+                return;
+            }
+
+            await ShowResultAsync(await __name__Service.PurgeAsync(record.Id), "已永久刪除");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception while purging __name__.");
+            ViewNotification.UnexpectedError(notificationService, "永久刪除__Item__時發生未預期的錯誤，請稍後再試或聯絡系統管理員。", ex);
+        }
+    }
+
+    private async Task ShowResultAsync(VerifyRecordResult result, string successMessage)
+    {
+        if (!result.Success)
+        {
+            ViewNotification.Error(notificationService, result.Message);
+            return;
+        }
+
+        ViewNotification.Warning(notificationService, successMessage);
+        await ReloadAsync();
+    }
+}

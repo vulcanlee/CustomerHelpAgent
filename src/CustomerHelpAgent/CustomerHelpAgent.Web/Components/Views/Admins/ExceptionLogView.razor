@@ -1,0 +1,183 @@
+﻿@using CustomerHelpAgent.Models.Systems
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="exception-log-toolbar">
+            <div class="exception-log-toolbar-left">
+                <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("最後發生（起）")" Style="width: 190px;" />
+                <span class="exception-log-range-separator">～</span>
+                <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("最後發生（迄）")" Style="width: 190px;" />
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedSource" Style="width: 130px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="來源：不限" />
+                    @foreach (var source in ExceptionSources.All)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@source" Label="@source" />
+                    }
+                </Select>
+
+                <Input class="exception-log-account-input" @bind-Value="accountFilter" Placeholder="使用者帳號" />
+                <Input class="exception-log-search-input" @bind-Value="keyword" Placeholder="關鍵字（類型／訊息／頁面／操作／追蹤碼）" />
+            </div>
+            <div class="exception-log-toolbar-right">
+                <ToolbarIconButton Title="查詢" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                <ToolbarIconButton Title="複製目前查詢結果（含完整堆疊）" Icon="content_copy"
+                                   Disabled="@(_total == 0)"
+                                   OnClick="@(async () => await OnCopyAllAsync())" />
+                <ToolbarIconButton Title="匯出目前查詢結果（CSV）" Icon="file_download"
+                                   Disabled="@(_total == 0)"
+                                   OnClick="@(async () => await OnExportAsync())" />
+                @*
+                    圖示用 classic Material Icons 世代的名稱。Icon 打錯只會渲染成破圖方塊，
+                    而且沒有任何守門測試會抓到（MenuIconTests 只管 Menu.json），改動時請目視確認。
+                *@
+                <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                   OnClick="@(async () => await OnBatchDeleteAsync())" />
+                <ToolbarIconButton Title="@($"清除 {PurgeDays} 天未再發生的紀錄")" Icon="history"
+                                   OnClick="@(async () => await OnPurgeAsync())" />
+                <ToolbarIconButton Title="清空全部紀錄" Icon="delete_forever"
+                                   OnClick="@(async () => await OnClearAllAsync())" />
+            </div>
+        </div>
+
+        <div class="alert alert-info exception-log-alert" role="alert">
+            本頁收錄的是程式碼有記錄下來的例外，相同的例外會合併成一列並累加「次數」。
+            少數刻意忽略的情況（例如使用者取消、正常關機）不會出現在這裡；
+            完整的逐行日誌請由「日誌檢視」取得。
+        </div>
+
+        <div class="exception-log-table-wrap">
+            <Table @ref="table"
+                   TItem="ExceptionLogAdapterModel"
+                   Class="exception-log-table"
+                   RemoteDataSource="true"
+                   DataSource="@exceptionLogAdapterModels"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   RowClassName="@(_ => "exception-log-row-copyable")"
+                   OnRowClick="OnRowClickAsync"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total"
+                   @bind-SelectedRows="selectedRows">
+                <ColumnDefinitions>
+                    @*
+                        0.9.132 起：勾選後可「刪除選取」。
+                        點列會複製該筆，勾選框的點擊要在這裡擋掉冒泡（同操作欄），否則勾一下就順便複製一次。
+                    *@
+                    <Selection>
+                        <CellRender Context="cell">
+                            <span @onclick:stopPropagation="true">
+                                <Checkbox Checked="@cell.RowData.Selected" CheckedChanged="@((bool v) => cell.RowData.Selected = v)" />
+                            </span>
+                        </CellRender>
+                    </Selection>
+                    @*
+                        欄位刻意精簡：只留「誰、在哪一頁、何時、什麼錯、幾次」這幾個掃視得到的，
+                        其餘（來源、首次發生、日誌樣板、記錄器、完整堆疊）都收進「查看」明細窗。
+                        0.9.11 的版本有 9 個資料欄、固定寬度合計 1530px，任何螢幕都會出現水平捲軸；
+                        而且當時日誌樣板那一欄也叫「操作」，與動作欄同名，看不出哪個是哪個。
+                    *@
+                    <Column TData="DateTime" DataIndex="@nameof(ExceptionLogAdapterModel.LastOccurredAt)"
+                            Title="最後發生" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                        @context.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")
+                    </Column>
+                    <Column TData="long" DataIndex="@nameof(ExceptionLogAdapterModel.OccurrenceCount)"
+                            Title="次數" Width="80" Sortable Align="ColumnAlign.Right">
+                        <Tag Color="@GetCountColor(context.OccurrenceCount)">@context.OccurrenceCount.ToString("N0")</Tag>
+                    </Column>
+                    <Column TData="string" Title="類型" Width="150" Ellipsis>
+                        <Tooltip Title="@context.ExceptionType">
+                            <span>@context.ShortExceptionType</span>
+                        </Tooltip>
+                    </Column>
+                    <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                    <Column TData="string" Title="頁面" Width="150" Ellipsis>@(context.Page ?? "—")</Column>
+                    <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.Account ?? "—")</Column>
+                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                        @* 點列會複製該筆；按鈕的點擊在這裡擋掉冒泡，否則按「查看」「刪除」也會順便複製一次。 *@
+                        <div @onclick:stopPropagation="true">
+                            <Space>
+                                <SpaceItem>
+                                    <CrudActionButton Title="查看" Icon="visibility"
+                                                      OnClick="@(async () => await OnViewAsync(@context))" />
+                                </SpaceItem>
+                                <SpaceItem>
+                                    <CrudActionButton Title="刪除" Icon="delete" Danger="true"
+                                                      OnClick="@(async () => await OnDeleteAsync(@context))" />
+                                </SpaceItem>
+                            </Space>
+                        </div>
+                    </ActionColumn>
+                </ColumnDefinitions>
+            </Table>
+        </div>
+
+        @*
+            明細窗：清單放不下的欄位與完整堆疊都在這裡。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的全域 style（.exception-log-modal），
+            刻意不設 Width —— 那邊是 !important，兩邊都寫只會讓下一個人改錯地方（見速查 §6.4）。
+            純唯讀、不含 EditForm，所以 Esc 直接交給 Modal 的 Keyboard 處理（見速查 §6.3）。
+        *@
+        <Modal Title="例外明細"
+               Class="exception-log-modal"
+               @bind-Visible="@detailVisible"
+               Keyboard="true"
+               Footer="null"
+               OnCancel="@(() => detailVisible = false)">
+            @if (detailItem is not null)
+            {
+                @*
+                    AI 例外分析（0.9.68 起）：把本窗的內容送給 AI 產生分析報告，可再多輪追問。
+                    堆疊還在讀取時停用，否則送出去的是「讀取中…」這幾個字。
+                *@
+                <div class="exception-log-detail-actions">
+                    <ToolbarIconButton Title="@AiButtonTitle" Icon="insights"
+                                       Disabled="@(isStackTraceLoading || aiExceptionAnalysisService.IsAvailable == false)"
+                                       OnClick="@(async () => await OnAiAnalyzeAsync())" />
+                </div>
+
+                <dl class="exception-log-detail-list">
+                    <div><dt>例外類型</dt><dd>@detailItem.ExceptionType</dd></div>
+                    <div><dt>訊息</dt><dd>@detailItem.Message</dd></div>
+                    <div>
+                        <dt>來源</dt>
+                        <dd><Tag Color="@GetSourceColor(detailItem.Source)">@detailItem.Source</Tag></dd>
+                    </div>
+                    <div><dt>頁面</dt><dd>@(detailItem.Page ?? "—")</dd></div>
+                    <div><dt>操作（日誌訊息樣板）</dt><dd>@(detailItem.Operation ?? "—")</dd></div>
+                    <div><dt>記錄器</dt><dd>@(detailItem.LoggerName ?? "—")</dd></div>
+                    <div><dt>使用者</dt><dd>@DetailAccountText</dd></div>
+                    <div><dt>累計次數</dt><dd>@detailItem.OccurrenceCount.ToString("N0")</dd></div>
+                    <div><dt>首次發生</dt><dd>@detailItem.FirstOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                    <div><dt>最後發生</dt><dd>@detailItem.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                    <div><dt>最後追蹤碼</dt><dd>@(detailItem.LastTraceId ?? "—")</dd></div>
+                </dl>
+
+                <h3 class="exception-log-detail-title">完整堆疊</h3>
+                <pre class="exception-log-stack">@detailStackTrace</pre>
+            }
+        </Modal>
+
+        <ExceptionAiAnalysisModal @ref="aiAnalysisModal" />
+    </div>
+}

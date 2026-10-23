@@ -1,0 +1,303 @@
+/* ===== AI 例外分析對話窗 ===== */
+
+/*
+ * 窗內會縮放的 font-size 一律是 calc(Npx * var(--ai-font-scale, 1))，倍率由三顆
+ * 「一般／中／大」按鈕寫進 .exception-ai-body 的 inline style（同日誌檢視頁 AI 分析）。
+ * ⚠️ 刻意不用 em：em 在巢狀清單與 pre code 上會複合相乘。
+ * 顏色一律取 theme.css 的變數（ThemeConventionTests 守門）。
+ */
+/* 整窗是「工具列／捲動區／追問輸入」三段的直向 flex，只有中間那段捲動。 */
+.exception-ai-body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.exception-ai-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.exception-ai-actions {
+    flex: none;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.exception-ai-font-scale,
+.exception-ai-actions-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ----- 第一次分析等待中 ----- */
+
+.exception-ai-loading,
+.exception-ai-failed {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 60vh;
+    text-align: center;
+}
+
+.exception-ai-loading-title {
+    margin: 0;
+    font-size: 24px;
+    color: var(--app-text);
+}
+
+.exception-ai-loading-elapsed {
+    margin: 0;
+    font-size: 16px;
+    color: var(--app-muted);
+}
+
+.exception-ai-loading-hint,
+.exception-ai-failed-hint {
+    margin: 0;
+    max-width: 720px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--app-off);
+    word-break: break-all;
+}
+
+/* ----- 第一次分析失敗 ----- */
+
+.exception-ai-failed-title {
+    margin: 0;
+    font-size: 20px;
+    color: var(--app-error);
+}
+
+.exception-ai-failed-message {
+    margin: 0;
+    max-width: 720px;
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--app-muted);
+}
+
+/* ----- 中介資訊 ----- */
+
+.exception-ai-meta {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 4px;
+}
+
+.exception-ai-meta-row {
+    display: flex;
+    gap: 8px;
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    line-height: 1.8;
+}
+
+.exception-ai-meta-term {
+    flex: 0 0 88px;
+    margin: 0;
+    color: var(--app-muted);
+    font-weight: normal;
+}
+
+.exception-ai-meta-value {
+    margin: 0;
+    color: var(--app-muted);
+    word-break: break-all;
+}
+
+/* ----- 對話 ----- */
+
+.exception-ai-conversation {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+/*
+ * focus 只會把錨點捲到「剛好看得到」，新回覆會貼在可視區最底部。
+ * scroll-margin-bottom 讓它停在可視區上半，使用者一眼就看到回覆的開頭。
+ */
+.exception-ai-anchor {
+    height: 0;
+    outline: none;
+    scroll-margin-bottom: 45vh;
+}
+
+.exception-ai-entry {
+    padding: 12px 14px;
+    border: 1px solid var(--app-line);
+    border-radius: 6px;
+}
+
+.exception-ai-entry-assistant {
+    background: var(--app-card);
+}
+
+.exception-ai-entry-user {
+    align-self: flex-end;
+    max-width: 80%;
+    background: var(--app-accent-soft);
+}
+
+.exception-ai-entry-error {
+    background: var(--app-tint);
+    border-color: var(--app-error);
+}
+
+.exception-ai-entry-pending {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: var(--app-muted);
+    font-size: calc(13px * var(--ai-font-scale, 1));
+}
+
+.exception-ai-entry-label {
+    margin-bottom: 6px;
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    color: var(--app-muted);
+}
+
+.exception-ai-question {
+    font-size: calc(14px * var(--ai-font-scale, 1));
+    line-height: 1.8;
+    color: var(--app-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.exception-ai-error-message {
+    font-size: calc(14px * var(--ai-font-scale, 1));
+    line-height: 1.8;
+    color: var(--app-error);
+}
+
+/*
+ * 以下是 Markdown 渲染後的 HTML。它由 MarkupString 注入，落在本元件 scope 屬性之外，
+ * 因此子選擇器一律需要 ::deep。
+ */
+.exception-ai-report {
+    font-size: calc(14px * var(--ai-font-scale, 1));
+    color: var(--app-text);
+}
+
+.exception-ai-report ::deep h1,
+.exception-ai-report ::deep h2 {
+    margin: 20px 0 8px;
+    padding-bottom: 4px;
+    font-size: calc(17px * var(--ai-font-scale, 1));
+    color: var(--app-text);
+    border-bottom: 1px solid var(--app-line);
+}
+
+.exception-ai-report ::deep h2:first-child {
+    margin-top: 4px;
+}
+
+.exception-ai-report ::deep h3,
+.exception-ai-report ::deep h4 {
+    margin: 16px 0 6px;
+    font-size: calc(15px * var(--ai-font-scale, 1));
+    color: var(--app-text);
+}
+
+.exception-ai-report ::deep p {
+    margin: 0 0 10px;
+    line-height: 1.8;
+}
+
+.exception-ai-report ::deep ul,
+.exception-ai-report ::deep ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+}
+
+.exception-ai-report ::deep li {
+    line-height: 1.8;
+}
+
+.exception-ai-report ::deep blockquote {
+    margin: 0 0 10px;
+    padding: 2px 0 2px 12px;
+    color: var(--app-muted);
+    border-left: 3px solid var(--app-line);
+}
+
+.exception-ai-report ::deep pre {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 4px;
+}
+
+.exception-ai-report ::deep code {
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    color: var(--app-error);
+}
+
+.exception-ai-report ::deep pre code {
+    color: inherit;
+}
+
+/* 安全管線把危險 scheme 的 URL 清空後，不要讓它看起來還像可點的連結。 */
+.exception-ai-report ::deep a[href=""] {
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+}
+
+/* ----- 追問輸入 ----- */
+
+.exception-ai-composer {
+    flex: none;
+    padding-top: 10px;
+    border-top: 1px solid var(--app-line);
+}
+
+.exception-ai-composer-status {
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--app-muted);
+}
+
+.exception-ai-composer-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+/* 輸入框是 AntDesign 渲染的元素，但位於本元件自有的 div 之內，所以 ::deep 命中得到。 */
+.exception-ai-composer-row ::deep .ant-input {
+    flex: 1;
+}
+
+@media (max-width: 640.98px) {
+    .exception-ai-entry-user {
+        max-width: 100%;
+    }
+
+    .exception-ai-composer-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

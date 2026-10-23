@@ -1,0 +1,50 @@
+﻿@if (Item.HasChildren)
+{
+    <SubMenu Key="@GetMenuKey()">
+        <TitleTemplate>
+            <span class="submenu-title-content" title="@Item.Name">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
+                              Kind="@GetMaterialIconKind()"
+                              Size="@MaterialIconOpticalSize.For(GetMaterialIconKind())" />
+                <span class="submenu-title-text">@Item.Name</span>
+            </span>
+        </TitleTemplate>
+        <ChildContent>
+            @for (var index = 0; index < Item.SubMenu.Count; index++)
+            {
+                <SidebarMenuNode Item="Item.SubMenu[index]"
+                                 Level="@(Level + 1)"
+                                 ItemKey="@($"{ItemKey}-{index}")"
+                                 OnLogoutCancelled="OnLogoutCancelled" />
+            }
+        </ChildContent>
+    </SubMenu>
+}
+else if (LogoutConfirm.IsLogoutUrl(Item.Url))
+{
+    @*
+        登出不直接連過去 —— 先問過使用者。三個登出入口（使用者選單、側邊欄展開、
+        側邊欄收合）行為必須一致，文案與導向都收斂在 LogoutConfirm。
+    *@
+    <MenuItem Key="@GetMenuKey()" OnClick="OnLogoutClickAsync">
+        <span class="menu-item-content" title="@Item.Name">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
+                              Kind="@GetMaterialIconKind()"
+                              Size="@MaterialIconOpticalSize.For(GetMaterialIconKind())" />
+            <span class="menu-item-text">@Item.Name</span>
+        </span>
+    </MenuItem>
+}
+else if (!string.IsNullOrWhiteSpace(Item.Url))
+{
+    <MenuItem Key="@GetMenuKey()"
+              RouterLink="@Item.Url"
+              RouterMatch="@GetMatchMode()">
+        <span class="menu-item-content" title="@Item.Name">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
+                              Kind="@GetMaterialIconKind()"
+                              Size="@MaterialIconOpticalSize.For(GetMaterialIconKind())" />
+            <span class="menu-item-text">@Item.Name</span>
+        </span>
+    </MenuItem>
+}

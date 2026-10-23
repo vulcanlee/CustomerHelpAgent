@@ -1,0 +1,56 @@
+.scheduled-job-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.scheduled-job-toolbar-left,
+.scheduled-job-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.scheduled-job-hint {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+}
+
+.scheduled-job-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+/* 欄位多，窄螢幕讓表格自己橫向捲動而不是把整頁撐寬。 */
+.scheduled-job-table-wrap {
+    overflow-x: auto;
+}
+
+.scheduled-job-name {
+    font-weight: 600;
+}
+
+.scheduled-job-description,
+.scheduled-job-message {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    margin-top: 0.15rem;
+}
+
+.scheduled-job-muted {
+    color: var(--app-muted);
+}
+
+.scheduled-job-last-run {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.scheduled-job-cron {
+    white-space: nowrap;
+}

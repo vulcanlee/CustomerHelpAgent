@@ -1,0 +1,41 @@
+@using System.Globalization
+
+<!DOCTYPE html>
+<html lang="@CultureInfo.CurrentUICulture.Name">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["CustomerHelpAgent.Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="@Assets["favicon.png"]" />
+    <HeadOutlet @rendermode="@RenderModeForPage()" />
+
+    <link href="_content/AntDesign/css/ant-design-blazor.css" rel="stylesheet">
+
+    <!-- ⚠️ theme.css 必須排在 AntDesign 之後：排在前面的話，對 .ant-* 的覆寫會
+         在同分特異性上輸給 AntDesign 而靜默失效。由 ThemeConventionTests 守門。 -->
+    <link rel="stylesheet" href="@Assets["theme.css"]" />
+
+    <link href="https://fonts.googleapis.com/css?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Sharp|Material+Icons+Round|Material+Icons+Two+Tone" rel="stylesheet">
+
+</head>
+
+<body>
+    <Routes @rendermode="@RenderModeForPage()" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+
+    <script src="_content/AntDesign/js/ant-design-blazor.js"></script> 
+    <script antblazor-js></script>
+    <script src="@Assets["js/file-download.js"]"></script>
+    <script src="@Assets["js/clipboard.js"]"></script>
+    <script src="@Assets["js/nav-state.js"]"></script>
+    <script src="@Assets["js/client-error-reporter.js"]"></script>
+</body>
+
+</html>

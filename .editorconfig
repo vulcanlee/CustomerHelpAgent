@@ -1,0 +1,78 @@
+# EditorConfig — https://editorconfig.org
+# 本檔的目的是「描述現有慣例」，讓 dotnet format 有規則可依並納入 CI 檢查，
+# 不是引入新風格去重新格式化整個 repo。
+# 刻意不強制的項目（專案中兩種寫法並存，強制會造成大量無關異動）：
+#   - namespace 宣告：檔案範圍（Business/Web）與區塊式（*.razor.cs）並存
+#   - this. 前綴：建構式指派使用、其餘位置不使用
+#   - var vs 明確型別
+#   - 檔案 BOM 有無（.cs 兩種並存，故不設 charset）
+#   - using 排序（現況未依 System 優先，強制會重排 28 個檔案）
+# 註：不設定 end_of_line，交由 git 的 core.autocrlf 處理，避免 CI 與本機不一致。
+
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+# 文件另受 scripts/Test-DocsEncoding.ps1 管控（UTF-8 含 BOM）。
+# 保留行尾空白，Markdown 以兩個空白表示換行。
+trim_trailing_whitespace = false
+
+[*.{json,yml,yaml,csproj,props,targets,slnx}]
+indent_size = 2
+
+[*.{cs,razor}]
+indent_size = 4
+
+[*.cs]
+# --- 大括號與換行（Allman，與現有程式碼一致）---
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# --- 縮排 ---
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = one_less_than_current
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+
+# --- 空白（這組對應 dotnet format 實際會檢查的項目）---
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_declaration_empty_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_method_call_empty_parameter_list_parentheses = false
+csharp_space_between_method_call_name_and_opening_parenthesis = false
+csharp_space_between_parentheses = false
+csharp_space_before_open_square_brackets = false
+csharp_space_between_empty_square_brackets = false
+csharp_space_between_square_brackets = false
+
+# --- 換行保留 ---
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
+
+# --- 風格偏好：一律 silent，只作為 IDE 提示，不讓 CI 因風格紅燈 ---
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_property = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_event = false:silent
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_var_elsewhere = false:silent
+csharp_style_namespace_declarations = file_scoped:silent
+csharp_style_expression_bodied_methods = false:silent
+csharp_style_expression_bodied_properties = true:silent

@@ -1,0 +1,157 @@
+@using CustomerHelpAgent.Web.Ai
+
+@*
+    AI 例外分析對話窗（0.9.68 起）。由例外明細窗的「AI 分析」按鈕以 OpenAsync 開啟。
+
+    尺寸寫在 Components/Commons/OverlayStyles.razor 的全域 style（.exception-ai-modal），
+    刻意不設 Width —— 那邊是 !important，兩邊都寫只會讓下一個人改錯地方（見速查 §6.4）。
+    MaskClosable 只在等待中關掉：關窗等於放棄一次已送出、可能已計費的呼叫，誤點遮罩就白花錢。
+    關窗一律丟棄窗內的整段對話（窗內不保存報告，要留存請下載 PDF 或複製）；
+    每一次送出的呼叫另記於「AI 對話紀錄」（0.9.72 起，同一窗的分析與追問共用一個 ConversationId）。
+*@
+<Modal Title="AI 例外分析"
+       Class="exception-ai-modal"
+       @bind-Visible="@visible"
+       Keyboard="true"
+       MaskClosable="@(isRunning == false)"
+       Footer="null"
+       OnCancel="OnModalCancel">
+    <div class="exception-ai-body" style="--ai-font-scale: @FontScaleCss">
+        @if (modalState == ModalState.Running)
+        {
+            <div class="exception-ai-loading">
+                <Spin Size="@SpinSize.Large" />
+                <p class="exception-ai-loading-title">AI 正在分析這筆例外…</p>
+                <p class="exception-ai-loading-elapsed">已等待 @elapsedSeconds 秒</p>
+                <p class="exception-ai-loading-hint">
+                    推論模型可能需要數十秒到數分鐘。關閉本視窗將放棄這次分析。
+                </p>
+            </div>
+        }
+        else if (modalState == ModalState.Failed)
+        {
+            <div class="exception-ai-failed">
+                <p class="exception-ai-failed-title">AI 分析未完成</p>
+                <p class="exception-ai-failed-message">@errorMessage</p>
+                <p class="exception-ai-failed-hint">
+                    同一則訊息也已寫入應用程式日誌，可在「日誌檢視」查詢記錄器
+                    CustomerHelpAgent.Web.Ai.AiChatCompletionClient 的紀錄取得完整細節。
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="exception-ai-actions">
+                <div class="exception-ai-font-scale">
+                    @foreach (var option in FontScaleOptions)
+                    {
+                        <Button Size="@ButtonSize.Small"
+                                Type="@(fontScalePercent == option.Percent ? ButtonType.Primary : ButtonType.Default)"
+                                OnClick="@(() => fontScalePercent = option.Percent)">@option.Label</Button>
+                    }
+                </div>
+                <div class="exception-ai-actions-right">
+                    <ToolbarIconButton Title="複製整段對話（Markdown 原文）" Icon="content_copy"
+                                       OnClick="@(async () => await OnCopyAsync())" />
+                    <ToolbarIconButton Title="產生 PDF 報告並下載" Icon="picture_as_pdf"
+                                       Disabled="@(isExporting || isRunning)"
+                                       OnClick="@(async () => await OnExportPdfAsync())" />
+                </div>
+            </div>
+
+            @* 只有這一塊捲動：上方工具列與下方追問輸入固定不動。 *@
+            <div class="exception-ai-scroll">
+                <dl class="exception-ai-meta">
+                    @foreach (var item in MetaItems)
+                    {
+                        <div class="exception-ai-meta-row">
+                            <dt class="exception-ai-meta-term">@item.Key</dt>
+                            <dd class="exception-ai-meta-value">@item.Value</dd>
+                        </div>
+                    }
+                </dl>
+
+                <div class="exception-ai-conversation">
+                    @for (var index = 0; index < entries.Count; index++)
+                    {
+                        var entry = entries[index];
+                        @if (index == entries.Count - 1 && isRunning == false)
+                        {
+                            @* 捲動錨點：最新一則回覆出現時把畫面帶到它的開頭（見 OnAfterRenderAsync）。 *@
+                            <div class="exception-ai-anchor" tabindex="-1" @ref="latestAnchor"></div>
+                        }
+                        @if (entry.Kind == EntryKind.User)
+                        {
+                            <div class="exception-ai-entry exception-ai-entry-user">
+                                <div class="exception-ai-entry-label">我的追問 @entry.Round</div>
+                                <div class="exception-ai-question">@entry.Text</div>
+                            </div>
+                        }
+                        else if (entry.Kind == EntryKind.Error)
+                        {
+                            <div class="exception-ai-entry exception-ai-entry-error">
+                                <div class="exception-ai-entry-label">追問未完成</div>
+                                <div class="exception-ai-error-message">@entry.Text</div>
+                            </div>
+                        }
+                        else
+                        {
+                            @*
+                                AI 輸出受例外內容影響（訊息、頁面可能含使用者輸入），屬不可信輸入，
+                                一律經 AiMarkdownRenderer.ToSafeHtml 的安全管線之後才能用 MarkupString。
+                                ⚠️ 不要改成直接把模型回應丟進 MarkupString。
+                            *@
+                            <div class="exception-ai-entry exception-ai-entry-assistant">
+                                <div class="exception-ai-entry-label">@(entry.Round == 0 ? "AI 分析報告" : $"AI 回覆（追問 {entry.Round}）")</div>
+                                <div class="exception-ai-report">
+                                    @((MarkupString)entry.Html)
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (isRunning)
+                    {
+                        <div class="exception-ai-anchor" tabindex="-1" @ref="latestAnchor"></div>
+                        <div class="exception-ai-entry exception-ai-entry-pending">
+                            <Spin Size="@SpinSize.Small" />
+                            <span>AI 正在回覆…已等待 @elapsedSeconds 秒（關閉本視窗將放棄這次追問）</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="exception-ai-composer">
+                <div class="exception-ai-composer-status">
+                    @if (MaxFollowUpRounds == 0)
+                    {
+                        <span>目前設定不開放追問（AiSettings:MaxFollowUpRounds 為 0）。</span>
+                    }
+                    else if (IsFollowUpLimitReached)
+                    {
+                        <span>已達追問上限（@MaxFollowUpRounds 輪）。如需繼續，請關閉視窗後重新分析。</span>
+                    }
+                    else
+                    {
+                        <span>已追問 @FollowUpCount／@MaxFollowUpRounds 輪。每一輪都會帶上前面整段對話，輪數越多費用越高。</span>
+                    }
+                </div>
+                <div class="exception-ai-composer-row">
+                    <TextArea @bind-Value="followUpText"
+                              Rows="3"
+                              MaxLength="@MaxFollowUpLength"
+                              Disabled="@(isRunning || IsFollowUpLimitReached)"
+                              Placeholder="對報告有疑問或想深入某一點，可以在這裡繼續追問…" />
+                    @*
+                        ⚠️ 「送出」刻意不看輸入框有沒有字：TextArea 要失焦（或 KeyUp 去抖動）才回寫值，
+                        貼上的文字在按下按鈕之前伺服器端還看不到，依內容停用會讓按鈕卡死。
+                        按下按鈕時輸入框先失焦回寫，空白內容由 OnSendFollowUpAsync 忽略。
+                    *@
+                    <Button Type="@ButtonType.Primary"
+                            Disabled="@(isRunning || IsFollowUpLimitReached)"
+                            OnClick="@(async () => await OnSendFollowUpAsync())">送出</Button>
+                </div>
+            </div>
+        }
+    </div>
+</Modal>

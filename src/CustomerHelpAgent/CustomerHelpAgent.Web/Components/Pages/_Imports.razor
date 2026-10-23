@@ -1,0 +1,12 @@
+﻿@*
+    Pages/ 底下（含子資料夾）的每一個可路由頁面**預設需要登入**。
+
+    這是 HTTP 層的閘門：未登入的請求在授權中介軟體就被 Cookie challenge 擋下，
+    直接 302 到 /Auths/Login?ReturnUrl=…，瀏覽器收不到任何一個位元組的頁面內容。
+    0.9.41 之前頁面全靠 OnInitializedAsync 內的 AuthenticationStateHelper.Check() 命令式檢查，
+    它要先渲染一次才會導走，未登入者因此會瞬間看到頁面框架與內容。
+
+    ⚠️ 需要匿名存取的頁面必須自己標 @attribute [AllowAnonymous]，並同步更新
+    PageAuthorizationConventionTests 的白名單 —— 沒列入白名單的匿名頁面會讓測試失敗。
+*@
+@attribute [Authorize]

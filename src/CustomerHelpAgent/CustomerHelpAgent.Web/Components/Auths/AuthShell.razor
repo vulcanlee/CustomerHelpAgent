@@ -1,0 +1,48 @@
+@using CustomerHelpAgent.Business.Services.Other
+@inject ISystemIdentity SystemIdentity
+
+@*
+    登入、忘記密碼、重設密碼三頁共用的外框：冬景背景、飄雪、品牌欄與卡片。
+    ⚠️ 樣式寫在 Login.razor.css —— 四個元件在 CustomerHelpAgent.Web.csproj 以 CssScope="b-auth-shell"
+    共用同一個 scope，所以那份檔案的規則同時套用到這裡與三個頁面的卡片內容。
+    本元件自己的 AuthShell.razor.css 只是為了讓元件拿到 scope 屬性，不要把規則分散寫過去。
+*@
+<div class="login-container">
+    <picture class="winter-scene" aria-hidden="true">
+        <source media="(max-width: 767px)" srcset="@Assets["images/login-winter-mobile.png"]" />
+        <img src="@Assets["images/login-winter-desktop.png"]" alt="" fetchpriority="high" />
+    </picture>
+    <div class="snowfall" aria-hidden="true" style="--snow-image: url('@Assets["images/login-snow.png"]')">
+        <div class="snow-layer snow-layer-near"></div>
+        <div class="snow-layer snow-layer-far"></div>
+    </div>
+    <div class="login-shell">
+        <section class="brand-panel">
+            <div class="brand-logo">
+                <img class="brand-logo-image" src="@Assets["images/brand-logo.png"]" alt="系統品牌圖示" />
+            </div>
+            <h1 class="app-title">@SystemIdentity.Name</h1>
+            <p class="brand-description">@SystemIdentity.Description</p>
+        </section>
+
+        <section class="login-card">
+            <div class="login-header">
+                <h2>@Title</h2>
+                <p>@Subtitle</p>
+            </div>
+
+            @ChildContent
+        </section>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Subtitle { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

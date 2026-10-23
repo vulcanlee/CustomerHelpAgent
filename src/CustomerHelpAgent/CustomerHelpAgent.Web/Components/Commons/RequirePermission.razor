@@ -1,0 +1,37 @@
+@using CustomerHelpAgent.Business.Helpers
+@using CustomerHelpAgent.Business.Services.Other
+
+@*
+    依動作權限顯示內容（0.9.110 起）：取代檢視裡的 @if (AuthenticationStateHelper.CheckAccessAction(...))。
+    規則在 PermissionRules.CanAccessAction（管理員、動作鍵、裸頁面鍵）；沒有權限時什麼都不渲染。
+    ⚠️ 這只是畫面上的顯示：伺服器端仍以 [HasPermission]／IPermissionChecker 為準。
+    0.9.120 起可給 Fallback：沒有權限時改渲染它（例如可點的狀態標籤 → 沒權限時顯示不可點的標籤）。
+*@
+@if (PermissionRules.CanAccessAction(CurrentUserService.CurrentUser, Page, Action))
+{
+    @ChildContent
+}
+else
+{
+    @Fallback
+}
+
+@code {
+    [Inject]
+    public CurrentUserService CurrentUserService { get; set; } = default!;
+
+    /// <summary>頁面權限鍵（<c>MagicObjectHelper.角色_…</c>）。</summary>
+    [Parameter, EditorRequired]
+    public string Page { get; set; } = string.Empty;
+
+    /// <summary><c>PermissionActions</c> 的動作。</summary>
+    [Parameter, EditorRequired]
+    public string Action { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>沒有權限時渲染的內容；不給則什麼都不渲染。</summary>
+    [Parameter]
+    public RenderFragment? Fallback { get; set; }
+}

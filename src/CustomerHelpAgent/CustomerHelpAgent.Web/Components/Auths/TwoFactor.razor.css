@@ -1,0 +1,2 @@
+/* 刻意沒有規則：本頁與 Login、AuthShell 共用 CssScope="b-auth-shell"（見 CustomerHelpAgent.Web.csproj），
+   外觀規則集中在 Login.razor.css。本檔存在只是為了讓本頁的標記取得同一個 scope 屬性，不可刪除。 */

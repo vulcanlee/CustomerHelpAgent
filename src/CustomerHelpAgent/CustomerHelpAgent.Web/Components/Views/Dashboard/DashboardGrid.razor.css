@@ -1,0 +1,136 @@
+/* 首頁小工具區（0.9.106 起）。顏色一律取 theme.css 的色票；小工具的內容樣式也集中在這裡（::deep）。 */
+.dashboard-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+}
+
+.dashboard-card {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    display: flex;
+    flex-direction: column;
+    min-height: 12rem;
+    padding: 1rem 1.25rem;
+}
+
+.dashboard-card-header {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.dashboard-card-icon {
+    color: var(--app-accent);
+    display: inline-flex;
+}
+
+.dashboard-card-title {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+/* 由上往下排，「前往…」連結推到卡片底部（不要用 grid：卡片拉高時內容會被平均撐開）。 */
+.dashboard-card-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.dashboard-card-error {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+}
+
+.dashboard-grid ::deep .dashboard-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+}
+
+.dashboard-grid ::deep .dashboard-warning {
+    color: var(--app-text);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.dashboard-grid ::deep .dashboard-stat {
+    align-items: baseline;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.dashboard-grid ::deep .dashboard-stat-number {
+    color: var(--app-accent);
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.dashboard-grid ::deep .dashboard-list {
+    display: grid;
+    gap: 0.35rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dashboard-grid ::deep .dashboard-list-item {
+    align-items: center;
+    border-bottom: 1px solid var(--app-line);
+    display: flex;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding-bottom: 0.35rem;
+}
+
+.dashboard-grid ::deep .dashboard-list-item a {
+    color: var(--app-text);
+}
+
+.dashboard-grid ::deep .dashboard-list-item a:hover,
+.dashboard-grid ::deep .dashboard-list-item a:focus-visible {
+    color: var(--app-accent);
+}
+
+.dashboard-grid ::deep .dashboard-unread {
+    font-weight: 700;
+}
+
+.dashboard-grid ::deep .dashboard-facts {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+}
+
+.dashboard-grid ::deep .dashboard-fact {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+}
+
+.dashboard-grid ::deep .dashboard-fact dt {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    font-weight: 400;
+    min-width: 5.5rem;
+}
+
+.dashboard-grid ::deep .dashboard-fact dd {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    margin: 0;
+}
+
+.dashboard-grid ::deep .dashboard-link {
+    color: var(--app-accent);
+    font-size: 0.88rem;
+    margin-top: auto;
+}

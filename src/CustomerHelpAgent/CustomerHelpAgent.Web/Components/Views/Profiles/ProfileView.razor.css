@@ -1,0 +1,115 @@
+/* 個人資料（0.9.102 起）。顏色一律取 theme.css 的色票。 */
+.profile-page {
+    display: grid;
+    gap: 1rem;
+    max-width: 48rem;
+}
+
+.profile-section {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    padding: 1rem 1.25rem;
+}
+
+.profile-header {
+    align-items: center;
+    display: flex;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.profile-initials {
+    align-items: center;
+    background: var(--app-accent-soft);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-accent);
+    display: inline-flex;
+    font-size: 1.3rem;
+    font-weight: 700;
+    height: 3.25rem;
+    justify-content: center;
+    width: 3.25rem;
+}
+
+.profile-name {
+    color: var(--app-text);
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.profile-heading {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+}
+
+.profile-form {
+    display: grid;
+    gap: 0.4rem;
+    max-width: 28rem;
+}
+
+.profile-label {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+    min-width: 5rem;
+}
+
+.profile-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+}
+
+.profile-actions {
+    margin-top: 0.75rem;
+}
+
+.profile-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.profile-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.profile-chip {
+    background: var(--app-row-alt);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-text);
+    font-size: 0.85rem;
+    padding: 0.1rem 0.65rem;
+}
+
+.profile-logins {
+    border-collapse: collapse;
+    margin-bottom: 0.5rem;
+    width: 100%;
+}
+
+.profile-logins th,
+.profile-logins td {
+    border-bottom: 1px solid var(--app-line);
+    font-size: 0.88rem;
+    padding: 0.45rem 0.5rem;
+    text-align: left;
+}
+
+/* IPv6 位址很長：允許在任意處換行，不撐破窄螢幕。 */
+.profile-login-ip {
+    overflow-wrap: anywhere;
+}
+
+.profile-logins th {
+    background: var(--app-thead);
+    color: var(--app-muted);
+    font-weight: 600;
+}

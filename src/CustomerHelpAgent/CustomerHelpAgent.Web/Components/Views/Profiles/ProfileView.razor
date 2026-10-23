@@ -1,0 +1,153 @@
+@* 權限判定完成前不渲染任何內容，否則會先閃出頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (profile is null)
+{
+    <div class="alert alert-danger" role="alert">
+        找不到目前登入使用者的資料。
+    </div>
+}
+else
+{
+    <div class="profile-page">
+        <section class="profile-section">
+            <div class="profile-header">
+                <span class="profile-initials" aria-hidden="true">@Initials</span>
+                <div>
+                    <div class="profile-name">@profile.Name</div>
+                    <div class="profile-muted">@profile.Account</div>
+                </div>
+            </div>
+
+            <div class="profile-form">
+                <label class="profile-label" for="profile-name">姓名</label>
+                <Input Id="profile-name" @bind-Value="nameInput" Placeholder="請輸入姓名" />
+
+                <label class="profile-label" for="profile-email">Email</label>
+                <Input Id="profile-email" Value="@(profile.Email ?? string.Empty)" Disabled="true" Placeholder="（未設定）" />
+                <div class="profile-muted">Email 由系統管理員修改；「忘記密碼」的重設信會寄到這裡。</div>
+
+                <div class="profile-actions">
+                    <Button Type="ButtonType.Primary" Loading="@isSaving" OnClick="SaveAsync">儲存</Button>
+                </div>
+            </div>
+        </section>
+
+        <section class="profile-section">
+            <h2 class="profile-heading">角色與團隊</h2>
+            <div class="profile-row">
+                <span class="profile-label">角色</span>
+                <span class="profile-chips">
+                    @if (profile.Roles.Count == 0)
+                    {
+                        <span class="profile-muted">（沒有角色）</span>
+                    }
+                    @foreach (var role in profile.Roles)
+                    {
+                        <span class="profile-chip">@role</span>
+                    }
+                </span>
+            </div>
+            <div class="profile-row">
+                <span class="profile-label">團隊</span>
+                <span class="profile-chips">
+                    @if (profile.Teams.Count == 0)
+                    {
+                        <span class="profile-muted">（沒有團隊，只看得到沒有指定團隊的公開資料）</span>
+                    }
+                    @foreach (var team in profile.Teams)
+                    {
+                        <span class="profile-chip">@team</span>
+                    }
+                </span>
+            </div>
+            @if (profile.SubordinateTeams is { Count: > 0 } subordinates)
+            {
+                <div class="profile-row">
+                    <span class="profile-label">下屬部門</span>
+                    <span class="profile-chips">
+                        @foreach (var team in subordinates)
+                        {
+                            <span class="profile-chip">@team</span>
+                        }
+                    </span>
+                </div>
+            }
+            <div class="profile-muted">角色與團隊由系統管理員設定；團隊包含你直接加入的與角色預設的，你也看得到它們所有下屬部門的資料。</div>
+        </section>
+
+        <section class="profile-section">
+            <h2 class="profile-heading">密碼</h2>
+            @if (!profile.HasLocalPassword)
+            {
+                <div class="profile-muted">你使用 Google 登入，沒有系統內的密碼。</div>
+            }
+            else
+            {
+                <div class="profile-row">
+                    <span class="profile-label">上次變更</span>
+                    <span>@(profile.PasswordChangedAtUtc is { } changed ? ToLocalText(changed) : "（沒有紀錄）")</span>
+                </div>
+                <div class="profile-row">
+                    <span class="profile-label">到期</span>
+                    <span>@(profile.PasswordExpiresAtUtc is { } expires ? ToLocalText(expires) : "不會到期")</span>
+                </div>
+                @if (profile.MustChangePassword)
+                {
+                    <div class="profile-row">
+                        <span class="profile-label">狀態</span>
+                        <StatusPill Text="系統管理員要求變更" Tone="StatusTone.Warning" />
+                    </div>
+                }
+                <div class="profile-actions">
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/ChangePassword"))">變更密碼</Button>
+                </div>
+            }
+        </section>
+
+        @if (profile.HasLocalPassword)
+        {
+            <section class="profile-section">
+                <h2 class="profile-heading">兩步驟驗證</h2>
+                <div class="profile-row">
+                    <span class="profile-label">狀態</span>
+                    <StatusPill Text="@(profile.TwoFactorEnabled ? "已啟用" : "未啟用")" Tone="@(profile.TwoFactorEnabled ? StatusTone.Positive : StatusTone.Muted)" />
+                </div>
+                <div class="profile-muted">登入時除了密碼，還要輸入手機驗證器 App 上的驗證碼。</div>
+                <div class="profile-actions">
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/TwoFactorSetup"))">@(profile.TwoFactorEnabled ? "管理兩步驟驗證" : "設定兩步驟驗證")</Button>
+                </div>
+            </section>
+        }
+
+        <section class="profile-section">
+            <h2 class="profile-heading">最近 @HistorySize 筆登入紀錄</h2>
+            @if (logins.Count == 0)
+            {
+                <div class="profile-muted">還沒有紀錄。</div>
+            }
+            else
+            {
+                <table class="profile-logins">
+                    <thead>
+                        <tr><th>時間</th><th>動作</th><th>來源 IP</th><th>結果</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in logins)
+                        {
+                            <tr>
+                                <td>@ToLocalText(item.OccurredAtUtc)</td>
+                                <td>@DescribeAction(item.Action)</td>
+                                @* 0.9.123 起；0.9.117 之前的舊紀錄沒有 IP。 *@
+                                <td class="profile-login-ip">@(item.ClientIp ?? "—")</td>
+                                <td><StatusPill Text="@(item.Success ? "成功" : "失敗")" Tone="@(item.Success ? StatusTone.Positive : StatusTone.Warning)" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div class="profile-muted">看到不是你做的登入或失敗紀錄，請立即變更密碼並通知系統管理員。</div>
+            }
+        </section>
+    </div>
+}

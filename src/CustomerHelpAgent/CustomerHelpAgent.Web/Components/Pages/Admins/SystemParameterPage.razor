@@ -1,0 +1,12 @@
+@page "/system-parameters"
+@layout MainLayout
+
+<PageTitle>系統參數</PageTitle>
+
+<SystemParameterView FocusGroup="@Group" />
+
+@code {
+    /// <summary>「資料保留與清理」頁的「修改」帶 <c>?group=資料保留</c> 等，進來時捲到該分類（0.9.133 起）。</summary>
+    [SupplyParameterFromQuery(Name = "group")]
+    public string? Group { get; set; }
+}

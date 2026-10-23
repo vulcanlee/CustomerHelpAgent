@@ -1,0 +1,88 @@
+﻿@inherits LayoutComponentBase
+
+@*
+    登入檢查完成前整個版面（側邊欄、頁首、頁面本體、對話窗）都不渲染。
+    未登入的整頁請求早已在 HTTP 層被 [Authorize] 擋掉（Components/Pages/_Imports.razor）；
+    這裡擋的是「Cookie 還在、但帳號已停用／被刪／沒有角色」—— 那些情況會被導去登出，
+    之前會先閃出系統框架。由 PageAuthorizationTests 守門。
+*@
+@if (isAuthenticated)
+{
+    <div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)">
+        <div class="sidebar">
+            <NavMenu IsSidebarCollapsed="isSidebarCollapsed" OnSidebarToggle="ToggleSidebar" />
+        </div>
+
+        <main>
+            <div class="top-row px-4">
+                <div class="top-row-heading">
+                    <div class="top-row-title">@CurrentPageTitle</div>
+                    <PageHelpDialog MenuItems="MenuItems" />
+                </div>
+                <div class="top-row-status">
+                    <NotificationBell />
+                    <div class="user-menu @(isUserMenuOpen ? "user-menu-open" : string.Empty)">
+                        <button type="button"
+                                class="user-menu-trigger"
+                                aria-label="使用者操作"
+                                aria-expanded="@isUserMenuOpen"
+                                aria-haspopup="menu"
+                                @onclick="ToggleUserMenu">
+                            @* 0.9.102 起以姓名縮寫取代人像圖示（不做頭像上傳）。 *@
+                            <span class="user-menu-icon user-menu-initials" aria-hidden="true">@CurrentUserInitials</span>
+                            <span class="user-menu-text">
+                                <span class="user-menu-name">@CurrentUserDisplayName</span>
+                                @if (CurrentUserIsAdmin)
+                                {
+                                    <span class="user-menu-badge">管理員</span>
+                                }
+                            </span>
+                            <span class="user-menu-caret" aria-hidden="true">
+                                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="expand_more" />
+                            </span>
+                        </button>
+
+                        <div class="user-menu-dropdown @(isUserMenuOpen ? "user-menu-dropdown-open" : string.Empty)"
+                             role="menu"
+                             aria-label="使用者操作">
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnProfileClick">個人資料</button>
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnChangePasswordClick">變更密碼</button>
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnAboutClick">關於</button>
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnLogoutClickAsync">登出</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <AnnouncementBanner />
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+
+    @* 尺寸寫在 Components/Commons/OverlayStyles.razor 的 .about-modal，不用 Width 參數（速查表 §6.4）。 *@
+    <Modal Title="關於"
+           Class="about-modal"
+           @bind-Visible="@aboutVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnAboutCancel">
+        <dl class="about-list">
+            @foreach (var item in aboutItems)
+            {
+                <div class="about-row">
+                    <dt class="about-term">@item.Key</dt>
+                    <dd class="about-value">@item.Value</dd>
+                </div>
+            }
+        </dl>
+    </Modal>
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">關閉</span>
+</div>

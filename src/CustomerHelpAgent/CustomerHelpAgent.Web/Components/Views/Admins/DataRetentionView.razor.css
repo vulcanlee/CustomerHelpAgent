@@ -1,0 +1,55 @@
+.data-retention-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.data-retention-toolbar-left,
+.data-retention-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.data-retention-hint {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+}
+
+.data-retention-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+/* 欄位多，窄螢幕讓表格自己橫向捲動而不是把整頁撐寬。 */
+.data-retention-table-wrap {
+    overflow-x: auto;
+}
+
+.data-retention-name {
+    font-weight: 600;
+}
+
+.data-retention-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    margin-top: 0.15rem;
+}
+
+.data-retention-error {
+    color: var(--app-error);
+}
+
+/* 有東西要清時才強調，0 筆維持一般字色。 */
+.data-retention-expected {
+    color: var(--app-accent);
+}
+
+.data-retention-link {
+    color: var(--app-accent);
+    margin-left: 0.5rem;
+    white-space: nowrap;
+}

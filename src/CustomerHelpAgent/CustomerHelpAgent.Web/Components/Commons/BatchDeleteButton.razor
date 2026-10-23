@@ -1,0 +1,29 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@*
+    列表頁工具列的「刪除選取（N）」（0.9.132 起）。沒有勾選時不渲染。
+    用文字按鈕而非 ToolbarIconButton：筆數要一直看得到，圖示按鈕只能把它藏在提示裡。
+*@
+
+@if (Count > 0)
+{
+    <Button Danger Loading="@Busy" OnClick="HandleClickAsync">
+        刪除選取（@Count）
+    </Button>
+}
+
+@code {
+    [Parameter]
+    public int Count { get; set; }
+
+    /// <summary>刪除進行中：按鈕轉圈並擋下重複點擊。</summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    private Task HandleClickAsync(MouseEventArgs args)
+        => OnClick.InvokeAsync();
+}

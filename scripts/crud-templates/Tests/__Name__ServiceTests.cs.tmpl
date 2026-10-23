@@ -1,0 +1,190 @@
+using AutoMapper;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using CustomerHelpAgent.AccessDatas;
+using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Business.Helpers;
+using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Business.Services.Other;
+using CustomerHelpAgent.Models.AdapterModel;
+using CustomerHelpAgent.Models.Others;
+using CustomerHelpAgent.Models.Systems;
+
+namespace CustomerHelpAgent.Tests;
+
+/// <summary>__Display__服務（由 scripts/New-CrudModule.ps1 產生）：新增、修改、名稱重複、並行衝突、軟刪除、還原、永久刪除與稽核。</summary>
+public sealed class __Name__ServiceTests : IDisposable
+{
+    private readonly SqliteConnection connection;
+    private readonly TestDbContextFactory factory;
+    private readonly IMapper mapper;
+    private readonly RecordingAuditLogService audit = new();
+    private readonly CurrentUserService currentUser = new() { CurrentUser = new CurrentUser { Id = 1, Account = "support", IsAdmin = true } };
+
+    public __Name__ServiceTests()
+    {
+        connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        factory = new TestDbContextFactory(connection);
+        using var context = factory.CreateDbContext();
+        context.Database.EnsureCreated();
+        mapper = new MapperConfiguration(c => c.AddProfile<AutoMapping>(), NullLoggerFactory.Instance).CreateMapper();
+    }
+
+    public void Dispose() => connection.Dispose();
+
+#IF TEAMS
+    private __Name__Service Service(bool isAdmin = true, params string[] teams)
+        => new(factory, mapper, NullLogger<__Name__Service>.Instance, new FakeRecordAccessScopeProvider(isAdmin, teams), audit, currentUser);
+#ELSE
+    private __Name__Service Service()
+        => new(factory, mapper, NullLogger<__Name__Service>.Instance, audit, currentUser);
+#ENDIF
+
+    private async Task<__Name__> SingleAsync(int id)
+    {
+        await using var context = factory.CreateDbContext();
+        return await context.__Name__.IgnoreQueryFilters([ISoftDeletable.FilterName]).AsNoTracking().SingleAsync(x => x.Id == id);
+    }
+
+    private async Task<int> AddAsync(__Name__Service service, string name)
+    {
+        var model = new __Name__AdapterModel { Name = name, Description = "說明" };
+        Assert.True((await service.AddAsync(model)).Success);
+        return model.Id;
+    }
+
+    [Fact]
+    public async Task AddAndUpdate_ShouldPersist_AndWriteAudit()
+    {
+        var service = Service();
+        var id = await AddAsync(service, "  第一筆  ");
+        var saved = await SingleAsync(id);
+        Assert.Equal("第一筆", saved.Name);
+
+        var edit = mapper.Map<__Name__AdapterModel>(saved);
+        edit.Description = "改過的說明";
+        Assert.True((await service.UpdateAsync(edit)).Success);
+
+        Assert.Equal("改過的說明", (await SingleAsync(id)).Description);
+        Assert.Equal([AuditActions.__Name__.Create, AuditActions.__Name__.Update], audit.Entries.Select(x => x.Action));
+    }
+
+    [Fact]
+    public async Task DuplicateName_ShouldBeRejected_IgnoringCaseAndSpaces()
+    {
+        var service = Service();
+        await AddAsync(service, "Alpha");
+
+        Assert.False((await service.BeforeAddCheckAsync(new __Name__AdapterModel { Name = " alpha " })).Success);
+        Assert.False((await service.AddAsync(new __Name__AdapterModel { Name = "Alpha" })).Success);
+    }
+
+    [Fact]
+    public async Task Update_WithStaleStamp_ShouldBeRejected()
+    {
+        var service = Service();
+        var id = await AddAsync(service, "原名");
+        var opened = mapper.Map<__Name__AdapterModel>(await SingleAsync(id));
+
+        var first = opened.Clone();
+        first.Name = "A 改的";
+        var second = opened.Clone();
+        second.Name = "B 改的";
+
+        Assert.True((await service.UpdateAsync(first)).Success);
+        var conflict = await service.UpdateAsync(second);
+
+        Assert.False(conflict.Success);
+        Assert.Equal(ConcurrencyStampHelper.ConflictMessage, conflict.Message);
+        Assert.Equal("A 改的", (await SingleAsync(id)).Name);
+    }
+
+    [Fact]
+    public async Task SetEnabled_ShouldOnlyChangeStatus_BumpStamp_AndAudit()
+    {
+        var service = Service();
+        var id = await AddAsync(service, "要停用的");
+        var opened = mapper.Map<__Name__AdapterModel>(await SingleAsync(id));
+
+        Assert.True((await service.SetEnabledAsync(id, false)).Success);
+        Assert.True((await service.SetEnabledAsync(id, false)).Success); // 已經是目標值：成功、不再寫稽核
+
+        var saved = await SingleAsync(id);
+        Assert.False(saved.IsEnabled);
+        Assert.Equal("要停用的", saved.Name);
+        Assert.NotEqual(opened.ConcurrencyStamp, saved.ConcurrencyStamp);
+        Assert.Equal([AuditActions.__Name__.Create, AuditActions.__Name__.Disable], audit.Entries.Select(x => x.Action));
+
+        // 停用前就開著的修改窗存檔：並行衝突，不能把狀態蓋回「啟用」。
+        Assert.Equal(ConcurrencyStampHelper.ConflictMessage, (await service.UpdateAsync(opened)).Message);
+    }
+
+    [Fact]
+    public async Task Delete_Restore_Purge_ShouldFollowTheSoftDeleteRules()
+    {
+        var service = Service();
+        var id = await AddAsync(service, "要刪的");
+
+        Assert.False((await service.PurgeAsync(id)).Success);
+        Assert.True((await service.DeleteAsync(id)).Success);
+        Assert.Equal(0, (await service.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Count);
+        var deleted = Assert.Single((await service.GetDeletedAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Result);
+        Assert.Equal("support", deleted.DeletedBy);
+
+        Assert.True((await service.RestoreAsync(id)).Success);
+        Assert.False((await SingleAsync(id)).IsDeleted);
+
+        Assert.True((await service.DeleteAsync(id)).Success);
+        Assert.True((await service.PurgeAsync(id)).Success);
+        await using var context = factory.CreateDbContext();
+        Assert.False(await context.__Name__.IgnoreQueryFilters([ISoftDeletable.FilterName]).AnyAsync());
+        Assert.Contains(audit.Entries, x => x.Action == AuditActions.__Name__.Purge);
+    }
+
+    [Fact]
+    public async Task Restore_ShouldBeRejected_WhenAnActiveRecordHasTheSameName()
+    {
+        var service = Service();
+        var oldId = await AddAsync(service, "同名");
+        Assert.True((await service.DeleteAsync(oldId)).Success);
+        await AddAsync(service, "同名");
+
+        var result = await service.RestoreAsync(oldId);
+
+        Assert.False(result.Success);
+        Assert.Contains("已有同名", result.Message);
+    }
+
+    [Fact]
+    public async Task Search_ShouldMatchNameAndDescription()
+    {
+        var service = Service();
+        await AddAsync(service, "蘋果");
+        await AddAsync(service, "香蕉");
+
+        var found = await service.GetAsync(new DataRequest { Search = "蘋", CurrentPage = 1, PageSize = 10 });
+
+        Assert.Equal(["蘋果"], found.Result.Select(x => x.Name));
+    }
+#IF TEAMS
+
+    [Fact]
+    public async Task TeamScope_ShouldHideOtherTeams_AndRejectChangesOutsideScope()
+    {
+        var admin = Service();
+        var model = new __Name__AdapterModel { Name = "研發專用", Teams = ["研發部"] };
+        Assert.True((await admin.AddAsync(model)).Success);
+        await AddAsync(admin, "公開的");
+
+        var outsider = Service(false, "業務部");
+        Assert.Equal(["公開的"], (await outsider.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Result.Select(x => x.Name));
+        Assert.False((await outsider.DeleteAsync(model.Id)).Success);
+        Assert.False((await outsider.AddAsync(new __Name__AdapterModel { Name = "越權", Teams = ["研發部"] })).Success);
+
+        var insider = Service(false, "研發部");
+        Assert.Equal(2, (await insider.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 10 })).Count);
+    }
+#ENDIF
+}

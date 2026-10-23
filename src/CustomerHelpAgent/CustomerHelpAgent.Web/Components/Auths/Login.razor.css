@@ -1,0 +1,489 @@
+.login-container {
+    --login-text: var(--app-text);
+    --login-muted: var(--app-muted);
+    --login-accent: var(--app-accent);
+    position: relative;
+    isolation: isolate;
+    min-height: 100vh;
+    min-height: 100svh;
+    padding: 48px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--login-text);
+    background: #f7e9ee;
+}
+
+.winter-scene,
+.snowfall {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.winter-scene img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.snow-layer {
+    position: absolute;
+    inset: -512px -80px 0;
+    background-image: var(--snow-image);
+    background-repeat: repeat;
+    background-size: 512px 512px;
+    animation: snowfall 18s linear infinite;
+    animation-delay: -9s;
+    opacity: 0.65;
+}
+
+.snow-layer-far {
+    background-size: 384px 384px;
+    inset-block-start: -384px;
+    animation: snowfall-far 28s linear infinite;
+    animation-delay: -19s;
+    opacity: 0.35;
+}
+
+.login-shell {
+    width: min(1200px, 100%);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(460px, 520px);
+    align-items: center;
+    gap: 64px;
+}
+
+.brand-panel {
+    padding: 40px 0 40px 24px;
+    animation: arrive 450ms ease-out both;
+}
+
+.brand-logo {
+    width: 104px;
+    height: 104px;
+    margin-bottom: 24px;
+}
+
+.brand-logo-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 26px;
+}
+
+.app-title {
+    margin: 0;
+    color: var(--login-text);
+    font-size: clamp(2.4rem, 3.2vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    text-shadow: 0 1px 8px rgba(255, 255, 255, 0.85);
+}
+
+.brand-description {
+    max-width: 460px;
+    margin: 20px 0 0;
+    font-size: 1.05rem;
+    line-height: 1.9;
+    color: var(--login-text);
+}
+
+.login-card {
+    position: relative;
+    min-width: 0;
+    padding: 40px;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 36px;
+    background: rgba(255, 237, 244, 0.94);
+    box-shadow: inset 0 2px 3px #fff, inset 0 -3px 8px rgba(232, 139, 169, 0.35),
+        0 0 0 4px rgba(255, 224, 236, 0.45), 0 20px 55px rgba(107, 39, 69, 0.14);
+    animation: arrive 600ms ease-out both;
+}
+
+.login-card::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 30px;
+    box-shadow: inset 1px 2px 4px rgba(255, 255, 255, 0.65);
+    pointer-events: none;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .login-card {
+        background: rgba(255, 228, 239, 0.55);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+    }
+}
+
+.login-header {
+    margin-bottom: 28px;
+}
+
+.login-header h2 {
+    margin: 0;
+    color: var(--login-text);
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+.login-header p {
+    margin: 12px 0 0;
+    color: var(--login-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.form-group {
+    margin-bottom: 22px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: color 200ms ease;
+}
+
+.form-group:focus-within .form-label {
+    color: var(--login-accent);
+}
+
+.form-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+    padding: 12px 16px;
+    border: 1px solid rgba(155, 74, 107, 0.4);
+    border-radius: 18px;
+    background: rgba(255, 252, 254, 0.65);
+    color: var(--login-text);
+    font-size: 1rem;
+    line-height: 1.5;
+    box-shadow: inset 0 1px 2px #fff, 0 0 0 2px rgba(255, 255, 255, 0.45);
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+
+.form-input::placeholder {
+    color: #806473;
+    opacity: 1;
+}
+
+.form-input:focus {
+    outline: 2px solid var(--login-accent);
+    outline-offset: 2px;
+    transform: translateY(-1px);
+    border-color: var(--app-accent-dim);
+    background: rgba(255, 249, 252, 0.9);
+    box-shadow: 0 0 0 5px rgba(240, 146, 179, 0.18), inset 0 1px 2px #fff;
+}
+
+.captcha-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    align-items: center;
+    gap: 12px;
+}
+
+.captcha-display {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 18px;
+    background: rgba(255, 194, 218, 0.65);
+    box-shadow: inset 0 2px 5px #fff, 0 0 0 2px rgba(227, 129, 166, 0.3);
+    color: #6b153a;
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-indent: 0.16em;
+    user-select: none;
+    transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+
+.captcha-group:focus-within .captcha-display {
+    background: rgba(255, 215, 232, 0.9);
+    box-shadow: inset 0 2px 5px #fff, 0 0 0 3px rgba(210, 91, 138, 0.25);
+}
+
+.form-options {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px 12px;
+    margin-bottom: 18px;
+}
+
+.remember-me {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.remember-me ::deep input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--login-accent);
+    cursor: pointer;
+}
+
+.remember-me ::deep input:checked {
+    animation: jelly-check 180ms ease-out;
+}
+
+.remember-me ::deep input:focus-visible,
+.login-button:focus-visible,
+.google-login-button:focus-visible {
+    outline: 2px solid var(--login-accent);
+    outline-offset: 4px;
+}
+
+.security-note {
+    color: var(--login-muted);
+    font-size: 0.875rem;
+}
+
+/* 鎖定規則（0.9.101 起）：登入失敗訊息不分原因，規則固定寫在表單下方。 */
+.lockout-hint {
+    margin: 16px 0 0;
+    color: var(--login-muted);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+}
+
+.login-button,
+.google-login-button {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 24px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.5;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1.3), box-shadow 220ms ease;
+}
+
+.login-button {
+    background: var(--app-primary-grad);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(93, 15, 48, 0.3);
+    box-shadow: inset 0 3px 5px rgba(255, 255, 255, 0.65), inset 0 -3px 5px rgba(121, 27, 63, 0.2),
+        0 8px 20px rgba(173, 45, 93, 0.2);
+}
+
+.google-login-button {
+    background: rgba(255, 255, 255, 0.88);
+    color: #452238;
+    box-shadow: inset 0 2px 3px #fff, 0 5px 16px rgba(107, 39, 69, 0.1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .login-button:hover,
+    .google-login-button:hover {
+        transform: translateY(-2px);
+        box-shadow: inset 0 3px 5px rgba(255, 255, 255, 0.65), 0 12px 26px rgba(173, 45, 93, 0.26);
+    }
+}
+
+.login-button:active,
+.google-login-button:active {
+    transform: scale(0.98);
+}
+
+.error-message {
+    margin-top: 18px;
+    color: #9a173a;
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    animation: error-appear 200ms ease-out;
+}
+
+.oauth-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 22px 0 18px;
+    color: var(--login-muted);
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgba(126, 58, 86, 0.25);
+}
+
+.google-icon {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+}
+
+/* ── 忘記密碼／重設密碼（0.9.60 起）──
+   本檔與 AuthShell、ForgotPassword、ResetPassword 以 CssScope="b-auth-shell" 共用 scope
+   （見 CustomerHelpAgent.Web.csproj），下列規則三頁都吃得到。 */
+
+.auth-link {
+    color: var(--login-accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.auth-link:hover,
+.auth-link:focus-visible {
+    text-decoration: underline;
+}
+
+.auth-link:focus-visible {
+    outline: 2px solid var(--login-accent);
+    outline-offset: 4px;
+}
+
+.auth-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 20px;
+    margin-top: 22px;
+}
+
+.success-message {
+    margin-bottom: 18px;
+    padding: 12px 16px;
+    border: 1px solid var(--app-ok-line);
+    border-radius: 18px;
+    background: var(--app-ok-bg);
+    color: var(--app-ok);
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    animation: error-appear 200ms ease-out;
+}
+
+/* 中性說明：忘記密碼送出後用。不確定信是否真的寄出，所以不用綠色成功框。 */
+.info-message {
+    margin-bottom: 18px;
+    padding: 12px 16px;
+    border: 1px solid var(--app-line);
+    border-radius: 18px;
+    background: var(--app-tint);
+    color: var(--app-text);
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    animation: error-appear 200ms ease-out;
+}
+
+.info-message p {
+    margin: 0;
+}
+
+.info-message p + p {
+    margin-top: 8px;
+}
+
+@keyframes snowfall {
+    50% { transform: translate3d(20px, 256px, 0); }
+    to { transform: translate3d(0, 512px, 0); }
+}
+
+@keyframes snowfall-far {
+    50% { transform: translate3d(-12px, 192px, 0); }
+    to { transform: translate3d(0, 384px, 0); }
+}
+
+@keyframes arrive {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes jelly-check {
+    50% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+
+@keyframes error-appear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (max-width: 1023px) {
+    .login-container { padding: 32px 24px 64px; }
+    .login-shell { max-width: 520px; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+    .brand-panel { padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+    .brand-logo { width: 56px; height: 56px; margin: 0; flex-shrink: 0; }
+    .brand-logo-image { border-radius: 16px; }
+    .app-title { font-size: 2rem; }
+    .brand-description { margin: 0; font-size: 1rem; }
+}
+
+@media (max-width: 767px) {
+    .login-container { padding: 128px 20px 100px; align-items: flex-start; }
+    .login-shell { gap: 24px; }
+    .brand-panel { flex-wrap: nowrap; justify-content: center; gap: 12px; }
+    .brand-logo { width: 44px; height: 44px; }
+    .brand-logo-image { border-radius: 12px; }
+    .app-title { font-size: clamp(1.35rem, 5.8vw, 1.8rem); }
+    .brand-description { display: none; }
+    .login-card { padding: 28px 24px; border-radius: 30px; }
+    .login-card::before { border-radius: 24px; }
+    .login-header { margin-bottom: 24px; }
+    .login-header h2 { font-size: 1.9rem; }
+    .captcha-group { grid-template-columns: minmax(0, 1fr) 88px; gap: 10px; }
+    .captcha-input { padding-inline: 12px; }
+    .snow-layer-far { display: none; }
+}
+
+@media (max-width: 359px) {
+    .login-container { padding-inline: 16px; }
+    .login-card { padding-inline: 20px; }
+    .captcha-group { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .snowfall { display: none; }
+    .brand-panel,
+    .login-card,
+    .error-message,
+    .success-message,
+    .info-message,
+    .remember-me ::deep input:checked { animation: none; }
+    .form-input,
+    .form-label,
+    .captcha-display,
+    .login-button,
+    .google-login-button { transition: none; }
+    .form-input:focus,
+    .login-button:hover,
+    .login-button:active,
+    .google-login-button:hover,
+    .google-login-button:active { transform: none; }
+}

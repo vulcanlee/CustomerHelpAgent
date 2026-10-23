@@ -1,0 +1,39 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@*
+    工具列圖示按鈕。與 CrudActionButton 刻意保持相同結構，差別只在視覺定位：
+    CrudActionButton 是 28x28 透明無框，塞在表格操作欄；本元件是 36x36 的一般
+    AntDesign Default 外觀，用於檢視上方的工具列。
+*@
+
+<Tooltip Title="@Title">
+    <Button Type="ButtonType.Default"
+            Class="toolbar-icon-button"
+            Disabled="@Disabled"
+            OnClick="HandleClickAsync">
+        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@Icon" />
+        <span class="toolbar-icon-button-label">@Title</span>
+    </Button>
+</Tooltip>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Material Icons 的 kind 名稱。須為 classic Material Icons 內的名稱，
+    /// 否則會渲染成破圖方塊（專案載入的是 classic 而非 Material Symbols）。
+    /// </summary>
+    [Parameter]
+    public string Icon { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private Task HandleClickAsync(MouseEventArgs args)
+        => OnClick.InvokeAsync();
+}

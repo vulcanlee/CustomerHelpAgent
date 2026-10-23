@@ -1,0 +1,12 @@
+@page "/myusers"
+@layout MainLayout
+
+<PageTitle>使用者管理</PageTitle>
+
+<MyUserView InitialShowDeleted="@(Deleted == 1)" />
+
+@code {
+    /// <summary>「資料保留與清理」頁的「前往」帶 <c>?deleted=1</c>：一進來就顯示已刪除的資料（0.9.133 起）。</summary>
+    [SupplyParameterFromQuery(Name = "deleted")]
+    public int? Deleted { get; set; }
+}

@@ -1,0 +1,24 @@
+@page "/Auths/Pending"
+@layout NoFooterLayout
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>帳號待審核</PageTitle>
+
+<div class="pending-container">
+    <div class="pending-card">
+        <div class="pending-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+            </svg>
+        </div>
+        <h1>帳號已建立，等待審核</h1>
+        <p>
+            您已成功透過 Google 完成身分驗證，系統已為您建立帳號。<br />
+            為維護系統安全，新帳號預設為停用狀態，需由管理者審核並指派權限後才能登入使用。
+        </p>
+        <p class="pending-hint">請在管理者啟用您的帳號後，再次使用 Google 登入。</p>
+        <a class="pending-back" href="/Auths/Login">返回登入頁</a>
+    </div>
+</div>

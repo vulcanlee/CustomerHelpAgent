@@ -1,0 +1,10 @@
+namespace CustomerHelpAgent.Dtos.Commons;
+
+/// <summary>
+/// __Display__搜尋（由 scripts/New-CrudModule.ps1 產生）。分頁參數的上下限由 <see cref="SearchRequestBaseDto"/> 的 [Range] 保護。
+/// </summary>
+public class __Name__SearchRequestDto : SearchRequestBaseDto
+{
+    /// <summary>是否啟用（null 表示不篩選）。</summary>
+    public bool? IsEnabled { get; set; }
+}

@@ -1,0 +1,82 @@
+@using CustomerHelpAgent.Business.Helpers
+@using CustomerHelpAgent.Business.Services.DataAccess
+@using CustomerHelpAgent.Business.Services.Other
+@inject ProfileService ProfileService
+@inject CurrentUserService CurrentUserService
+@inject TimeProvider TimeProvider
+
+@*
+    首頁「我的帳號」（0.9.106 起）：上一次登入、密碼到期、兩步驟驗證。細節在個人資料頁。
+*@
+@if (!loaded)
+{
+}
+else
+{
+    <dl class="dashboard-facts">
+        <div class="dashboard-fact">
+            <dt>上一次登入</dt>
+            <dd>
+                @if (previousLogin is null)
+                {
+                    <span class="dashboard-muted">（沒有紀錄）</span>
+                }
+                else
+                {
+                    @ToLocalText(previousLogin.OccurredAtUtc)
+                    <span class="dashboard-muted">@(previousLogin.Action == AuditActions.Login.SsoSuccess ? "Google 登入" : "帳號密碼")</span>
+                    @if (!string.IsNullOrWhiteSpace(previousLogin.ClientIp))
+                    {
+                        @* 0.9.123 起：陌生的 IP 比較容易發現不是自己的登入。 *@
+                        <span class="dashboard-muted">@previousLogin.ClientIp</span>
+                    }
+                }
+            </dd>
+        </div>
+        @if (profile?.HasLocalPassword == true)
+        {
+            <div class="dashboard-fact">
+                <dt>密碼到期</dt>
+                <dd>
+                    @if (profile.PasswordExpiresAtUtc is { } expires)
+                    {
+                        @ToLocalText(expires)
+                        @if (expires <= TimeProvider.GetUtcNow().UtcDateTime.AddDays(7))
+                        {
+                            <StatusPill Text="快到期" Tone="StatusTone.Warning" />
+                        }
+                    }
+                    else
+                    {
+                        <span>不會到期</span>
+                    }
+                </dd>
+            </div>
+            <div class="dashboard-fact">
+                <dt>兩步驟驗證</dt>
+                <dd>
+                    <StatusPill Text="@(profile.TwoFactorEnabled ? "已啟用" : "未啟用")" Tone="@(profile.TwoFactorEnabled ? StatusTone.Positive : StatusTone.Muted)" />
+                </dd>
+            </div>
+        }
+    </dl>
+    <div class="dashboard-muted">不是你做的登入，請立即變更密碼並通知系統管理員。</div>
+    <a class="dashboard-link" href="/Profile">前往個人資料</a>
+}
+
+@code {
+    private bool loaded;
+    private ProfileInfo? profile;
+    private LoginRecord? previousLogin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = CurrentUserService.CurrentUser.Id;
+        profile = await ProfileService.GetAsync(userId);
+        previousLogin = await ProfileService.GetPreviousLoginAsync(userId);
+        loaded = true;
+    }
+
+    private string ToLocalText(DateTime utc)
+        => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), TimeProvider.LocalTimeZone).ToString("yyyy-MM-dd HH:mm");
+}

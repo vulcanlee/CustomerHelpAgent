@@ -1,0 +1,188 @@
+﻿@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+
+    <div>
+        <div class="role-view-toolbar">
+            <div class="role-view-toolbar-left">
+                @if (!showDeleted)
+                {
+                    <ToolbarIconButton Title="新增" Icon="add"
+                                       OnClick="@(async()=>await OnAddAsync(true))" />
+                }
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                @if (!showDeleted)
+                {
+                    <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                       OnClick="@(async () => await OnBatchDeleteAsync())" />
+                }
+                @* 0.9.95 起刪除為軟刪除：切換到已刪除的資料，可還原或永久刪除（本頁只有管理員能進）。 *@
+                <ToolbarIconButton Title="@(showDeleted ? "返回清單" : "顯示已刪除")"
+                                   Icon="@(showDeleted ? "arrow_back" : "auto_delete")"
+                                   OnClick="@(async () => await OnToggleDeletedAsync())" />
+            </div>
+            <div class="role-view-toolbar-right">
+                <Input class="role-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <ToolbarIconButton Title="清空搜尋" Icon="close"
+                                       OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })" />
+                }
+                <ToolbarIconButton Title="搜尋" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+            </div>
+        </div>
+        <div class="role-view-table-wrap">
+            <Table @ref="table"
+            TItem="RoleViewAdapterModel"
+            Class="role-view-table"
+            RemoteDataSource="true"
+            DataSource="@roleViewAdapterModels"
+            OnChange=OnTableChange
+            @bind-PageIndex="_pageIndex"
+            @bind-PageSize="_pageSize"
+            @bind-Total=_total
+            @bind-SelectedRows="selectedRows">
+                @*
+                    0.9.132 起：勾選後可「刪除選取」；已刪除的資料不可勾選。
+                    預設角色一律不能刪，直接反灰；「仍是某人的主要角色」要查資料庫，交給刪除時的規則擋下並列出原因。
+                *@
+                @if (!showDeleted)
+                {
+                    <Selection Disabled="@(context.Name == MagicObjectHelper.預設角色)" />
+                }
+                <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                @if (showDeleted)
+                {
+                    <Column TData="DateTime?" DataIndex="@nameof(RoleViewAdapterModel.DeletedAt)" Title="刪除時間" />
+                    <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.DeletedBy)" Title="刪除者" />
+                }
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    @if (showDeleted)
+                    {
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="還原" Icon="restore_from_trash"
+                                                  OnClick="@(async () => await OnRestoreAsync(@context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="永久刪除" Icon="delete_forever" Danger
+                                                  OnClick="@(async () => await OnPurgeAsync(@context))" />
+                            </SpaceItem>
+                        </Space>
+                    }
+                    else
+                    {
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(@context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                  OnClick="@(async () => await OnDeleteAsync(@context))" />
+                            </SpaceItem>
+                        </Space>
+                    }
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    @*
+        大量資料輸入對話窗，規範見 docs/architecture/對話窗 UI 設計規範.md。
+        ⚠️ EditForm 上絕不可掛鍵盤事件（§6.3，ModalKeyboardConventionTests 守門）。
+    *@
+    <Modal Title="@modalTitle"
+           Class="form-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("儲存")"
+           CancelText="@("取消")"
+           OnOk="OnModalOKHandleAsync"
+           OnCancel="OnModalCancelHandleAsync">
+        <EditForm Model="@CurrentRecord" Context="editContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <InputWatcher EditContextActionChanged="OnEditContestChanged" />
+
+            <AntDesign.Form TModel="RoleViewAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+
+                <FormSection Title="角色資料">
+                    <FormItem Label="名稱" Required>
+                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
+                        <ValidationMessage For="() => CurrentRecord.Name" />
+                    </FormItem>
+
+                    @* 多選：選項一多就換行，半欄寬度會讓它一直長高、把右邊欄位擠歪。 *@
+                    <FormItem Label="預設團隊" Class="form-field-full">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.DefaultTeams" OnSelectedItemsChanged="OnRoleTeamsChanged"
+                                Placeholder="選擇此角色可瀏覽的團隊（不設定表示僅能看到無團隊的公開紀錄）"
+                                AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var t in availableTeams)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Class="form-field-full">
+                        <Checkbox Checked="@CurrentRecord.RequireTwoFactor" CheckedChanged="@(value => CurrentRecord.RequireTwoFactor = value)">需要兩步驟驗證（有這個角色的人，設定完成前無法使用其他頁面）</Checkbox>
+                    </FormItem>
+                </FormSection>
+
+                @* 權限矩陣本身就是二維排列，再塞進半欄會變成三層巢狀 —— 整個區塊走單欄。 *@
+                <FormSection Title="權限設定" Hint="勾選「全部」等於該資源的所有動作" SingleColumn="true">
+                    <FormItem>
+                            @foreach (var group in CurrentRecord.RolePermission.Groups)
+                            {
+                                <div class="role-permission-group">
+                                    <Checkbox Checked="@group.Enable" CheckedChanged="@(value => OnPermissionGroupChanged(group, value))">
+                                        @group.Name
+                                    </Checkbox>
+
+                                    @if (group.Permissions.Count > 0)
+                                    {
+                                        <div class="role-permission-children">
+                                            @foreach (var role in group.Permissions)
+                                            {
+                                                <div class="role-permission-node">
+                                                    <Checkbox Checked="@role.Enable" CheckedChanged="@(value => OnPermissionItemChanged(group, role, value))">
+                                                        @role.Name（全部）
+                                                    </Checkbox>
+                                                    <span class="role-permission-actions">
+                                                        @foreach (var action in PermissionActionItems)
+                                                        {
+                                                            <Checkbox Disabled="@role.Enable"
+                                                                      Checked="@GetActionChecked(role, action.Key)"
+                                                                      CheckedChanged="@(value => OnPermissionActionChanged(group, role, action.Key, value))">
+                                                                @action.Label
+                                                            </Checkbox>
+                                                        }
+                                                    </span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                    </FormItem>
+                </FormSection>
+            </AntDesign.Form>
+        </EditForm>
+    </Modal>
+}

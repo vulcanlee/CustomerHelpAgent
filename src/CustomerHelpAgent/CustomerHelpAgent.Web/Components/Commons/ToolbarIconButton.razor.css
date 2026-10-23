@@ -1,0 +1,31 @@
+﻿.toolbar-icon-button {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    padding: 0;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 1;
+}
+
+/* ⚠️ 圖示大小只能從 MaterialIcon 的 Size 參數改：
+   該元件會輸出行內的 style="font-size:…"，CSS 的 font-size 蓋不過去。
+   0.9.16 已把這裡原本無效的 font-size 宣告移除。 */
+.toolbar-icon-button ::deep .material-icons,
+.toolbar-icon-button ::deep .material-icons-outlined {
+    line-height: 1;
+}
+
+/* 視覺隱藏但保留給螢幕閱讀器，與 CrudActionButton 一致 */
+.toolbar-icon-button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

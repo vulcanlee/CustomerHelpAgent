@@ -1,0 +1,83 @@
+.pending-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: var(--app-dark-grad);
+    background-size: 300% 300%;
+    animation: pendingGradient 18s ease infinite;
+}
+
+.pending-card {
+    width: min(520px, 100%);
+    padding: 48px 40px;
+    text-align: center;
+    color: var(--app-on-accent);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 30px 80px rgba(var(--app-shadow-rgb), 0.45);
+    border-radius: 28px;
+}
+
+.pending-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 84px;
+    height: 84px;
+    margin-bottom: 22px;
+    border-radius: 24px;
+    color: var(--app-accent-light);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pending-card h1 {
+    margin: 0 0 16px;
+    font-size: 1.7rem;
+    font-weight: 800;
+}
+
+.pending-card p {
+    margin: 0 0 14px;
+    line-height: 1.85;
+    color: rgba(255, 247, 250, 0.82);
+}
+
+.pending-hint {
+    color: var(--app-accent-light) !important;
+    font-weight: 600;
+}
+
+.pending-back {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 12px 28px;
+    border-radius: 16px;
+    background: var(--app-primary-grad);
+    color: var(--app-on-accent);
+    font-weight: 800;
+    text-decoration: none;
+    box-shadow: 0 16px 30px rgba(var(--app-shadow-rgb), 0.38);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.pending-back:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 34px rgba(var(--app-shadow-rgb), 0.46);
+}
+
+@keyframes pendingGradient {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}

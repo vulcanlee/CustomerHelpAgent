@@ -1,0 +1,63 @@
+/* 尺寸沿用舊的 .category-status / .team-status（2px 10px、12px、圓角），
+   讓分類與團隊兩頁在這次遷移中維持原樣，只有語氣色改由 token 提供。 */
+.status-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--app-radius-pill);
+    border: 1px solid transparent;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+/* ⚠️ 啟用綠與警示琥珀刻意不轉粉：它們是掃表時最先被讀到的訊號，
+   為了視覺統一染成粉紅等於把訊號拿掉。理由同 OverlayStyles 對通知圖示的處理。 */
+.status-pill-positive {
+    color: var(--app-ok);
+    background: var(--app-ok-bg);
+    border-color: var(--app-ok-line);
+}
+
+.status-pill-muted {
+    color: var(--app-off);
+    background: var(--app-off-bg);
+    border-color: var(--app-off-line);
+}
+
+.status-pill-warning {
+    color: var(--app-warn);
+    background: var(--app-warn-bg);
+    border-color: var(--app-warn-line);
+}
+
+.status-pill-accent {
+    color: var(--app-accent);
+    background: var(--app-tint);
+    border-color: var(--app-line);
+}
+
+/* 可點的標籤（0.9.120 起）：button 的預設外觀歸零，只多手指游標與 hover／鍵盤焦點的外框。 */
+.status-pill-clickable {
+    margin: 0;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.status-pill-clickable:hover {
+    border-color: currentColor;
+}
+
+.status-pill-clickable:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+}
+
+.status-pill-clickable:disabled {
+    cursor: progress;
+}
+
+.status-pill-neutral {
+    color: var(--app-muted);
+    background: rgba(var(--app-tint-rgb), 0.55);
+    border-color: var(--app-line);
+}

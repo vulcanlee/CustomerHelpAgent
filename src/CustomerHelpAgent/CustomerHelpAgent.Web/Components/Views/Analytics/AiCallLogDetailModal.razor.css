@@ -1,0 +1,298 @@
+/* ===== AI 對話紀錄明細窗（0.9.72 起） ===== */
+
+/*
+ * 視窗外框尺寸在 OverlayStyles.razor 的 .ai-call-log-modal；這裡只管窗內內容。
+ * 窗內每一條 font-size 都是 calc(Npx * var(--ai-font-scale, 1))，倍率由「一般／中／大」
+ * 寫進 .ai-call-log-body 的 inline style（同日誌檢視與例外 AI 分析，AiModalStyleConventionTests 守門）。
+ * ⚠️ 刻意不用 em：em 在巢狀清單與 pre code 上會複合相乘。
+ * 顏色一律取 theme.css 的變數（ThemeConventionTests 守門）。
+ */
+.ai-call-log-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40vh;
+}
+
+.ai-call-log-toolbar,
+.ai-call-log-views {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.ai-call-log-font-scale,
+.ai-call-log-toolbar-right,
+.ai-call-log-views-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 檢視切換列是「中繼資料」與「內容」的分界。 */
+.ai-call-log-views {
+    padding-top: 12px;
+    border-top: 1px solid var(--app-line);
+}
+
+/* ----- 中繼資料 ----- */
+
+.ai-call-log-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 24px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 4px;
+}
+
+.ai-call-log-meta > div {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    gap: 4px 12px;
+}
+
+.ai-call-log-meta dt {
+    margin: 0;
+    color: var(--app-muted);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    font-weight: normal;
+    line-height: 1.8;
+}
+
+.ai-call-log-meta dd {
+    margin: 0;
+    color: var(--app-text);
+    font-size: calc(13px * var(--ai-font-scale, 1));
+    line-height: 1.8;
+    word-break: break-word;
+}
+
+.ai-call-log-mono {
+    font-family: var(--app-code-font);
+}
+
+.ai-call-log-muted {
+    margin-left: 6px;
+    color: var(--app-muted);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+}
+
+/* ----- 同一段對話 ----- */
+
+.ai-call-log-thread {
+    margin: 0 0 16px;
+    padding: 8px 12px;
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: 6px;
+}
+
+.ai-call-log-thread-title {
+    margin-bottom: 4px;
+    color: var(--app-muted);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-thread-list {
+    margin: 0;
+    padding-left: 22px;
+    font-size: calc(13px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-thread-current {
+    color: var(--app-accent);
+}
+
+/* ----- 內容區塊 ----- */
+
+.ai-call-log-empty {
+    color: var(--app-muted);
+    font-size: calc(13px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-note {
+    margin: 0 0 6px;
+    color: var(--app-muted);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+}
+
+/* 一段內容：淺色卡片，左側色條標示角色（系統／使用者／AI）。 */
+.ai-call-log-block {
+    margin: 0 0 14px;
+    padding: 10px 14px 12px;
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-left-width: 4px;
+    border-radius: 6px;
+}
+
+.ai-call-log-role-system,
+.ai-call-log-role-other {
+    border-left-color: var(--app-off);
+}
+
+.ai-call-log-role-user,
+.ai-call-log-role-raw {
+    border-left-color: var(--app-accent);
+}
+
+.ai-call-log-role-assistant,
+.ai-call-log-role-response {
+    border-left-color: var(--app-ok);
+}
+
+.ai-call-log-role-response {
+    background: var(--app-tint);
+}
+
+.ai-call-log-block-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.ai-call-log-block-title {
+    color: var(--app-text);
+    font-size: calc(14px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-block-spacer {
+    flex: 1;
+}
+
+/* 純文字：送出的 Prompt 與 AI 回應原文，保留換行、依畫面寬度折行。 */
+.ai-call-log-text {
+    max-height: 60vh;
+    margin: 0;
+    overflow: auto;
+    color: var(--app-text);
+    font-family: inherit;
+    font-size: calc(14px * var(--ai-font-scale, 1));
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ⚠️ 原始 JSON 刻意用深色原文區塊：配色與字型走 theme.css 的 --app-code-*，
+   與日誌檢視展開列、健康監控日誌尾端、例外堆疊同一組（0.9.70 起）。 */
+.ai-call-log-code {
+    max-height: 60vh;
+    margin: 0;
+    padding: 0.9rem 1rem;
+    overflow: auto;
+    background: var(--app-code-bg);
+    border: 1px solid var(--app-code-line);
+    border-radius: 14px;
+    color: var(--app-code-text);
+    color-scheme: dark;
+    font-family: var(--app-code-font);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/*
+ * 以下是 Markdown 渲染後的 HTML（比照 .exception-ai-report）。它由 MarkupString 注入，
+ * 落在本元件 scope 屬性之外，因此子選擇器一律需要 ::deep。
+ */
+.ai-call-log-markdown {
+    max-height: 60vh;
+    overflow: auto;
+    color: var(--app-text);
+    font-size: calc(14px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-markdown ::deep h1,
+.ai-call-log-markdown ::deep h2 {
+    margin: 20px 0 8px;
+    padding-bottom: 4px;
+    color: var(--app-text);
+    font-size: calc(17px * var(--ai-font-scale, 1));
+    border-bottom: 1px solid var(--app-line);
+}
+
+.ai-call-log-markdown ::deep h1:first-child,
+.ai-call-log-markdown ::deep h2:first-child {
+    margin-top: 4px;
+}
+
+.ai-call-log-markdown ::deep h3,
+.ai-call-log-markdown ::deep h4 {
+    margin: 16px 0 6px;
+    color: var(--app-text);
+    font-size: calc(15px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-markdown ::deep p {
+    margin: 0 0 10px;
+    line-height: 1.8;
+}
+
+.ai-call-log-markdown ::deep ul,
+.ai-call-log-markdown ::deep ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+}
+
+.ai-call-log-markdown ::deep li {
+    line-height: 1.8;
+}
+
+.ai-call-log-markdown ::deep blockquote {
+    margin: 0 0 10px;
+    padding: 2px 0 2px 12px;
+    color: var(--app-muted);
+    border-left: 3px solid var(--app-line);
+}
+
+.ai-call-log-markdown ::deep pre {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 4px;
+    font-size: calc(12px * var(--ai-font-scale, 1));
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ai-call-log-markdown ::deep code {
+    color: var(--app-error);
+    font-size: calc(12px * var(--ai-font-scale, 1));
+}
+
+.ai-call-log-markdown ::deep pre code {
+    color: inherit;
+}
+
+/* 安全管線把危險 scheme 的 URL 清空後，不要讓它看起來還像可點的連結。 */
+.ai-call-log-markdown ::deep a[href=""] {
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+}
+
+@media (max-width: 900.98px) {
+    .ai-call-log-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640.98px) {
+    /* 窄螢幕沒有 8.5rem 可以留給標題，改成上下堆疊 */
+    .ai-call-log-meta > div {
+        grid-template-columns: 1fr;
+    }
+}

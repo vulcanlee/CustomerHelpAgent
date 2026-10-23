@@ -1,0 +1,1065 @@
+﻿<style>
+
+    /* ══════════════════════════════════════════════════════════════════
+       AntDesign 浮層的全域樣式 —— 粉梅暖雪果凍
+       規範全文見 docs/architecture/對話窗 UI 設計規範.md
+
+       分層：
+         .ant-modal .ant-modal-content   果凍基底 —— **所有**對話窗（含未來新增的）自動吃到
+         .form-modal / .ant-modal-confirm / .about-modal / …   只負責尺寸與版型差異
+         .ant-notification-notice / .ant-message-notice-content   通知與消息條
+
+       ⚠️ 不要退回「逐一為每個 *-modal 各寫一份果凍」的加法寫法。
+          0.9.25／0.9.26 就是那樣做的，結果關於、變更密碼與三個明細窗整組被漏掉，
+          而且下一個新增的窗也會再落空一次。由 FormModalConventionTests 守門。
+
+       ⚠️ 本元件只能在 Components/Routes.razor 渲染一次（AntContainer 旁邊）。
+          AntDesign 把這些浮層全部渲染在 AntContainer 底下，與 layout 無關；
+          掛在 layout 或各檢視裡，只要有頁面用了別的 layout 就會吃不到樣式。
+          由 FormModalConventionTests 守門。
+       ⚠️ AntDesign 的 CSS 在 App.razor 最後載入，覆蓋 .ant-* 一律要 !important。
+       ⚠️ 尺寸不可改用 Modal 的 Width 參數（見速查表 §6.4）：兩邊都寫只會讓下一個人改錯地方。
+          確認窗更是完全沒得選 —— ConfirmOptions.ClassName 會被 AntDesign 內部覆寫掉，
+          個別確認窗無法掛自訂 class，只能吃這裡的全域 .ant-modal-confirm。
+       ⚠️ 本檔是 .razor，CSS 裡的單一 at 符號一律要寫兩次（@@media / @@supports / @@keyframes）。
+       ⚠️ scoped CSS 裡 :root 無效，CSS 變數掛在最外層容器 class 上（同 Login.razor.css 手法）。
+       ══════════════════════════════════════════════════════════════════ */
+
+    /* ── 中和 AntDesign 自己的進場動畫 ──
+       AntD 把 antZoomIn 掛在 .ant-modal 上（.ant-zoom-enter 基底還有 transform: scale(0)），
+       不關掉的話會與我們掛在 .ant-modal-content 上的果凍動畫疊加，
+       實際彈跳幅度會比設計時選定的更誇張。離場動畫（antZoomOut）保留不動。 */
+    .ant-modal.ant-zoom-enter,
+    .ant-modal.ant-zoom-appear {
+        animation: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       共用果凍基底 —— 所有對話窗都吃這一層
+       個別的 *-modal class 只覆寫尺寸、版型，以及 --ov-radius / --ov-blur 這類參數。
+       ══════════════════════════════════════════════════════════════════ */
+
+    .ant-modal {
+        --ov-text: var(--app-text);
+        --ov-muted: var(--app-muted);
+        --ov-accent: var(--app-accent);
+        --ov-accent-dim: var(--app-accent-dim);
+        --ov-line: var(--app-line);
+        --ov-error: var(--app-error);
+        --ov-edge: var(--app-edge);
+        --ov-glow: var(--app-glow);
+        --ov-inner: var(--app-inner);
+        --ov-tint: var(--app-tint);
+        --ov-tint-glass: var(--app-tint-glass);
+        --ov-radius: 24px;
+        --ov-blur: 20px;
+    }
+
+    /* 果凍本體：半透明 + 內外亮邊，手法沿用 Login.razor.css 的 .login-card */
+    .ant-modal .ant-modal-content {
+        color: var(--ov-text) !important;
+        border: 2px solid var(--ov-edge) !important;
+        border-radius: var(--ov-radius) !important;
+        background: var(--ov-tint) !important;
+        box-shadow: inset 0 2px 4px #fff, inset 0 -4px 10px var(--ov-inner),
+                    0 0 0 4px var(--ov-glow), 0 20px 48px rgba(var(--app-shadow-rgb), 0.24) !important;
+        animation: ov-arrive 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* 毛玻璃只在瀏覽器支援時才降低不透明度，否則維持可讀的實底 */
+    @@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .ant-modal .ant-modal-content {
+            background: var(--ov-tint-glass) !important;
+            backdrop-filter: blur(var(--ov-blur)) saturate(1.15);
+            -webkit-backdrop-filter: blur(var(--ov-blur)) saturate(1.15);
+        }
+    }
+
+    /* 短版果凍。大表單窗另外覆寫成更誇張的 fm-arrive。 */
+    @@keyframes ov-arrive {
+        0% { opacity: 0; transform: scale(0.86, 0.94); }
+        50% { opacity: 1; transform: scale(1.02, 0.985); }
+        78% { transform: scale(0.995, 1.006); }
+        100% { transform: scale(1, 1); }
+    }
+
+    /* 勾選回彈 */
+    @@keyframes ov-jelly-check {
+        50% { transform: scale(1.14); }
+        100% { transform: scale(1); }
+    }
+
+    /* 標題列與按鈕列：不透明底會把毛玻璃切掉一整條，一律透明。
+       內圓角 = 外圓角扣掉邊框寬度，不然轉角會露出一小塊直角。 */
+    .ant-modal .ant-modal-header {
+        background: transparent !important;
+        border-bottom: 1px solid var(--ov-line) !important;
+        border-radius: calc(var(--ov-radius) - 3px) calc(var(--ov-radius) - 3px) 0 0 !important;
+    }
+
+    .ant-modal .ant-modal-title {
+        color: var(--ov-text) !important;
+        font-weight: 800 !important;
+    }
+
+    .ant-modal .ant-modal-close {
+        color: var(--ov-muted) !important;
+    }
+
+    .ant-modal .ant-modal-close:hover {
+        color: var(--ov-accent) !important;
+    }
+
+    .ant-modal .ant-modal-footer {
+        background: transparent !important;
+        border-top: 1px solid var(--ov-line) !important;
+        border-radius: 0 0 calc(var(--ov-radius) - 3px) calc(var(--ov-radius) - 3px) !important;
+    }
+
+    /* 沒有按鈕列的窗（「關於」用 Footer="null"）：下圓角要落在 body 上，否則會被切平。 */
+    .ant-modal .ant-modal-body:last-child {
+        border-radius: 0 0 calc(var(--ov-radius) - 3px) calc(var(--ov-radius) - 3px);
+    }
+
+    /* ── 輸入元件：圓角 ＋ 聚焦柔光 ── */
+    .ant-modal .ant-input,
+    .ant-modal .ant-input-affix-wrapper,
+    .ant-modal .ant-input-number,
+    .ant-modal .ant-picker,
+    .ant-modal .ant-select-selector {
+        border-radius: 14px !important;
+        background: rgba(255, 252, 254, 0.72) !important;
+        transition: border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+    }
+
+    .ant-modal .ant-input:focus,
+    .ant-modal .ant-input-focused,
+    .ant-modal .ant-input-affix-wrapper-focused,
+    .ant-modal .ant-select-focused .ant-select-selector,
+    .ant-modal .ant-picker-focused,
+    .ant-modal .ant-input-number-focused {
+        border-color: var(--ov-accent-dim) !important;
+        background: rgba(255, 249, 252, 0.94) !important;
+        box-shadow: 0 0 0 5px rgba(240, 146, 179, 0.2), inset 0 1px 2px #fff !important;
+    }
+
+    .ant-modal .ant-form-item-label > label {
+        color: var(--ov-text) !important;
+        font-weight: 500;
+    }
+
+    .ant-modal .ant-select-selection-item {
+        border-radius: 999px !important;
+    }
+
+    .ant-modal .ant-checkbox-checked .ant-checkbox-inner {
+        background-color: var(--ov-accent) !important;
+        border-color: var(--ov-accent) !important;
+        animation: ov-jelly-check 220ms ease-out;
+    }
+
+    /* ── 按鈕：膠囊圓角 ＋ Q 彈回饋 ── */
+    .ant-modal-footer .ant-btn,
+    .ant-modal-confirm-btns .ant-btn {
+        border-radius: 999px !important;
+        font-weight: 700;
+        transition: transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1.3), box-shadow 220ms ease;
+    }
+
+    .ant-modal-footer .ant-btn-primary,
+    .ant-modal-confirm-btns .ant-btn-primary {
+        border-color: transparent !important;
+        background: var(--app-primary-grad) !important;
+        text-shadow: 0 1px 2px rgba(93, 15, 48, 0.3);
+        box-shadow: inset 0 3px 5px rgba(255, 255, 255, 0.6), 0 8px 20px rgba(173, 45, 93, 0.2) !important;
+    }
+
+    @@media (hover: hover) and (pointer: fine) {
+        .ant-modal-footer .ant-btn:hover,
+        .ant-modal-confirm-btns .ant-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 26px rgba(173, 45, 93, 0.26) !important;
+        }
+    }
+
+    .ant-modal-footer .ant-btn:active,
+    .ant-modal-confirm-btns .ant-btn:active {
+        transform: scale(0.97);
+    }
+
+    /* ── 無障礙降級：比照 Login.razor.css 的 prefers-reduced-motion 區段 ── */
+    @@media (prefers-reduced-motion: reduce) {
+        .ant-modal .ant-modal-content,
+        .ant-modal .ant-checkbox-checked .ant-checkbox-inner {
+            animation: none !important;
+        }
+
+        .ant-modal .ant-input,
+        .ant-modal .ant-select-selector,
+        .ant-modal-footer .ant-btn,
+        .ant-modal-confirm-btns .ant-btn {
+            transition: none !important;
+        }
+
+        .ant-modal-footer .ant-btn:hover,
+        .ant-modal-footer .ant-btn:active,
+        .ant-modal-confirm-btns .ant-btn:hover,
+        .ant-modal-confirm-btns .ant-btn:active {
+            transform: none !important;
+        }
+    }
+
+    /* ══ 表單對話窗（大量資料輸入）══ 只覆寫尺寸、版型與更重的果凍參數。 */
+    .form-modal {
+        --ov-radius: 34px;
+        --ov-blur: 26px;
+        /* 大面積的窗透一點才不會壓迫，比基底再淡一階 */
+        --ov-tint-glass: rgba(255, 234, 243, 0.62);
+        width: 95vw !important;
+        /* .ant-modal 預設 max-width: calc(100vw - 32px)，這裡必須壓過它 */
+        max-width: 1400px !important;
+        /* 上下各留 2.5vh，讓遮罩透出來，果凍與毛玻璃才看得出來 */
+        top: 2.5vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    /* 標題列與按鈕列固定、中間捲動；果凍本體的邊框與陰影比基底更重一階 */
+    .form-modal .ant-modal-content {
+        height: 95vh !important;
+        max-height: 95vh !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        border-width: 3px !important;
+        box-shadow: inset 0 3px 5px #fff, inset 0 -6px 14px rgba(var(--app-inner-rgb), 0.5),
+                    0 0 0 6px rgba(var(--app-glow-rgb), 0.5), 0 28px 70px rgba(var(--app-shadow-rgb), 0.26) !important;
+        animation: fm-arrive 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* 大表單窗的進場：擠壓回彈（squash & stretch），幅度比基底的 ov-arrive 明顯 */
+    @@keyframes fm-arrive {
+        0% { opacity: 0; transform: scale(0.72, 0.86); }
+        45% { opacity: 1; transform: scale(1.035, 0.965); }
+        70% { transform: scale(0.985, 1.018); }
+        88% { transform: scale(1.006, 0.995); }
+        100% { transform: scale(1, 1); }
+    }
+
+    .form-modal .ant-modal-header {
+        flex-shrink: 0;
+        padding: 18px 28px !important;
+    }
+
+    .form-modal .ant-modal-title {
+        font-size: 1.15rem !important;
+    }
+
+    .form-modal .ant-modal-body {
+        flex: 1 !important;
+        /* 沒有這行，flex 子項不會縮，捲軸永遠不會出現 */
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        padding: 20px 28px !important;
+        /* 捲軸出現時版面不要橫跳 */
+        scrollbar-gutter: stable;
+    }
+
+    .form-modal .ant-modal-footer {
+        flex-shrink: 0;
+        padding: 14px 28px !important;
+    }
+
+    /* ── 區塊分組 ── */
+    .form-modal .form-section {
+        margin: 0 0 1.5rem;
+    }
+
+    .form-modal .form-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .form-modal .form-section-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+        margin: 0 0 0.9rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px dashed var(--ov-line);
+        color: var(--ov-accent);
+        font-size: 0.95rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+    }
+
+    .form-modal .form-section-hint {
+        color: var(--ov-muted);
+        font-size: 0.78rem;
+        font-weight: 400;
+    }
+
+    /* ── 2 欄 grid ──
+       AntD 的 FormItem 外層就是 .ant-form-item（單純的 block div），
+       直接當 grid item，不需要再包一層，也不要用 AntD 的 Row/Col。 */
+    .form-modal .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 1.75rem;
+        /* 左右兩欄各自量高，長驗證訊息只撐高自己那一格 */
+        align-items: start;
+    }
+
+    .form-modal .form-grid-single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .form-modal .form-grid > .ant-form-item {
+        /* 不可省：grid item 預設 min-width:auto，多選 Select 的 tag 一多就會撐破欄寬 */
+        min-width: 0;
+        /* AntD 預設 24px，兩欄排列時太鬆 */
+        margin-bottom: 1rem !important;
+    }
+
+    /* 不適合 2 欄的欄位（多行文字、檔案上傳、清單、權限矩陣…）獨占整行 */
+    .form-modal .form-grid > .form-field-full {
+        grid-column: 1 / -1;
+    }
+
+    .form-modal .form-field-hint {
+        margin-top: 0.3rem;
+        color: var(--ov-muted);
+        font-size: 0.8rem;
+        line-height: 1.5;
+    }
+
+    /* ── 驗證訊息（Blazor 的 ValidationMessage / ValidationSummary）── */
+    .form-modal .validation-message {
+        display: block;
+        margin-top: 0.3rem;
+        color: var(--ov-error);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        /* 長訊息換行，不要橫向撐破格子 */
+        overflow-wrap: anywhere;
+    }
+
+    .form-modal .validation-errors {
+        margin: 0 0 1rem;
+        padding: 0.75rem 1rem 0.75rem 2rem;
+        border-radius: 16px;
+        background: rgba(255, 214, 229, 0.75);
+        color: var(--ov-error);
+        font-size: 0.85rem;
+    }
+
+    /* ── 窄螢幕：塌成單欄 + 全螢幕 ── */
+    @@media (max-width: 767.98px) {
+        .form-modal {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            top: 0 !important;
+            margin: 0 !important;
+        }
+
+        .form-modal .ant-modal-content {
+            height: 100vh !important;
+            /* 行動瀏覽器的動態網址列 */
+            height: 100svh !important;
+            max-height: none !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+        }
+
+        .form-modal .ant-modal-header {
+            border-radius: 0 !important;
+            padding: 14px 16px !important;
+        }
+
+        .form-modal .ant-modal-body {
+            padding: 16px !important;
+        }
+
+        .form-modal .ant-modal-footer {
+            border-radius: 0 !important;
+            padding: 12px 16px !important;
+        }
+
+        .form-modal .form-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0;
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       小型確認窗（ModalService.ConfirmAsync）—— 不滿版
+       文案與參數一律由 Components/Commons/ConfirmDialog.cs 樣板決定。
+
+       ⚠️ 這裡的選擇器只能是全域的 .ant-modal-confirm：
+          AntDesign 的 Confirm 在內部把 ConfirmOptions.ClassName 無條件覆寫成
+          "ant-modal-confirm ant-modal-confirm-" + ConfirmType，
+          呼叫端給的 class 會被丟掉，所有確認窗只能一起變。
+       ⚠️ 預設寬度 416px 是 AntDesign 寫在 .ant-modal 上的 inline style，覆寫必須 !important。
+       ══════════════════════════════════════════════════════════════════ */
+
+    .ant-modal-confirm {
+        width: 440px !important;
+        max-width: 90vw !important;
+    }
+
+    /* 破壞性確認（刪除／清空／放棄變更）轉紅調。
+       ConfirmOptions.ClassName 既然無效，改以「確定鈕是 Danger」當 hook ——
+       ConfirmDialog.AskDestructiveAsync 一律會設 OkButtonProps.Danger。
+       :has() 不支援時只是退回粉梅（按鈕本身仍是紅的），屬漸進增強。 */
+    .ant-modal-confirm:has(.ant-btn-dangerous) {
+        --ov-accent: #b42318;
+        --ov-glow: rgba(255, 214, 214, 0.5);
+        --ov-inner: rgba(214, 120, 120, 0.4);
+        --ov-tint: rgba(255, 238, 238, 0.96);
+        --ov-tint-glass: rgba(255, 236, 236, 0.72);
+    }
+
+    /* 果凍本體與 380ms 短版進場都由基底提供，這裡不必重寫。
+       確認窗出現頻率高（每刪一筆就跳一次），動作太大或太久都會變成干擾，
+       基底的 ov-arrive 正好就是那個強度。 */
+    .ant-modal-confirm .ant-modal-body {
+        padding: 24px 26px 18px !important;
+    }
+
+    .ant-modal-confirm-body .ant-modal-confirm-title {
+        color: var(--ov-text) !important;
+        font-weight: 700 !important;
+    }
+
+    /* pre-line：「刪除選取」的確認與結果以換行列出各筆（0.9.132 起）；其他文案沒有換行，不受影響。 */
+    .ant-modal-confirm-body .ant-modal-confirm-content {
+        color: var(--ov-muted) !important;
+        line-height: 1.6;
+        white-space: pre-line;
+    }
+
+    .ant-modal-confirm-body > .anticon {
+        color: var(--ov-accent) !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       右下角通知（NotificationService）與頂部消息條（MessageService）
+
+       ⚠️ 圖示的語意色（成功綠／錯誤紅／警告橘／資訊藍）刻意**不動**：
+          為了視覺統一把錯誤訊息染成粉紅，等於拿掉使用者最先讀到的那個訊號。
+       ══════════════════════════════════════════════════════════════════ */
+
+    .ant-notification-notice {
+        border: 2px solid rgba(255, 255, 255, 0.9) !important;
+        border-radius: 18px !important;
+        background: rgba(var(--app-tint-rgb), 0.96) !important;
+        box-shadow: inset 0 2px 3px #fff, inset 0 -3px 8px rgba(var(--app-inner-rgb), 0.32),
+                    0 14px 34px rgba(var(--app-shadow-rgb), 0.22) !important;
+    }
+
+    .ant-notification-notice-message {
+        color: var(--app-text) !important;
+    }
+
+    .ant-notification-notice-description {
+        color: var(--app-muted) !important;
+        white-space: pre-line;
+    }
+
+    .ant-message-notice-content {
+        border: 2px solid rgba(255, 255, 255, 0.92) !important;
+        border-radius: 999px !important;
+        background: rgba(var(--app-tint-rgb), 0.96) !important;
+        color: var(--app-text) !important;
+        box-shadow: inset 0 2px 3px #fff, inset 0 -3px 7px rgba(var(--app-inner-rgb), 0.3),
+                    0 10px 26px rgba(var(--app-shadow-rgb), 0.2) !important;
+        padding: 9px 20px !important;
+    }
+
+    @@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .ant-notification-notice,
+        .ant-message-notice-content {
+            background: rgba(var(--app-tint-glass-rgb), 0.80) !important;
+            backdrop-filter: blur(14px) saturate(1.12);
+            -webkit-backdrop-filter: blur(14px) saturate(1.12);
+        }
+    }
+
+    /* 進場改成自家 keyframes：AntD 的 NotificationFadeIn 是用 left 位移，
+       換成 transform 才能加上回彈，也不會干擾版面計算。離場維持 AntD 原本的。 */
+    .ant-notification-fade-enter.ant-notification-fade-enter-active,
+    .ant-notification-fade-appear.ant-notification-fade-appear-active {
+        animation-name: notice-arrive !important;
+        animation-duration: 420ms !important;
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+    }
+
+    @@keyframes notice-arrive {
+        0% { opacity: 0; transform: translateX(36px) scale(0.96); }
+        62% { opacity: 1; transform: translateX(-4px) scale(1.012); }
+        100% { opacity: 1; transform: translateX(0) scale(1); }
+    }
+
+    .ant-message-notice {
+        animation: msg-arrive 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @@keyframes msg-arrive {
+        0% { opacity: 0; transform: translateY(-18px) scale(0.94, 1.04); }
+        58% { opacity: 1; transform: translateY(3px) scale(1.02, 0.98); }
+        100% { opacity: 1; transform: translateY(0) scale(1, 1); }
+    }
+
+    /* 離場時不要讓進場動畫再跑一次（AntD 的 MessageMoveOut 掛在同一個元素上） */
+    .ant-message-notice.ant-move-up-leave {
+        animation-name: MessageMoveOut;
+    }
+
+    /* ── 小浮層的無障礙降級 ── */
+    @@media (prefers-reduced-motion: reduce) {
+        .ant-modal-confirm .ant-modal-content,
+        .ant-message-notice,
+        .ant-notification-fade-enter.ant-notification-fade-enter-active,
+        .ant-notification-fade-appear.ant-notification-fade-appear-active {
+            animation: none !important;
+        }
+
+        .ant-modal-confirm .ant-modal-confirm-btns .ant-btn {
+            transition: none !important;
+        }
+
+        .ant-modal-confirm .ant-modal-confirm-btns .ant-btn:hover,
+        .ant-modal-confirm .ant-modal-confirm-btns .ant-btn:active {
+            transform: none !important;
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       其餘對話窗：唯讀明細窗、AI 分析窗、變更密碼、關於
+
+       這些 class **只負責尺寸與捲動版型** —— 果凍、毛玻璃、圓角、進場動畫、
+       標題列與按鈕列的配色，全部由上面的共用基底提供。
+       新增對話窗時同理：只寫尺寸，不要再複製一份果凍。
+       ══════════════════════════════════════════════════════════════════ */
+
+    /* AI analysis modal: near full screen with scrollable body (long read-only report)
+       .exception-ai-modal（AI 例外分析，0.9.68 起）共用同一組尺寸。 */
+    .log-ai-modal,
+    .exception-ai-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .log-ai-modal .ant-modal-content,
+        .exception-ai-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .log-ai-modal .ant-modal-header,
+        .exception-ai-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .log-ai-modal .ant-modal-body,
+        .exception-ai-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /* page help modal（操作說明）: near full screen。body 不捲動、padding 歸零 —— 捲軸交給右側內容欄，
+       左側章節導覽才固定不動。內文樣式在 PageHelpDialog.razor.css。 */
+    .page-help-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 3vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .page-help-modal .ant-modal-content {
+            height: 94vh !important;
+            max-height: 94vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .page-help-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .page-help-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
+    /* 窄視窗：真正滿版（頂欄在窄視窗隱藏說明鈕，這裡只服務「開著窗縮放視窗」）*/
+    @@media (max-width: 640.98px) {
+        .page-help-modal {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            top: 0 !important;
+        }
+
+            .page-help-modal .ant-modal-content {
+                height: 100vh !important;
+                max-height: 100vh !important;
+                border-radius: 0 !important;
+            }
+    }
+
+    /* exception log detail modal: large read-only view (long stack traces need internal scrolling) */
+    .exception-log-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .exception-log-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .exception-log-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .exception-log-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /* 排程作業的「執行紀錄」窗（0.9.96 起）：唯讀表格，比照例外明細窗接近滿版。 */
+    .scheduled-job-runs-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .scheduled-job-runs-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .scheduled-job-runs-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .scheduled-job-runs-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+/*
+       明細窗的內容樣式寫在這裡（全域）而非 ExceptionLogView.razor.css：
+       這些規則與 AntDesign 自己渲染的 .ant-modal-* 搭配使用，
+       而那些元素不帶檢視的 scope 屬性，scoped CSS（含 ::deep）打不到。
+    */
+    /* 明細窗上方的動作列（AI 分析按鈕，0.9.68 起） */
+    .exception-log-modal .exception-log-detail-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin: 0 0 0.75rem;
+    }
+
+    .exception-log-modal .exception-log-detail-list {
+        display: grid;
+        gap: 0.5rem;
+        margin: 0 0 1.25rem;
+    }
+
+    .exception-log-modal .exception-log-detail-list > div {
+        display: grid;
+        gap: 0.25rem 1rem;
+        grid-template-columns: 11rem 1fr;
+    }
+
+    .exception-log-modal .exception-log-detail-list dt {
+        color: var(--ov-muted);
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .exception-log-modal .exception-log-detail-list dd {
+        color: var(--ov-text);
+        font-size: 0.9rem;
+        margin: 0;
+        word-break: break-word;
+    }
+
+    .exception-log-modal .exception-log-detail-title {
+        color: var(--ov-accent);
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+    }
+
+    /* ⚠️ 刻意維持深色：堆疊追蹤是程式碼，深色等寬底最好讀。
+       配色與字型走 theme.css 的 --app-code-*，與日誌檢視展開列、健康監控日誌尾端同一組（0.9.70 起）；
+       圓角維持與果凍一致，讓它讀起來就是「一塊程式碼」。 */
+    .exception-log-modal .exception-log-stack {
+        background: var(--app-code-bg);
+        border: 1px solid var(--app-code-line);
+        border-radius: 14px;
+        color: var(--app-code-text);
+        color-scheme: dark;
+        font-family: var(--app-code-font);
+        font-size: 0.8rem;
+        line-height: 1.6;
+        margin: 0;
+        padding: 0.9rem 1rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    @@media (max-width: 640.98px) {
+        /* 窄螢幕沒有 11rem 可以留給標題，改成上下堆疊 */
+        .exception-log-modal .exception-log-detail-list > div {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* audit log detail modal: read-only, no stack trace so it needs less height than the exception one */
+    .audit-log-modal {
+        width: 72vw !important;
+        max-width: 72vw !important;
+        top: 8vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .audit-log-modal .ant-modal-content {
+            max-height: 84vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .audit-log-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .audit-log-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /*
+       明細窗的內容樣式寫在這裡（全域）而非 AuditLogView.razor.css：
+       這些規則與 AntDesign 自己渲染的 .ant-modal-* 搭配使用，
+       而那些元素不帶檢視的 scope 屬性，scoped CSS（含 ::deep）打不到。
+    */
+    .audit-log-modal .audit-log-detail-list {
+        display: grid;
+        gap: 0.5rem;
+        margin: 0 0 1.25rem;
+    }
+
+    .audit-log-modal .audit-log-detail-list > div {
+        display: grid;
+        gap: 0.25rem 1rem;
+        grid-template-columns: 11rem 1fr;
+    }
+
+    .audit-log-modal .audit-log-detail-list dt {
+        color: var(--ov-muted);
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .audit-log-modal .audit-log-detail-list dd {
+        color: var(--ov-text);
+        font-size: 0.9rem;
+        margin: 0;
+        word-break: break-word;
+    }
+
+    .audit-log-modal .audit-log-detail-title {
+        color: var(--ov-accent);
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+    }
+
+    .audit-log-modal .audit-log-detail-text {
+        color: var(--ov-text);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* 詳細內容（修改差異、查詢條件；0.9.131 起）可能很長：在窗內捲動，不把整個窗撐高 */
+    .audit-log-modal .audit-log-detail-content {
+        max-height: 45vh;
+        overflow: auto;
+    }
+
+    @@media (max-width: 640.98px) {
+        /* 窄螢幕沒有 11rem 可以留給標題，改成上下堆疊 */
+        .audit-log-modal .audit-log-detail-list > div {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* AI call log detail modal (0.9.72): large read-only view, prompt/response blocks scroll inside the body.
+       Content styles live in AiCallLogDetailModal.razor.css (they are rendered by the component itself). */
+    .ai-call-log-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .ai-call-log-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .ai-call-log-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .ai-call-log-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /* token usage detail modal: large read-only view */
+    .token-usage-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .token-usage-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .token-usage-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .token-usage-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+    /* 同 .exception-log-modal：與 .ant-modal-* 搭配的樣式一律寫在這裡（全域）。 */
+    .token-usage-modal .token-usage-detail-list {
+        display: grid;
+        gap: 0.35rem;
+        margin: 0 0 1rem;
+    }
+
+    .token-usage-modal .token-usage-detail-list > div {
+        border-bottom: 1px solid var(--ov-line);
+        display: grid;
+        gap: 0.25rem 1rem;
+        grid-template-columns: 18rem 1fr;
+        padding-bottom: 0.3rem;
+    }
+
+    .token-usage-modal .token-usage-detail-list dt {
+        color: var(--ov-muted);
+        font-size: 0.85rem;
+    }
+
+    .token-usage-modal .token-usage-detail-list dd {
+        color: var(--ov-text);
+        font-size: 0.9rem;
+        margin: 0;
+        word-break: break-word;
+    }
+
+    .token-usage-modal .token-usage-raw-list dt {
+        color: #b4222a;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.82rem;
+    }
+
+    .token-usage-modal .token-usage-detail-title {
+        border-top: 2px solid var(--ov-line);
+        color: var(--ov-accent);
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 1.25rem 0 0.6rem;
+        padding-top: 0.75rem;
+    }
+
+    .token-usage-modal .token-usage-detail-empty {
+        color: var(--ov-muted);
+        font-size: 0.88rem;
+    }
+
+    @@media (max-width: 640.98px) {
+        .token-usage-modal .token-usage-detail-list > div {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* 公告編輯窗（0.9.100 起）：小型表單。 */
+    .announcement-modal {
+        width: 620px !important;
+        max-width: 92vw !important;
+        top: 8vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    /* 資料保留與清理的「自訂清除」窗（0.9.134 起）：兩個選項＋預覽，窄窗即可。 */
+    .data-retention-purge-modal {
+        width: 520px !important;
+        max-width: 92vw !important;
+        top: 12vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    .data-retention-purge-modal .data-retention-purge-option {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .data-retention-purge-modal .data-retention-purge-preview {
+        border-top: 1px solid var(--ov-line);
+        margin-top: 0.5rem;
+        padding-top: 0.75rem;
+    }
+
+    .data-retention-purge-modal .data-retention-muted {
+        color: var(--ov-muted) !important;
+        font-size: 0.85rem;
+        margin-top: 0.25rem;
+    }
+
+    .data-retention-purge-modal .data-retention-error {
+        color: var(--ov-error);
+    }
+
+    .data-retention-purge-modal .data-retention-expected {
+        color: var(--ov-accent);
+    }
+
+    /* AI 提示詞的編輯與檢視窗（0.9.108 起）：提示詞動輒數十行，給寬一點；原文保留換行、長行折行。 */
+    .prompt-template-modal {
+        width: 900px !important;
+        max-width: 94vw !important;
+        top: 5vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    .prompt-template-modal .prompt-editor {
+        font-family: var(--app-code-font);
+        font-size: 0.85rem;
+        line-height: 1.6;
+    }
+
+    .prompt-template-modal .prompt-editor-hint {
+        color: var(--ov-muted);
+        font-size: 0.85rem;
+        margin: -0.5rem 0 0.75rem;
+    }
+
+    .prompt-template-modal .prompt-content {
+        border: 1px solid var(--ov-line);
+        border-radius: 12px;
+        font-family: var(--app-code-font);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        margin: 0;
+        max-height: 70vh;
+        overflow: auto;
+        padding: 0.75rem 1rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* 系統參數修改窗（0.9.98 起）：一次只改一個值的小窗。尺寸寫在這裡而不是 Modal 的 Width 參數，見速查表 §6.4。 */
+    .system-parameter-modal {
+        width: 560px !important;
+        max-width: 90vw !important;
+        top: 15vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    /* 使用者「複製」建立後的交付窗（0.9.127 起）：登入網址、帳號、密碼，原文保留換行。 */
+    .user-copy-result-modal {
+        width: 560px !important;
+        max-width: 90vw !important;
+        top: 15vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    .user-copy-result-modal .user-copy-result-text {
+        border: 1px solid var(--ov-line);
+        border-radius: 12px;
+        font-family: var(--app-code-font);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin: 0 0 0.75rem;
+        padding: 0.75rem 1rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    .user-copy-result-modal .user-copy-result-hint {
+        color: var(--ov-muted);
+        font-size: 0.85rem;
+    }
+
+    /* about modal: compact, auto height。
+       尺寸寫在這裡而不是 Modal 的 Width 參數，見速查表 §6.4。 */
+    .about-modal {
+        width: 520px !important;
+        max-width: 90vw !important;
+        top: 15vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+</style>

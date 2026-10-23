@@ -1,0 +1,138 @@
+﻿.splash-shell {
+    align-items: center;
+    background:
+        radial-gradient(circle at top left, rgba(var(--app-inner-rgb), 0.35), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(var(--app-glow-rgb), 0.6), transparent 30%),
+        linear-gradient(180deg, var(--app-tint) 0%, #fffafc 100%);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.splash-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--app-line);
+    border-radius: 28px;
+    box-shadow: 0 24px 60px rgba(var(--app-shadow-rgb), 0.16);
+    max-width: 760px;
+    padding: 2rem;
+    width: min(100%, 760px);
+}
+
+.splash-brand {
+    align-items: center;
+    display: flex;
+    gap: 1.5rem;
+}
+
+.splash-brand-image-wrap {
+    align-items: center;
+    background: linear-gradient(135deg, rgba(var(--app-inner-rgb), 0.3) 0%, var(--app-tint) 100%);
+    border-radius: 24px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex: 0 0 120px;
+    height: 120px;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.splash-brand-image {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.splash-brand-copy {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.splash-eyebrow {
+    color: var(--app-accent);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.splash-title {
+    color: var(--app-text);
+    font-size: clamp(1.8rem, 2.5vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    margin: 0;
+}
+
+.splash-description {
+    color: var(--app-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin: 0;
+    max-width: 42rem;
+}
+
+.splash-status {
+    align-items: center;
+    color: var(--app-text);
+    display: inline-flex;
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+    padding: 0.8rem 1rem;
+    background: rgba(255, 250, 252, 0.95);
+    border: 1px solid var(--app-line);
+    border-radius: 999px;
+    font-size: 0.92rem;
+    font-weight: 600;
+}
+
+.splash-status-dot {
+    animation: splash-pulse 1.2s ease-in-out infinite;
+    background: var(--app-accent);
+    border-radius: 999px;
+    display: inline-block;
+    height: 0.75rem;
+    width: 0.75rem;
+}
+
+@keyframes splash-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.45;
+        transform: scale(0.8);
+    }
+}
+
+@media (max-width: 640.98px) {
+    .splash-shell {
+        padding: 1rem;
+    }
+
+    .splash-card {
+        padding: 1.5rem;
+    }
+
+    .splash-brand {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .splash-brand-image-wrap {
+        flex-basis: auto;
+        height: 96px;
+        width: 96px;
+    }
+
+    .splash-status {
+        border-radius: 20px;
+        width: 100%;
+    }
+}

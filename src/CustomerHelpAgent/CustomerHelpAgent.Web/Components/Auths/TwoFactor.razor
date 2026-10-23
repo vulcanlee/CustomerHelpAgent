@@ -1,0 +1,39 @@
+@page "/Auths/TwoFactor"
+@layout NoFooterLayout
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>兩步驟驗證</PageTitle>
+
+<AuthShell Title="兩步驟驗證" Subtitle="請輸入驗證器 App 上目前顯示的 6 位數驗證碼；手機不在身邊時，可以改輸入一組備用碼。">
+    <EditForm Model="@Input" method="post" OnValidSubmit="SubmitAsync" FormName="two-factor">
+        <div class="form-group">
+            <label class="form-label" for="code">驗證碼或備用碼</label>
+            <input id="code" name="Input.Code" class="form-input" placeholder="例如 123456 或 ABCDE-FGH23"
+                   @bind="Input.Code" autocomplete="one-time-code" inputmode="text" autofocus />
+        </div>
+
+        @if (TwoFactorCookies.RememberDeviceDays > 0)
+        {
+            <div class="form-options">
+                <label class="remember-me">
+                    <InputCheckbox id="rememberDevice" name="Input.RememberDevice" @bind-Value="Input.RememberDevice" />
+                    <span>記住這台裝置 @TwoFactorCookies.RememberDeviceDays 天</span>
+                </label>
+            </div>
+        }
+
+        <div class="login-actions">
+            <button class="login-button" type="submit">驗證並登入</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert-danger error-message" role="alert">@message</div>
+        }
+    </EditForm>
+
+    <div class="auth-links">
+        <a class="auth-link" href="/Auths/Login">取消，回到登入頁</a>
+    </div>
+</AuthShell>

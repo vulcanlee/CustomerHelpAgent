@@ -1,0 +1,379 @@
+﻿.page {
+    background: var(--app-page);
+    min-height: 100vh;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    --sidebar-width: 100%;
+}
+
+main {
+    flex: 1 1 auto;
+    min-height: 100vh;
+    min-width: 0;
+    transition: margin 0.28s ease, width 0.28s ease;
+}
+
+.sidebar {
+    /* ⚠️ 頂端這層白色柔光原本是 0.85 —— 那是給淺色側邊欄用的。
+       深梅底上維持 0.85 會把上緣洗成近白，品牌文字（淺色字）直接看不見。
+       改深色面之後只留一點點光澤。 */
+    background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.10), transparent 42%),
+        var(--app-rail);
+    border-right: 1px solid rgba(var(--app-shadow-rgb), 0.55);
+    box-shadow: 14px 0 34px rgba(var(--app-shadow-rgb), 0.22);
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: width 0.28s ease, box-shadow 0.28s ease;
+    width: var(--sidebar-width);
+}
+
+.top-row {
+    background: rgba(255, 250, 252, 0.82);
+    border-bottom: 1px solid var(--app-line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 4.5rem;
+    backdrop-filter: blur(14px);
+}
+
+/* 頁名 ＋「操作說明」按鈕。窄視窗整組隱藏（與 ReviewSkills.AI 一致）。 */
+.top-row-heading {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 0.5rem;
+}
+
+.top-row-title {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.top-row-status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-left: auto;
+}
+
+.user-menu {
+    position: relative;
+}
+
+.user-menu-trigger {
+    align-items: center;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(var(--app-tint-rgb), 0.9) 100%);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-pill);
+    box-shadow: 0 10px 26px rgba(var(--app-shadow-rgb), 0.12);
+    color: var(--app-text);
+    cursor: pointer;
+    display: inline-flex;
+    gap: 0.75rem;
+    min-height: 3rem;
+    padding: 0.45rem 0.75rem 0.45rem 0.55rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.user-menu:hover .user-menu-trigger,
+.user-menu:focus-within .user-menu-trigger,
+.user-menu.user-menu-open .user-menu-trigger {
+    border-color: var(--app-accent-dim);
+    box-shadow: 0 14px 30px rgba(var(--app-accent-rgb), 0.18);
+    transform: translateY(-1px);
+}
+
+.user-menu-trigger:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+}
+
+.user-menu-icon {
+    align-items: center;
+    background: linear-gradient(135deg, rgba(var(--app-inner-rgb), 0.35) 0%, var(--app-tint) 100%);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-accent);
+    display: inline-flex;
+    height: 2rem;
+    justify-content: center;
+    width: 2rem;
+}
+
+/* ⚠️ 圖示大小只能從 MaterialIcon 的 Size 參數改：該元件會輸出行內的
+   style="font-size:…"，CSS 的 font-size 蓋不過去。0.9.16 已把本檔原本無效的
+   font-size 宣告全數移除。 */
+
+.user-menu-text {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.5rem;
+}
+
+.user-menu-name {
+    color: var(--app-text);
+    font-size: 0.95rem;
+    font-weight: 700;
+    max-width: 13rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 管理員標記不是警示，是身分 —— 轉為重點色。
+   真正的警示色留給登出（.user-menu-item-danger）。 */
+.user-menu-badge {
+    background: rgba(var(--app-accent-rgb), 0.08);
+    border: 1px solid rgba(var(--app-accent-rgb), 0.18);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.35rem 0.55rem;
+}
+
+.user-menu-caret {
+    color: var(--app-muted);
+    display: inline-flex;
+}
+
+.user-menu-dropdown {
+    background: rgba(255, 252, 253, 0.98);
+    border: 1px solid var(--app-line);
+    border-radius: 16px;
+    box-shadow: 0 18px 38px rgba(var(--app-shadow-rgb), 0.18);
+    min-width: 11rem;
+    opacity: 0;
+    padding: 0.4rem;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.55rem);
+    transform: translateY(-6px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 20;
+}
+
+.user-menu:hover .user-menu-dropdown,
+.user-menu:focus-within .user-menu-dropdown,
+.user-menu.user-menu-open .user-menu-dropdown {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.user-menu-item {
+    background: none;
+    border: none;
+    border-radius: 12px;
+    /* 0.9.30 更正：這裡原本也是 #b91c1c，讓「變更密碼」「關於」全都長得像危險動作。
+       危險色由 .user-menu-item-danger 負責。 */
+    color: var(--app-text);
+    cursor: pointer;
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    padding: 0.8rem 0.95rem;
+    text-align: left;
+    transition: background-color 0.18s ease, color 0.18s ease;
+    width: 100%;
+}
+
+.user-menu-item:hover,
+.user-menu-item:focus-visible {
+    background: var(--app-tint);
+    color: var(--app-accent);
+    outline: none;
+}
+
+.user-menu-item-danger {
+    color: #b91c1c;
+}
+
+.user-menu-item-danger:hover,
+.user-menu-item-danger:focus-visible {
+    background: rgba(254, 226, 226, 0.72);
+    color: #991b1b;
+}
+
+.top-row ::deep a,
+.top-row ::deep .btn-link {
+    color: var(--app-muted);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.top-row ::deep a:hover,
+.top-row ::deep .btn-link:hover {
+    color: var(--app-accent);
+}
+
+.top-row ::deep a:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 640.98px) {
+    .page.sidebar-collapsed .sidebar {
+        box-shadow: 0 10px 24px rgba(var(--app-shadow-rgb), 0.18);
+    }
+
+    .top-row {
+        padding-bottom: 0.75rem !important;
+        padding-top: 0.75rem !important;
+    }
+
+    .top-row-heading {
+        display: none;
+    }
+
+    .top-row-status {
+        width: 100%;
+    }
+
+    .user-menu {
+        width: 100%;
+    }
+
+    .user-menu-trigger {
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    .user-menu-name {
+        max-width: 9rem;
+    }
+
+    .top-row ::deep a,
+    .top-row ::deep .btn-link {
+        margin-left: 0;
+    }
+
+    article {
+        margin: 1rem;
+    }
+}
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+        --sidebar-width: 300px;
+    }
+
+    .page.sidebar-collapsed {
+        --sidebar-width: 64px;
+    }
+
+    .sidebar {
+        height: 100vh;
+        position: sticky;
+        top: 0;
+    }
+
+    .page.sidebar-collapsed .sidebar {
+        box-shadow: 10px 0 26px rgba(var(--app-shadow-rgb), 0.18);
+        overflow: visible;
+        /* 必須高於 .top-row（20），否則收合側邊欄的飛出選單會被頂部列蓋掉。 */
+        z-index: 30;
+    }
+
+    .top-row {
+        position: sticky;
+        top: 0;
+        /* 必須高於 AntDesign 表格的固定欄（2）、sticky 標頭（3）與容器邊框（4）。
+           本層帶 z-index 即建立 stacking context，.user-menu-dropdown 的 20 只在其內部有效，
+           整個頂部列是以這個數值參與根層級堆疊 —— 調小會讓使用者選單被固定「操作」欄蓋住。 */
+        z-index: 20;
+    }
+
+    .top-row.auth ::deep a:first-child {
+        flex: 1;
+        text-align: right;
+        width: 0;
+    }
+
+    .top-row,
+    article {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+}
+
+/* 全站唯一的內容卡片：每個頁面的工具列與表格都裝在這裡面。
+   果凍的「外亮邊」手法沿用 OverlayStyles 的 .ant-modal-content，
+   但不加毛玻璃 —— 資料表底下沒有東西需要透出來，模糊只會讓文字變糊。 */
+article {
+    margin: 1.5rem;
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    box-shadow: 0 0 0 4px var(--app-glow), var(--app-shadow);
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+.about-list {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.about-row {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--app-line);
+}
+
+.about-row:last-child {
+    border-bottom: none;
+}
+
+.about-term {
+    margin: 0;
+    color: var(--app-muted);
+    font-size: 0.875rem;
+}
+
+.about-value {
+    margin: 0;
+    color: var(--app-text);
+    word-break: break-word;
+}
+
+/* 姓名縮寫（0.9.102 起取代人像圖示）：沿用 .user-menu-icon 的圓形底色。 */
+.user-menu-initials {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1;
+}

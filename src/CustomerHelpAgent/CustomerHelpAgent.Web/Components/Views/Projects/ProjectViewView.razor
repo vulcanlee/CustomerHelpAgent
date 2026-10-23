@@ -1,0 +1,294 @@
+﻿@using CustomerHelpAgent.Share.Helpers
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="project-view-toolbar">
+            <div class="project-view-toolbar-left">
+                @if (!showDeleted)
+                {
+                    <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Create">
+                        <ToolbarIconButton Title="新增" Icon="add"
+                                           OnClick="@(async () => await OnAddAsync(true))" />
+                    </RequirePermission>
+                }
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                @* 0.9.107 起：依目前的搜尋、篩選、排序與「顯示已刪除」匯出（團隊範圍與畫面相同）。 *@
+                <ToolbarIconButton Title="匯出 Excel" Icon="file_download"
+                                   OnClick="@(async () => await OnExportExcelAsync())" />
+                @if (!showDeleted)
+                {
+                    <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Delete">
+                        <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                           OnClick="@(async () => await OnBatchDeleteAsync())" />
+                    </RequirePermission>
+                }
+                <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Delete">
+                    @* 0.9.94 起刪除為軟刪除：切換到已刪除的資料，可還原或永久刪除。 *@
+                    <ToolbarIconButton Title="@(showDeleted ? "返回清單" : "顯示已刪除")"
+                                       Icon="@(showDeleted ? "arrow_back" : "auto_delete")"
+                                       OnClick="@(async () => await OnToggleDeletedAsync())" />
+                </RequirePermission>
+            </div>
+            <div class="project-view-toolbar-right">
+                @if (!showDeleted)
+                {
+                    <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                            Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
+                            Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                        @foreach (var c in availableCategories)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                        }
+                    </Select>
+                    <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                            Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
+                            Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                        @foreach (var t in availableTeams)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                        }
+                    </Select>
+                }
+                <Input class="project-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <ToolbarIconButton Title="清空搜尋" Icon="close"
+                                       OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })" />
+                }
+                <ToolbarIconButton Title="搜尋" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+            </div>
+        </div>
+        <div class="project-view-table-wrap">
+            <Table @ref="table"
+                   TItem="ProjectAdapterModel"
+                   Class="project-view-table"
+                   RemoteDataSource="true"
+                   DataSource="@projectAdapterModels"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total"
+                   @bind-SelectedRows="selectedRows">
+                @* 0.9.132 起：勾選後可「刪除選取」；已刪除的資料不可勾選。 *@
+                @if (!showDeleted)
+                {
+                    <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Delete">
+                        <Selection />
+                    </RequirePermission>
+                }
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Title)" Title="標題" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Description)" Title="描述" />
+                <Column TData="DateTime?" DataIndex="@nameof(ProjectAdapterModel.StartDate)" Title="開始日期" Sortable />
+                <Column TData="DateTime?" DataIndex="@nameof(ProjectAdapterModel.EndDate)" Title="結束日期" Sortable />
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Status)" Title="狀態" Sortable>
+                    <StatusPill Text="@context.Status" Tone="@ResolveStatusTone(context.Status)" />
+                </Column>
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Priority)" Title="優先級" Sortable />
+                <Column TData="int" DataIndex="@nameof(ProjectAdapterModel.CompletionPercentage)" Title="完成百分比" Sortable />
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Owner)" Title="負責人" Sortable />
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.CategoriesText)" Title="分類" />
+                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.TeamsText)" Title="團隊" />
+                <Column TData="DateTime" DataIndex="@nameof(ProjectAdapterModel.CreatedAt)" Title="建立時間" Sortable />
+                <Column TData="DateTime" DataIndex="@nameof(ProjectAdapterModel.UpdatedAt)" Title="更新時間" Sortable />
+                @if (showDeleted)
+                {
+                    <Column TData="DateTime?" DataIndex="@nameof(ProjectAdapterModel.DeletedAt)" Title="刪除時間" />
+                    <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.DeletedBy)" Title="刪除者" />
+                }
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    @if (showDeleted)
+                    {
+                        <Space>
+                            <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Delete">
+                                <SpaceItem>
+                                    <CrudActionButton Title="還原" Icon="restore_from_trash"
+                                                      OnClick="@(async () => await OnRestoreAsync(@context))" />
+                                </SpaceItem>
+                                <SpaceItem>
+                                    <CrudActionButton Title="永久刪除" Icon="delete_forever" Danger
+                                                      OnClick="@(async () => await OnPurgeAsync(@context))" />
+                                </SpaceItem>
+                            </RequirePermission>
+                        </Space>
+                    }
+                    else
+                    {
+                        <Space>
+                            <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Edit">
+                                <SpaceItem>
+                                    <CrudActionButton Title="修改" Icon="edit"
+                                                      OnClick="@(async () => await OnEditAsync(context))" />
+                                </SpaceItem>
+                            </RequirePermission>
+                            <RequirePermission Page="@MagicObjectHelper.角色_專案項目" Action="@PermissionActions.Delete">
+                                <SpaceItem>
+                                    <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                      OnClick="@(async () => await OnDeleteAsync(context))" />
+                                </SpaceItem>
+                            </RequirePermission>
+                        </Space>
+                    }
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    @*
+        大量資料輸入對話窗，規範見 docs/architecture/對話窗 UI 設計規範.md。
+        ⚠️ EditForm 上絕不可掛鍵盤事件（§6.3，ModalKeyboardConventionTests 守門）。
+    *@
+    <Modal Title="@modalTitle"
+           Class="form-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("儲存")"
+           CancelText="@("取消")"
+           OnOk="OnModalOKHandleAsync"
+           OnCancel="OnModalCancelHandleAsync">
+        <EditForm Model="@CurrentRecord" Context="editContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <InputWatcher EditContextActionChanged="OnEditContestChanged" />
+
+            <AntDesign.Form TModel="ProjectAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+
+                <FormSection Title="基本資料">
+                    <FormItem Label="標題" Required>
+                        <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入專案標題" />
+                        <ValidationMessage For="() => CurrentRecord.Title" />
+                    </FormItem>
+
+                    <FormItem Label="負責人" Required>
+                        <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人名稱" />
+                        <ValidationMessage For="() => CurrentRecord.Owner" />
+                    </FormItem>
+
+                    @* 多行文字獨占整行：擠在半欄裡會逼使用者在窄框裡讀長句。 *@
+                    <FormItem Label="描述" Class="form-field-full">
+                        <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入專案描述" />
+                        <ValidationMessage For="() => CurrentRecord.Description" />
+                    </FormItem>
+                </FormSection>
+
+                <FormSection Title="排程與進度">
+                    <FormItem Label="開始日期">
+                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
+                        <ValidationMessage For="() => CurrentRecord.StartDate" />
+                    </FormItem>
+
+                    <FormItem Label="結束日期">
+                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.EndDate" AllowClear="true" Style="width: 100%;" />
+                        <ValidationMessage For="() => CurrentRecord.EndDate" />
+                    </FormItem>
+
+                    <FormItem Label="狀態" Required>
+                        <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
+                            @foreach (var status in StatusOptions)
+                            {
+                                <SelectOption Value="@status">@status</SelectOption>
+                            }
+                        </Select>
+                        <ValidationMessage For="() => CurrentRecord.Status" />
+                    </FormItem>
+
+                    <FormItem Label="優先級" Required>
+                        <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
+                            @foreach (var priority in PriorityOptions)
+                            {
+                                <SelectOption Value="@priority">@priority</SelectOption>
+                            }
+                        </Select>
+                        <ValidationMessage For="() => CurrentRecord.Priority" />
+                    </FormItem>
+
+                    <FormItem Label="完成百分比" Required>
+                        <AntDesign.InputNumber TValue="int" @bind-Value="CurrentRecord.CompletionPercentage" Min="0" Max="100" Step="1" Style="width: 100%;" />
+                        <ValidationMessage For="() => CurrentRecord.CompletionPercentage" />
+                    </FormItem>
+
+                </FormSection>
+
+                <FormSection Title="分類與團隊" Hint="多選欄位獨占整行">
+                    <FormItem Label="分類" Class="form-field-full">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var c in modalCategoryOptions)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@c">@CategoryOptionLabel(c)</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="團隊" Class="form-field-full">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
+                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var t in AssignableTeams)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                </FormSection>
+
+                @* 檔案清單是縱向的，橫向切一半只會兩邊都不好讀 —— 整區走單欄。 *@
+                <FormSection Title="專案附件" SingleColumn="true">
+                    <FormItem Label="新增附件">
+                        <InputFile OnChange="OnProjectFilesSelectedAsync" multiple />
+                        <div class="form-field-hint">可一次選擇多個檔案，每個檔案上限 1GB。</div>
+                    </FormItem>
+
+                    @if (pendingUploadFiles.Count > 0)
+                    {
+                        <FormItem Label="待上傳檔案">
+                            <ul class="list-group">
+                                @foreach (var file in pendingUploadFiles)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>@file.File.Name (@FormatFileSize(file.File.Size))</span>
+                                        <CrudActionButton Title="移除" Icon="close" Danger
+                                                          OnClick="@(() => RemovePendingFile(file.Id))" />
+                                    </li>
+                                }
+                            </ul>
+                        </FormItem>
+                    }
+
+                    @if (CurrentRecord.Files.Count > 0)
+                    {
+                        <FormItem Label="已上傳檔案">
+                            <ul class="list-group">
+                                @foreach (var file in CurrentRecord.Files)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <a href="@GetProjectFileDownloadUrl(file.Id)" target="_blank">@file.OriginalFileName</a>
+                                        <span>
+                                            @FormatFileSize(file.FileSize)
+                                            <CrudActionButton Title="移除" Icon="close" Danger
+                                                              OnClick="@(() => RemoveExistingFile(file.Id))" />
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </FormItem>
+                    }
+                </FormSection>
+            </AntDesign.Form>
+        </EditForm>
+    </Modal>
+}

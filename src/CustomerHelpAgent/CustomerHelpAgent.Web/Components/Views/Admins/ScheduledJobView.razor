@@ -1,0 +1,138 @@
+@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Web.Scheduling
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="scheduled-job-toolbar">
+            <div class="scheduled-job-toolbar-left">
+                <span class="scheduled-job-hint">時間依伺服器本地時區；執行時間在 appsettings 的 ScheduledJobSettings 設定。</span>
+            </div>
+            <div class="scheduled-job-toolbar-right">
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+            </div>
+        </div>
+
+        @if (overview is { SchedulingEnabled: false })
+        {
+            <div class="alert alert-warning scheduled-job-alert" role="alert">
+                排程總開關已關閉（ScheduledJobSettings:Enabled = false）：作業不會依排程執行，也不會補跑；仍可按「立即執行」。
+            </div>
+        }
+
+        @if (overview?.SettingsError is { } settingsError)
+        {
+            <div class="alert alert-danger scheduled-job-alert" role="alert">
+                排程設定有誤，目前沿用上一份正確的設定：@settingsError
+            </div>
+        }
+
+        <div class="scheduled-job-table-wrap">
+            <Table TItem="ScheduledJobOverviewItem"
+                   Class="scheduled-job-table"
+                   DataSource="@(overview?.Items ?? [])"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   HidePagination="true">
+                <ColumnDefinitions>
+                    <Column TData="string" Title="作業">
+                        <div class="scheduled-job-name">@context.DisplayName</div>
+                        <div class="scheduled-job-description">@context.Description</div>
+                    </Column>
+                    <Column TData="string" Title="執行時間" Width="110">
+                        <code class="scheduled-job-cron">@context.Cron</code>
+                    </Column>
+                    <Column TData="string" Title="下次執行" Width="150">
+                        @if (context.NextRunLocal is { } next)
+                        {
+                            @next.ToString("yyyy-MM-dd HH:mm")
+                        }
+                        else
+                        {
+                            <span class="scheduled-job-muted">@(context.IsEnabled ? "排程已關閉" : "已停用")</span>
+                        }
+                    </Column>
+                    <Column TData="string" Title="上次執行" Width="260">
+                        @if (context.LastRun is { } run)
+                        {
+                            <div class="scheduled-job-last-run">
+                                <StatusPill Text="@StatusText(run.Status)" Tone="@ToneOf(run.Status)" />
+                                <span>@ToLocalText(run.StartedAtUtc)</span>
+                                @if (run.DurationMs is { } duration)
+                                {
+                                    <span class="scheduled-job-muted">@DurationText(duration)</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(run.Message))
+                            {
+                                <div class="scheduled-job-message">@run.Message</div>
+                            }
+                        }
+                        else
+                        {
+                            <span class="scheduled-job-muted">尚未執行</span>
+                        }
+                    </Column>
+                    <Column TData="bool" Title="啟用" Width="90">
+                        <Switch Value="@context.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用"
+                                OnChange="@(async (bool enabled) => await OnToggleEnabledAsync(context, enabled))" />
+                    </Column>
+                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="立即執行" Icon="play_arrow"
+                                                  Disabled="@(context.IsQueued || IsRunning(context))"
+                                                  OnClick="@(async () => await OnTriggerAsync(context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="執行紀錄" Icon="history"
+                                                  OnClick="@(async () => await OnShowRunsAsync(context))" />
+                            </SpaceItem>
+                        </Space>
+                    </ActionColumn>
+                </ColumnDefinitions>
+            </Table>
+        </div>
+
+        @*
+            執行紀錄窗：唯讀、不含 EditForm，Esc 直接交給 Modal 的 Keyboard 處理（速查 §6.3）。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的 .scheduled-job-runs-modal，刻意不設 Width（速查 §6.4）。
+        *@
+        <Modal Title="@runsTitle"
+               Class="scheduled-job-runs-modal"
+               @bind-Visible="@runsVisible"
+               Keyboard="true"
+               Footer="null"
+               OnCancel="@(() => runsVisible = false)">
+            <Table TItem="JobRunAdapterModel"
+                   DataSource="@runs"
+                   Loading="@isRunsLoading"
+                   Size="TableSize.Small"
+                   PageSize="20">
+                <ColumnDefinitions Context="item">
+                    <Column TData="string" Title="開始" Width="160">@ToLocalText(item.StartedAtUtc)</Column>
+                    <Column TData="string" Title="結果" Width="90">
+                        <StatusPill Text="@StatusText(item.Status)" Tone="@ToneOf(item.Status)" />
+                    </Column>
+                    <Column TData="string" Title="觸發" Width="120">
+                        @TriggerText(item.Trigger)@(item.TriggeredByAccount is { } account ? $"（{account}）" : string.Empty)
+                    </Column>
+                    <Column TData="string" Title="耗時" Width="90">@(item.DurationMs is { } d ? DurationText(d) : "—")</Column>
+                    <Column TData="string" Title="訊息">@(item.Message ?? "—")</Column>
+                    <Column TData="string" Title="追蹤碼" Width="110">@(item.TraceId ?? "—")</Column>
+                </ColumnDefinitions>
+            </Table>
+        </Modal>
+    </div>
+}

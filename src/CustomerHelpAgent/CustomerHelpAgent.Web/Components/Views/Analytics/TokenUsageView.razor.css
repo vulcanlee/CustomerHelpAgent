@@ -1,0 +1,360 @@
+.token-usage-intro {
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 10px;
+    color: var(--app-muted);
+    font-size: 0.86rem;
+    line-height: 1.75;
+    margin-bottom: 0.9rem;
+    padding: 0.85rem 1.1rem;
+}
+
+.token-usage-intro p {
+    margin: 0 0 0.35rem;
+}
+
+.token-usage-intro p:last-child {
+    margin-bottom: 0;
+}
+
+.token-usage-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.token-usage-toolbar-left,
+.token-usage-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.token-usage-account-input {
+    width: 130px;
+}
+
+.token-usage-purge {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+/* 明細頁籤欄位較多，讓表格自己橫向捲動而不是把整頁撐寬。 */
+.token-usage-table-wrap {
+    overflow-x: auto;
+}
+
+@media (max-width: 640.98px) {
+    .token-usage-account-input {
+        width: 100%;
+    }
+}
+
+/*
+    未定價標記。刻意用橘色而不是紅色：那不是錯誤，只是「這筆算不出費用」。
+    ⚠️ TokenUsageGroupTable.razor.css 也有一份同名規則 —— Blazor 的 CSS 隔離以元件為界，
+    這份套不到子元件的 DOM 上，兩邊都要各自宣告。
+*/
+.token-usage-unpriced {
+    color: #d46b08;
+}
+
+/* ── 統計卡片（上排「篩選範圍合計」與下排「最近 N 天」共用）──────────────
+   兩排必須長得像，所以外觀只有一份基底 .token-usage-stat-card；
+   差別只在下排可點（游標、hover、焦點框、選中狀態）。
+
+   顏色一律走 var(--app-*)：色碼字面量只能出現在 theme.css，由
+   ThemeConventionTests.PaletteHexes_ShouldOnlyLiveInThemeCss 守門。 */
+.token-usage-totals,
+.token-usage-ranges {
+    margin-bottom: 0.75rem;
+}
+
+/* AI 用量上限（0.9.109 起）：一行一個上限，窄螢幕自動換行。 */
+.token-usage-quota {
+    margin-bottom: 0.75rem;
+}
+
+.token-usage-quota-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+}
+
+.token-usage-quota-item {
+    align-items: center;
+    display: inline-flex;
+    font-size: 0.88rem;
+    gap: 0.4rem;
+}
+
+.token-usage-cards-caption {
+    color: var(--app-muted);
+    font-size: 0.82rem;
+    margin-bottom: 0.4rem;
+}
+
+.token-usage-total-cards,
+.token-usage-range-cards {
+    display: grid;
+    gap: 0.6rem;
+}
+
+/* 上排四張（輸入／輸出／合計／花費），下排三張（近 1／7／30 天）。 */
+.token-usage-total-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.token-usage-range-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.token-usage-stat-card {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+}
+
+/*
+    下排才可點。用 <button> 而不是 <div>：可鍵盤聚焦、Enter/Space 直接觸發，
+    不必自己補 tabindex 與 keydown。這不是 AntDesign Button，與 theme.css 的 .ant-* 覆寫無關。
+
+    ⚠️ 上排是 <article>，刻意沒有游標與 hover —— 那排沒有東西可套用，
+    給了互動感只會讓人去點然後沒反應。
+*/
+.token-usage-range-card {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.token-usage-range-card:hover {
+    border-color: var(--app-accent-dim);
+    box-shadow: var(--app-shadow);
+}
+
+.token-usage-range-card:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+}
+
+.token-usage-range-card.is-active {
+    background: var(--app-tint);
+    border-color: var(--app-accent);
+}
+
+.token-usage-stat-label {
+    color: var(--app-muted);
+    font-size: 0.82rem;
+}
+
+.token-usage-stat-value {
+    color: var(--app-text);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.token-usage-stat-meta {
+    color: var(--app-muted);
+    font-size: 0.78rem;
+}
+
+/* 子集說明（「快取是輸入的折扣子集…」）刻意比 meta 再淡一階：
+   它是註解，不是數據，不該與數字爭視線。 */
+.token-usage-stat-note {
+    color: var(--app-muted);
+    font-size: 0.72rem;
+    opacity: 0.85;
+}
+
+/* ── 趨勢圖 ────────────────────────────────────────────────────────
+   行內 SVG 折線圖，座標由 TokenUsageTrendChart 算好；本檔只管顏色與線寬。
+   專案刻意不引入任何圖表函式庫。顏色與「每日趨勢」的兩根長條同一組。 */
+.token-usage-chart-caption {
+    color: var(--app-muted);
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.token-usage-chart {
+    border-bottom: 1px solid var(--app-line);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+}
+
+.token-usage-chart-title {
+    color: var(--app-text);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.token-usage-chart-svg {
+    display: block;
+    height: auto;
+    width: 100%;
+}
+
+.token-usage-chart-grid {
+    stroke: var(--app-line);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.token-usage-chart-tick {
+    fill: var(--app-muted);
+    font-size: 12px;
+}
+
+.token-usage-chart-line {
+    fill: none;
+    stroke-linejoin: round;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.token-usage-chart-hit {
+    fill: transparent;
+}
+
+.token-usage-chart-point:hover .token-usage-chart-dot {
+    r: 5;
+}
+
+.token-usage-chart-cost .token-usage-chart-line {
+    stroke: var(--app-accent);
+}
+
+.token-usage-chart-cost .token-usage-chart-dot {
+    fill: var(--app-accent);
+}
+
+.token-usage-chart-count .token-usage-chart-line {
+    stroke: var(--app-accent-dim);
+}
+
+.token-usage-chart-count .token-usage-chart-dot {
+    fill: var(--app-accent-dim);
+}
+
+/* ── 每日趨勢 ────────────────────────────────────────────────────────
+   純 CSS 長條：長度由行內 style="width:…" 給（見 BarWidth），
+   本檔只管顏色、高度與圓角。專案刻意不引入任何圖表函式庫。 */
+.token-usage-trend-note,
+.token-usage-trend-empty {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.token-usage-trend-legend {
+    align-items: center;
+    color: var(--app-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+.token-usage-trend-key {
+    border-radius: 2px;
+    display: inline-block;
+    height: 0.6rem;
+    width: 1.1rem;
+}
+
+.token-usage-trend-key-cost {
+    background: var(--app-accent);
+}
+
+.token-usage-trend-key-count {
+    background: var(--app-accent-dim);
+    margin-left: 0.8rem;
+}
+
+.token-usage-trend-hint {
+    margin-left: auto;
+}
+
+.token-usage-trend-row {
+    align-items: center;
+    border-bottom: 1px solid var(--app-line);
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: 6.5rem 1fr 7rem 5rem 4rem;
+    padding: 0.3rem 0;
+}
+
+.token-usage-trend-date {
+    color: var(--app-muted);
+    font-size: 0.8rem;
+}
+
+.token-usage-trend-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.token-usage-trend-track {
+    background: rgba(var(--app-accent-rgb), 0.08);
+    border-radius: 3px;
+    display: block;
+    height: 0.5rem;
+    overflow: hidden;
+}
+
+.token-usage-trend-bar {
+    border-radius: 3px;
+    display: block;
+    height: 100%;
+}
+
+.token-usage-trend-bar-cost {
+    background: var(--app-accent);
+}
+
+.token-usage-trend-bar-count {
+    background: var(--app-accent-dim);
+}
+
+.token-usage-trend-cost,
+.token-usage-trend-count,
+.token-usage-trend-calls {
+    color: var(--app-text);
+    font-size: 0.82rem;
+    text-align: right;
+}
+
+/* 上排四欄在中等寬度先降成兩欄，數字才不會被擠到換行。 */
+@media (max-width: 1200.98px) {
+    .token-usage-total-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 860.98px) {
+    .token-usage-total-cards,
+    .token-usage-range-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .token-usage-trend-row {
+        grid-template-columns: 5rem 1fr 6.5rem;
+    }
+
+    .token-usage-trend-count,
+    .token-usage-trend-calls {
+        display: none;
+    }
+}

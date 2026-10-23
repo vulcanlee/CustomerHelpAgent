@@ -1,0 +1,16 @@
+/*
+    ⚠️ 這條規則必須留在本元件自己的 scoped CSS 裡。
+    TokenUsageView.razor.css 也有同名的 .token-usage-table-wrap，但 Blazor 的 CSS 隔離
+    是以元件為界（b-xxxx 屬性），那份規則套不到這個子元件的 DOM 上，
+    四個統計頁籤就會把整頁撐寬、在窄螢幕出現水平捲軸。
+*/
+.token-usage-table-wrap {
+    overflow-x: auto;
+}
+
+/* ⚠️ 同 .token-usage-table-wrap 的理由：TokenUsageView.razor.css 那份套不到這裡。 */
+.token-usage-unpriced {
+    color: #d46b08;
+    font-size: 0.85em;
+    margin-left: 0.25rem;
+}

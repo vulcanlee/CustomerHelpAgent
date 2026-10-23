@@ -1,0 +1,44 @@
+﻿.role-view-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.role-view-toolbar-left,
+.role-view-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.role-view-search-input {
+    width: 260px;
+}
+
+.role-view-sort-field {
+    width: 120px;
+}
+
+.role-view-sort-direction {
+    width: 120px;
+}
+
+.role-permission-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.role-permission-group + .role-permission-group {
+    border-top: 1px solid var(--app-line);
+}
+
+.role-permission-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding-left: 28px;
+}

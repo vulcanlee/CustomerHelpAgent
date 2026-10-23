@@ -1,0 +1,83 @@
+﻿@using CustomerHelpAgent.Web.Diagnostics
+@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+@code {
+    private LoggingErrorBoundary? overlayBoundary;
+
+    // AntDesign 語系只在啟動時設定一次（AddConfiguredLocalization）。⚠️ 不要在這裡依目前文化呼叫 LocaleProvider.SetLocale：
+    // 它會改到整個行程的預設 UI 文化（0.9.136 前每次渲染都呼叫）。
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    // 浮層的錯誤邊界一旦觸發，換頁時自動復原，讓對話窗與通知重新可用。
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(() => overlayBoundary?.Recover());
+    }
+
+    private void ReloadPage() => NavigationManager.Refresh(forceReload: true);
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}
+
+<ConfigProvider>
+    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            @* 最後一道網：接住並記錄所有元件內未處理的例外，避免使用者只看到空白畫面而日誌毫無痕跡。 *@
+            <LoggingErrorBoundary>
+                <ChildContent>
+                    @*
+                        AuthorizeRouteView 讓頁面上的 [Authorize] 在 circuit 內導覽時也生效（HTTP 層的閘門只管整頁請求）。
+                        驗證中與未授權時一律不渲染任何內容，避免頁面先閃出來再被導走。
+                    *@
+                    <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                        <Authorizing></Authorizing>
+                        <NotAuthorized>
+                            <CustomerHelpAgent.Web.Components.Auths.RedirectToLogin />
+                        </NotAuthorized>
+                    </AuthorizeRouteView>
+                    <FocusOnNavigate RouteData="routeData" Selector="h1" />
+                </ChildContent>
+                <ErrorContent Context="exception">
+                    <div class="alert alert-danger" role="alert">
+                        <strong>這個頁面發生未預期的錯誤。</strong>
+                        錯誤已記錄，請重新整理頁面；若持續發生請聯絡系統管理員@TraceCode.Suffix(TraceCode.FromException(exception))。
+                    </div>
+                </ErrorContent>
+            </LoggingErrorBoundary>
+        </Found>
+    </Router>
+
+    @*
+        AntDesign 的對話窗、確認窗、通知與消息條全部渲染在這個 AntContainer 底下，
+        與 layout 無關。它們的全域樣式因此也必須掛在同一層 —— 掛在 layout 或各檢視裡，
+        只要有頁面用了別的 layout（登入頁的 NoFooterLayout、首頁的 EmptyLayout）就會吃不到。
+        ⚠️ OverlayStyles 全專案只能在這裡渲染一次，由 FormModalConventionTests 守門。
+    *@
+    <OverlayStyles />
+
+    @*
+        AntContainer 在上面頁面的錯誤邊界之外。0.9.77 之前，確認窗、通知、消息條內的未處理例外
+        會讓整個 circuit 中斷（畫面突然沒反應），只留下一行框架日誌。
+        這一層接住並記錄它，顯示明確的提示；換頁時自動復原（見 OnLocationChanged）。
+        由 FormModalConventionTests.AntContainer_ShouldBeWrappedInErrorBoundary 守門。
+    *@
+    <LoggingErrorBoundary @ref="overlayBoundary">
+        <ChildContent>
+            <AntContainer />
+        </ChildContent>
+        <ErrorContent Context="exception">
+            <div class="alert alert-danger overlay-error-banner" role="alert">
+                <strong>畫面元件發生錯誤，已記錄。</strong>
+                請<a href="" @onclick="ReloadPage" @onclick:preventDefault>重新整理頁面</a>；若持續發生請聯絡系統管理員@TraceCode.Suffix(TraceCode.FromException(exception))。
+            </div>
+        </ErrorContent>
+    </LoggingErrorBoundary>
+</ConfigProvider>

@@ -1,0 +1,96 @@
+@* 權限判定完成前不渲染任何內容，否則會先閃出頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else
+{
+    <div class="tfa-page">
+        <section class="tfa-section">
+            <h2 class="tfa-heading">兩步驟驗證</h2>
+            <div class="tfa-muted">登入時除了密碼，還要輸入手機驗證器 App 上的 6 位數驗證碼；密碼外洩時，別人也登入不了。</div>
+            @if (isRequired && !isEnabled)
+            {
+                <Alert Type="AlertType.Info" ShowIcon="true" Class="tfa-required"
+                       Message="系統要求你的帳號使用兩步驟驗證，設定完成前無法使用其他頁面。" />
+            }
+        </section>
+
+        @if (!hasLocalPassword)
+        {
+            <section class="tfa-section">
+                <div class="tfa-muted">你使用 Google 登入，沒有系統內的密碼，不需要設定兩步驟驗證。</div>
+            </section>
+        }
+        else if (backupCodes is not null)
+        {
+            <section class="tfa-section">
+                <h2 class="tfa-heading">請保存這 @backupCodes.Count 組備用碼</h2>
+                <div class="tfa-muted">手機遺失或不在身邊時，用一組備用碼代替驗證碼登入，每組只能用一次。<b>這些碼只會顯示這一次</b>，請抄下來或存進密碼管理工具。</div>
+                <ol class="tfa-codes">
+                    @foreach (var backupCode in backupCodes)
+                    {
+                        <li>@backupCode</li>
+                    }
+                </ol>
+                <Button Type="ButtonType.Primary" OnClick="ContinueAsync">我已保存，繼續</Button>
+            </section>
+        }
+        else if (!isEnabled && enrollment is null)
+        {
+            <section class="tfa-section">
+                <div class="tfa-muted">需要一支裝有驗證器 App 的手機（例如 Google Authenticator、Microsoft Authenticator）。</div>
+                <div class="tfa-actions">
+                    <Button Type="ButtonType.Primary" OnClick="BeginEnrollment">開始設定</Button>
+                </div>
+            </section>
+        }
+        else if (!isEnabled && enrollment is not null)
+        {
+            <section class="tfa-section">
+                <h2 class="tfa-heading">1. 用驗證器 App 掃描</h2>
+                <img class="tfa-qr" src="@qrDataUri" alt="兩步驟驗證 QR Code" />
+                <div class="tfa-muted">無法掃描時，在 App 選「輸入設定金鑰」，帳號填 @account，金鑰：</div>
+                <code class="tfa-key">@FormatKey(enrollment.Secret)</code>
+            </section>
+            <section class="tfa-section">
+                <h2 class="tfa-heading">2. 輸入 App 上顯示的 6 位數</h2>
+                <div class="tfa-row">
+                    <Input @bind-Value="enableCode" Placeholder="6 位數驗證碼" MaxLength="6" Style="width: 12rem;" />
+                    <Button Type="ButtonType.Primary" Loading="@isBusy" OnClick="EnableAsync">啟用</Button>
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="tfa-section">
+                <div class="tfa-row">
+                    <StatusPill Text="已啟用" Tone="StatusTone.Positive" />
+                    <span class="tfa-muted">剩下 @remainingBackupCodes 組未使用的備用碼</span>
+                </div>
+            </section>
+            <section class="tfa-section">
+                <h2 class="tfa-heading">重新產生備用碼</h2>
+                <div class="tfa-muted">舊的備用碼會全部失效。輸入目前的驗證碼（或一組備用碼）確認是本人。</div>
+                <div class="tfa-row tfa-actions">
+                    <Input @bind-Value="regenerateCode" Placeholder="驗證碼或備用碼" Style="width: 12rem;" />
+                    <Button Loading="@isBusy" OnClick="RegenerateAsync">重新產生</Button>
+                </div>
+            </section>
+            <section class="tfa-section">
+                <h2 class="tfa-heading">停用兩步驟驗證</h2>
+                @if (isRequired)
+                {
+                    <div class="tfa-muted">你的帳號必須使用兩步驟驗證，不能停用。換了手機請洽系統管理員重設。</div>
+                }
+                else
+                {
+                    <div class="tfa-muted">停用後登入只需要密碼。輸入目前的驗證碼（或一組備用碼）確認是本人。</div>
+                    <div class="tfa-row tfa-actions">
+                        <Input @bind-Value="disableCode" Placeholder="驗證碼或備用碼" Style="width: 12rem;" />
+                        <Button Danger Loading="@isBusy" OnClick="DisableAsync">停用</Button>
+                    </div>
+                }
+            </section>
+        }
+    </div>
+}

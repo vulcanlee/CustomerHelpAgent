@@ -1,0 +1,55 @@
+﻿.exception-log-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.exception-log-toolbar-left {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.exception-log-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.exception-log-range-separator {
+    color: var(--app-muted);
+}
+
+.exception-log-account-input {
+    width: 140px;
+}
+
+.exception-log-search-input {
+    width: 260px;
+}
+
+.exception-log-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+/* 欄位多，窄螢幕一定會超出，讓表格自己橫向捲動而不是把整頁撐寬。 */
+.exception-log-table-wrap {
+    overflow-x: auto;
+}
+
+/* 點一下任一列即複製該筆（明細＋堆疊）；列由 AntDesign 渲染，需要 ::deep。只改游標，顏色沿用 theme.css 的列 hover。 */
+::deep .exception-log-row-copyable {
+    cursor: pointer;
+}
+
+@media (max-width: 640.98px) {
+    .exception-log-account-input,
+    .exception-log-search-input {
+        width: 100%;
+    }
+}

@@ -1,0 +1,75 @@
+.system-parameter-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.system-parameter-toolbar-left,
+.system-parameter-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* 說明文字較長：讓左側可縮小換行，重新整理按鈕留在同一列右側。 */
+.system-parameter-toolbar-left {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.system-parameter-hint,
+.system-parameter-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+}
+
+.system-parameter-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+.system-parameter-orphan {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.system-parameter-group {
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+}
+
+/* 欄位多，窄螢幕讓表格自己橫向捲動而不是把整頁撐寬。 */
+.system-parameter-table-wrap {
+    overflow-x: auto;
+}
+
+.system-parameter-name,
+.system-parameter-edit-name {
+    font-weight: 600;
+}
+
+.system-parameter-key {
+    font-size: 0.78rem;
+    word-break: break-all;
+}
+
+.system-parameter-value {
+    margin-bottom: 0.2rem;
+}
+
+.system-parameter-problem {
+    color: var(--app-error);
+    font-size: 0.85rem;
+    margin-top: 0.2rem;
+}
+
+.system-parameter-edit-facts {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+    margin: 0.5rem 0 0.75rem;
+}

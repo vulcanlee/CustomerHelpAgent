@@ -1,0 +1,17 @@
+@* 公告橫幅（0.9.100 起）：顯示期間內、對象包含目前使用者、而且他沒有關閉過的公告。內容是純文字，以換行保留格式。 *@
+@if (visible.Count > 0)
+{
+    <div class="announcement-banner-list">
+        @foreach (var item in visible)
+        {
+            <div class="announcement-banner" role="status">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="campaign" />
+                <div class="announcement-banner-text">
+                    <div class="announcement-banner-title">@item.Title</div>
+                    <div class="announcement-banner-content">@item.Content</div>
+                </div>
+                <button type="button" class="announcement-banner-dismiss" @onclick="@(() => DismissAsync(item))">知道了</button>
+            </div>
+        }
+    </div>
+}

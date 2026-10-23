@@ -1,0 +1,141 @@
+@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Web.Ai
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        @* 說明框沿用同群組 Token 用量頁的樣式（淡色底＋細框），兩頁並排看起來是同一套。 *@
+        <div class="ai-call-log-intro">
+            <p>
+                本頁保存每次呼叫 AI API 時<strong>實際送出的 Prompt</strong>與<strong>取得的 Response</strong>，
+                內容可能含整份日誌、例外堆疊與使用者帳號，<strong>僅管理員可見</strong>。
+            </p>
+            <p>
+                @if (IsRecordingEnabled)
+                {
+                    <span>紀錄保留 <strong>@RetentionDays 天</strong>，超過的連同內容檔每日自動清除。</span>
+                }
+                else
+                {
+                    <span>目前<strong>已停用記錄</strong>（系統參數「記錄 AI 對話內容」已關閉），新的呼叫不會出現在這裡；既有紀錄仍保留 @RetentionDays 天。</span>
+                }
+                用量與費用請看「Token 用量」頁，兩邊以呼叫識別碼互相連結。
+            </p>
+        </div>
+
+        <div class="ai-call-log-toolbar">
+            <div class="ai-call-log-toolbar-left">
+                <DatePicker TValue="DateTime?" @bind-Value="startDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("起始日")" Style="width: 140px;" />
+                <DatePicker TValue="DateTime?" @bind-Value="endDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("結束日")" Style="width: 140px;" />
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedOperation" Style="width: 170px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="全部作業" />
+                    @foreach (var item in filterOptions.Operations)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@item" Label="@item" />
+                    }
+                </Select>
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedSuccess" Style="width: 130px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="結果：不限" />
+                    <SelectOption TItemValue="string" TItem="string" Value="@("true")" Label="成功" />
+                    <SelectOption TItemValue="string" TItem="string" Value="@("false")" Label="失敗／取消" />
+                </Select>
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedModel" Style="width: 170px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="全部模型" />
+                    @foreach (var item in filterOptions.Models)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@item" Label="@item" />
+                    }
+                </Select>
+
+                <Input @bind-Value="accountFilter" Placeholder="帳號" Style="width: 140px;" />
+                <Input @bind-Value="keyword" Placeholder="關聯說明關鍵字（例外 #、日誌區間…）" Style="width: 280px;" />
+            </div>
+            <div class="ai-call-log-toolbar-right">
+                <ToolbarIconButton Title="查詢" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                <ToolbarIconButton Title="匯出目前查詢結果（CSV，不含內文）" Icon="file_download"
+                                   Disabled="@(_total == 0)"
+                                   OnClick="@(async () => await OnExportAsync())" />
+                <ToolbarIconButton Title="清空全部紀錄" Icon="delete_forever"
+                                   OnClick="@(async () => await OnClearAllAsync())" />
+            </div>
+        </div>
+
+        <div class="ai-call-log-purge">
+            <DatePicker TValue="DateTime?" @bind-Value="purgeBeforeDate" Picker="@DatePickerType.Date"
+                        Format="yyyy-MM-dd" Placeholder="@("清除此日之前")" Style="width: 160px;" />
+            <Button Danger Disabled="@(purgeBeforeDate is null)"
+                    OnClick="@(async () => await OnPurgeAsync())">批次清除</Button>
+            @* 0.9.132 起：勾選後出現。 *@
+            <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                               OnClick="@(async () => await OnBatchDeleteAsync())" />
+        </div>
+
+        <div class="ai-call-log-table-wrap">
+            <Table @ref="table"
+                   TItem="AiCallLogAdapterModel"
+                   RemoteDataSource="true"
+                   DataSource="@items"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total"
+                   @bind-SelectedRows="selectedRows">
+                @* 0.9.132 起：勾選後可「刪除選取」。 *@
+                <Selection />
+                <Column TData="DateTime" DataIndex="@nameof(AiCallLogAdapterModel.OccurredAt)"
+                        Title="送出時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                    @context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")
+                </Column>
+                <Column TData="bool" Title="結果" Width="110">
+                    <StatusPill Text="@AiCallLogPdfBuilder.DescribeOutcome(context)" Tone="@ResolveTone(context)" />
+                </Column>
+                <Column TData="string" Title="作業" Width="140" Ellipsis>@context.Operation</Column>
+                <Column TData="string" Title="發起者" Width="120" Ellipsis>@(context.Account ?? "（系統自動）")</Column>
+                <Column TData="string" Title="模型" Width="150" Ellipsis>@context.Model</Column>
+                <Column TData="long" DataIndex="@nameof(AiCallLogAdapterModel.ElapsedMilliseconds)"
+                        Title="耗時" Width="100" Align="ColumnAlign.Right" Sortable>
+                    @FormatElapsed(context.ElapsedMilliseconds)
+                </Column>
+                <Column TData="int" DataIndex="@nameof(AiCallLogAdapterModel.RequestCharacters)"
+                        Title="送出字元" Width="105" Align="ColumnAlign.Right" Sortable>
+                    @context.RequestCharacters.ToString("N0")
+                </Column>
+                <Column TData="string" Title="關聯說明" Ellipsis>@(context.RelatedInfo ?? "—")</Column>
+                <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                    <Space>
+                        <SpaceItem>
+                            <CrudActionButton Title="查看對話" Icon="visibility"
+                                              OnClick="@(async () => await OnViewAsync(context.Id))" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <CrudActionButton Title="刪除" Icon="delete" Danger="true"
+                                              OnClick="@(async () => await OnDeleteAsync(context))" />
+                        </SpaceItem>
+                    </Space>
+                </ActionColumn>
+            </Table>
+        </div>
+
+        <AiCallLogDetailModal @ref="detailModal" />
+    </div>
+}

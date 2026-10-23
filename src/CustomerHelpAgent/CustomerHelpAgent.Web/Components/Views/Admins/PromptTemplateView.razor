@@ -1,0 +1,134 @@
+@using CustomerHelpAgent.AccessDatas.Models
+@using CustomerHelpAgent.Web.Ai
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="prompt-toolbar">
+            <span class="prompt-hint">修改後下一次 AI 分析就會使用。每次儲存都是新的版本，舊版本可以隨時切回。模型與參數仍在設定檔（AiSettings）。</span>
+            <ToolbarIconButton Title="重新整理" Icon="refresh" OnClick="@(async () => await OnRefreshAsync())" />
+        </div>
+
+        <Tabs @bind-ActiveKey="activeKey">
+            @foreach (var key in PromptTemplateKeys.All)
+            {
+                var history = histories.GetValueOrDefault(key) ?? [];
+                var active = history.FirstOrDefault(x => x.IsActive);
+                <TabPane Key="@key" Tab="@TitleOf(key)">
+                    <section class="prompt-section">
+                        <div class="prompt-section-head">
+                            <div>
+                                <div class="prompt-section-title">目前使用的分析指示</div>
+                                <div class="prompt-muted">
+                                    @if (active is null)
+                                    {
+                                        <span>內建預設（尚未修改過，或已切回內建預設）</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@ActiveSummary(active)</span>
+                                    }
+                                </div>
+                            </div>
+                            <ToolbarIconButton Title="編輯" Icon="edit" OnClick="@(() => OnEdit(key))" />
+                        </div>
+                        <pre class="prompt-content">@(active?.Content ?? AiPromptGuardrails.DefaultInstructions(key))</pre>
+                    </section>
+
+                    <section class="prompt-section">
+                        <div class="prompt-section-title">固定附加的規則（不能修改）</div>
+                        <div class="prompt-muted">送出時一律接在分析指示後面：防止日誌或例外內容裡的文字被當成指令、限定 PDF 報告支援的格式。</div>
+                        <pre class="prompt-content prompt-locked">@AiPromptGuardrails.For(key)</pre>
+                    </section>
+
+                    <section class="prompt-section">
+                        <div class="prompt-section-title">版本紀錄</div>
+                        <div class="prompt-table-wrap">
+                            <Table TItem="PromptHistoryRow"
+                                   Class="prompt-table"
+                                   DataSource="@RowsOf(key)"
+                                   Loading="@isLoading"
+                                   Size="TableSize.Small"
+                                   PageSize="10">
+                                <ColumnDefinitions>
+                                    <Column TData="string" Title="版本" Width="110">@(context.Version is { } v ? $"第 {v} 版" : "內建預設")</Column>
+                                    <Column TData="string" Title="狀態" Width="100">
+                                        @if (context.IsActive)
+                                        {
+                                            <StatusPill Text="作用中" Tone="StatusTone.Positive" />
+                                        }
+                                    </Column>
+                                    <Column TData="string" Title="建立者" Width="110">@context.CreatedByAccount</Column>
+                                    <Column TData="string" Title="建立時間" Width="150">@context.CreatedAt?.ToString("yyyy-MM-dd HH:mm")</Column>
+                                    <Column TData="string" Title="備註">@context.Note</Column>
+                                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                                        <Space>
+                                            <SpaceItem>
+                                                <CrudActionButton Title="檢視" Icon="visibility" OnClick="@(() => OnView(key, context))" />
+                                            </SpaceItem>
+                                            @if (!context.IsActive)
+                                            {
+                                                <SpaceItem>
+                                                    <CrudActionButton Title="設為作用中" Icon="check_circle" OnClick="@(async () => await OnActivateAsync(key, context))" />
+                                                </SpaceItem>
+                                            }
+                                        </Space>
+                                    </ActionColumn>
+                                </ColumnDefinitions>
+                            </Table>
+                        </div>
+                    </section>
+                </TabPane>
+            }
+        </Tabs>
+
+        @*
+            編輯窗：刻意不用 EditForm（含 EditForm 的窗依慣例是 95vw 的大窗，見 FormModalConventionTests）。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的 .prompt-template-modal（速查 §6.4）。
+        *@
+        <Modal Title="@($"編輯提示詞：{TitleOf(editingKey)}")"
+               Class="prompt-template-modal"
+               @bind-Visible="@modalVisible"
+               Keyboard="true"
+               MaskClosable="false"
+               OkText="@("存成新版本")"
+               CancelText="@("取消")"
+               OnOk="OnModalOkAsync"
+               OnCancel="OnModalCancelAsync">
+            <AntDesign.Form TModel="PromptEditModel" Model="@editing" Layout="FormLayout.Vertical">
+                <FormItem Label="分析指示" Required>
+                    <TextArea @bind-Value="editing.Content" Rows="16" MaxLength="8000" Class="prompt-editor" />
+                </FormItem>
+                <div class="prompt-muted prompt-editor-hint">
+                    最多 8000 字。「固定附加的規則」會自動接在後面，不必也不能寫在這裡。
+                </div>
+                <FormItem Label="備註（選填，例如這次改了什麼）">
+                    <Input @bind-Value="editing.Note" MaxLength="200" />
+                </FormItem>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <AntDesign.Alert Message="@errorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
+                }
+            </AntDesign.Form>
+        </Modal>
+
+        <Modal Title="@viewTitle"
+               Class="prompt-template-modal"
+               Visible="@viewVisible"
+               Keyboard="true"
+               Footer="null"
+               OnCancel="@(() => viewVisible = false)">
+            <pre class="prompt-content">@viewContent</pre>
+        </Modal>
+    </div>
+}

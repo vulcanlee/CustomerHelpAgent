@@ -1,0 +1,31 @@
+@if (!loaded)
+{
+}
+else if (items.Count == 0)
+{
+    <div class="dashboard-muted">沒有通知。</div>
+}
+else
+{
+    <div class="dashboard-stat">
+        <span class="dashboard-stat-number">@unreadCount</span>
+        <span class="dashboard-muted">則未讀</span>
+    </div>
+    <ul class="dashboard-list">
+        @foreach (var item in items)
+        {
+            <li class="@(item.ReadAtUtc is null ? "dashboard-list-item dashboard-unread" : "dashboard-list-item")">
+                @if (SafeLink(item.Link) is { } link)
+                {
+                    <a href="@link" @onclick="@(() => MarkReadAsync(item))" @onclick:preventDefault="false">@item.Title</a>
+                }
+                else
+                {
+                    <span>@item.Title</span>
+                }
+                <span class="dashboard-muted">@ToLocalText(item.CreatedAtUtc)</span>
+            </li>
+        }
+    </ul>
+    <div class="dashboard-muted">全部通知在右上角的鈴鐺。</div>
+}

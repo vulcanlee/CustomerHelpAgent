@@ -1,0 +1,180 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using CustomerHelpAgent.AccessDatas;
+using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Business.Helpers;
+#IF TEAMS
+using CustomerHelpAgent.Business.Services.Other;
+#ENDIF
+using CustomerHelpAgent.Dtos.Commons;
+
+namespace CustomerHelpAgent.Business.Repositories;
+
+/// <summary>
+/// Web API 的__Display__存取（由 scripts/New-CrudModule.ps1 產生）。注入 scoped BackendDBContext：Controller 的 scope ＝ 單次 HTTP 請求。
+#IF TEAMS
+/// 團隊範圍與 Blazor 的 <c>__Name__Service</c> 相同（<see cref="RecordTeamScope"/>）：看不到的一律當作不存在（controller 回 404）。
+#ENDIF
+/// </summary>
+public class __Name__Repository
+{
+    private readonly BackendDBContext context;
+#IF TEAMS
+    private readonly IRecordAccessScopeProvider accessScope;
+#ENDIF
+    private readonly ILogger<__Name__Repository> logger;
+
+#IF TEAMS
+    public __Name__Repository(BackendDBContext context, IRecordAccessScopeProvider accessScope, ILogger<__Name__Repository> logger)
+    {
+        this.context = context;
+        this.accessScope = accessScope;
+        this.logger = logger;
+    }
+#ELSE
+    public __Name__Repository(BackendDBContext context, ILogger<__Name__Repository> logger)
+    {
+        this.context = context;
+        this.logger = logger;
+    }
+#ENDIF
+
+    public async Task<__Name__?> GetByIdAsync(int id)
+    {
+        var item = await context.__Name__.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+#IF TEAMS
+        return item is not null && RecordTeamScope.CanAccess(item.Teams, await accessScope.GetAsync()) ? item : null;
+#ELSE
+        return item;
+#ENDIF
+    }
+#IF TEAMS
+
+    /// <summary>非管理員指定團隊的規則（新加的團隊要在自己範圍內、不可清成公開）；新增時 <paramref name="id"/> 傳 null。回傳錯誤訊息。</summary>
+    public async Task<string?> CheckTeamAssignmentAsync(int? id, string? requestedTeams)
+    {
+        var current = id is { } existingId
+            ? await context.__Name__.AsNoTracking().Where(x => x.Id == existingId).Select(x => x.Teams).FirstOrDefaultAsync()
+            : null;
+        return RecordTeamScope.CheckAssignment(current, requestedTeams, await accessScope.GetAsync());
+    }
+#ENDIF
+
+    public async Task<PagedResult<__Name__>> GetPagedAsync(__Name__SearchRequestDto request)
+    {
+#IF TEAMS
+        var query = RecordTeamScope.Apply(context.__Name__.AsNoTracking(), x => x.Teams, await accessScope.GetAsync());
+#ELSE
+        IQueryable<__Name__> query = context.__Name__.AsNoTracking();
+#ENDIF
+
+        if (!string.IsNullOrEmpty(request.Keyword))
+        {
+            query = query.Where(x =>
+                x.Name.Contains(request.Keyword) ||
+                (x.Description != null && x.Description.Contains(request.Keyword)));
+        }
+
+        if (request.IsEnabled.HasValue)
+        {
+            query = query.Where(x => x.IsEnabled == request.IsEnabled.Value);
+        }
+
+        // Skip/Take 必須搭配 OrderBy；同值時以 Id 決定順序，分頁才穩定。
+        query = request.SortBy?.ToLower() switch
+        {
+            "name" => request.SortDescending ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
+            "isenabled" => request.SortDescending ? query.OrderByDescending(x => x.IsEnabled).ThenByDescending(x => x.Id) : query.OrderBy(x => x.IsEnabled).ThenBy(x => x.Id),
+            "createdat" => request.SortDescending ? query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => query.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id),
+        };
+
+        var totalCount = await query.CountAsync();
+        logger.LogDebug(
+            "Paged __name__ query executed. PageIndex={PageIndex}, PageSize={PageSize}, HasKeyword={HasKeyword}, TotalCount={TotalCount}",
+            request.PageIndex, request.PageSize, string.IsNullOrWhiteSpace(request.Keyword) == false, totalCount);
+        var items = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync();
+
+        return new PagedResult<__Name__>
+        {
+            Items = items,
+            PageIndex = request.PageIndex,
+            PageSize = request.PageSize,
+            TotalCount = totalCount,
+        };
+    }
+
+    /// <summary>名稱是否已被使用。比對語意與 Blazor 路徑相同（先正規化、再不分大小寫）。</summary>
+    public async Task<bool> ExistsByNameAsync(string name, int? excludeId = null)
+    {
+        var normalized = NameNormalizer.Normalize(name).ToLower();
+        var query = context.__Name__.Where(x => x.Name.ToLower() == normalized);
+        if (excludeId.HasValue)
+        {
+            query = query.Where(x => x.Id != excludeId.Value);
+        }
+
+        return await query.AnyAsync();
+    }
+
+    public async Task<__Name__> AddAsync(__Name__ item)
+    {
+        // 一律由資料庫配號、由伺服器產生版本號，不信任客戶端傳來的值。
+        item.Id = 0;
+        item.CreatedAt = DateTime.Now;
+        item.UpdatedAt = DateTime.Now;
+        item.ConcurrencyStamp = ConcurrencyStampHelper.New();
+        await context.__Name__.AddAsync(item);
+        await context.SaveChangesAsync();
+        return item;
+    }
+
+    /// <summary>
+    /// 修改；找不到（或已刪除、不在範圍內）回 <see cref="UpdateOutcome.NotFound"/>。版本號不符時丟 DbUpdateConcurrencyException（controller 回 409）。
+    /// 成功時帶回修改前後差異，給稽核詳細內容檔。
+    /// </summary>
+    public async Task<UpdateOutcome> UpdateAsync(__Name__ item)
+    {
+        var existing = await context.__Name__.FindAsync(item.Id);
+#IF TEAMS
+        if (existing == null || !RecordTeamScope.CanAccess(existing.Teams, await accessScope.GetAsync()))
+#ELSE
+        if (existing == null)
+#ENDIF
+        {
+            return UpdateOutcome.NotFound;
+        }
+
+        item.UpdatedAt = DateTime.Now;
+        item.CreatedAt = existing.CreatedAt;
+
+        var before = (__Name__)context.Entry(existing).CurrentValues.ToObject();
+        context.Entry(existing).CurrentValues.SetValues(item);
+        var diff = AuditDiff.Compare(before, existing).Render($"__Item__ #{existing.Id}（{before.Name}）修改");
+        ConcurrencyStampHelper.Apply(context.Entry(existing), item.ConcurrencyStamp);
+        SoftDeleteHelper.ProtectFlags(context.Entry(existing));
+        await context.SaveChangesAsync();
+        return new UpdateOutcome(true, diff);
+    }
+
+    /// <summary>軟刪除；已刪除或找不到回 false（controller 回 404）。</summary>
+    public async Task<bool> DeleteAsync(int id, string? actorAccount)
+    {
+        var item = await context.__Name__.FindAsync(id);
+#IF TEAMS
+        if (item == null || !RecordTeamScope.CanAccess(item.Teams, await accessScope.GetAsync()))
+#ELSE
+        if (item == null)
+#ENDIF
+        {
+            return false;
+        }
+
+        SoftDeleteHelper.MarkDeleted(item, actorAccount);
+        await context.SaveChangesAsync();
+        return true;
+    }
+}

@@ -1,0 +1,74 @@
+{
+  // 提交前跑 quality-gate（= scripts/Invoke-QualityGate.ps1：restore → build → format → test → 文件編碼 → 弱點掃描）。
+  // 專案沒有 CI，這就是唯一的關卡。build／format-check／test／docs-encoding 保留給單獨執行某一道時使用。
+  // 更名專案時，本檔的 CustomerHelpAgent 路徑必須一併更新。
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "restore",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["restore", "${workspaceFolder}/src/CustomerHelpAgent/CustomerHelpAgent.slnx"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/CustomerHelpAgent/CustomerHelpAgent.slnx",
+        "-v:minimal",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "format-check",
+      "detail": "執行 dotnet format --verify-no-changes；失敗時改跑不帶該旗標的 dotnet format 讓它自動修。",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "format",
+        "${workspaceFolder}/src/CustomerHelpAgent/CustomerHelpAgent.slnx",
+        "--verify-no-changes"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "test",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["test", "${workspaceFolder}/src/CustomerHelpAgent/CustomerHelpAgent.slnx"],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "docs-encoding",
+      "detail": "檢查 docs/**/*.md 與根目錄 *.md 是否為 UTF-8 含 BOM 且無亂碼。",
+      "command": "pwsh",
+      "type": "process",
+      "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/Test-DocsEncoding.ps1"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "quality-gate",
+      "detail": "提交前的品質關卡：restore、Release 建置、format、test、文件編碼、弱點掃描，遇到失敗就停。",
+      "command": "pwsh",
+      "type": "process",
+      "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/Invoke-QualityGate.ps1"],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

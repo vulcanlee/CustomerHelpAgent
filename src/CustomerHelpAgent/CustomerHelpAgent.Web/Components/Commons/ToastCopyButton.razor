@@ -1,0 +1,78 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using Microsoft.Extensions.Options
+@using CustomerHelpAgent.Business.Services.Other
+@using CustomerHelpAgent.Web.Configuration
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject CurrentUserService CurrentUserService
+@inject IOptions<SecuritySettings> SecuritySettings
+@inject IWebHostEnvironment HostEnvironment
+@inject ILogger<ToastCopyButton> Logger
+
+@*
+    右下角錯誤／警告通知裡的「複製」按鈕（由 ViewNotification 放進 NotificationConfig.Btn）。
+    結果直接顯示在按鈕文字上（已複製／複製失敗），不再另外跳一個通知疊在旁邊。
+*@
+
+<Button Size="ButtonSize.Small" Class="toast-copy-button" OnClick="CopyAsync">@label</Button>
+
+@code {
+    private const string DefaultLabel = "複製";
+    private static readonly TimeSpan FeedbackDuration = TimeSpan.FromSeconds(2);
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>原始內文，不含 UnexpectedError 畫面上的追蹤碼後綴（追蹤碼由 <see cref="TraceCode"/> 另起一行）。</summary>
+    [Parameter, EditorRequired]
+    public string Description { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? TraceCode { get; set; }
+
+    [Parameter]
+    public DateTime OccurredAt { get; set; }
+
+    /// <summary>
+    /// 完整例外或 AI 失敗的技術細節（0.9.130 起）。畫面上不顯示；只有管理員，或 <see cref="ExceptionDetailPolicy"/>
+    /// 允許時（Development 或 <c>Security:ReturnExceptionDetails=true</c>）按複製才會帶上。
+    /// </summary>
+    [Parameter]
+    public string? Detail { get; set; }
+
+    private string label = DefaultLabel;
+
+    // 通知不會自動關閉，使用者可能換頁後才按複製，所以在通知出現當下就記下頁面網址。
+    private string? pageUrl;
+
+    protected override void OnInitialized() => pageUrl = NavigationManager.Uri;
+
+    private async Task CopyAsync()
+    {
+        var text = ToastCopyText.Build(Title, Description, TraceCode, OccurredAt, pageUrl, MayCopyDetail() ? Detail : null);
+
+        try
+        {
+            var copied = await JSRuntime.InvokeAsync<bool>("appClipboard.copyText", text);
+            label = copied ? "已複製" : "複製失敗";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to copy notification text to clipboard.");
+            label = "複製失敗";
+        }
+
+        StateHasChanged();
+        await Task.Delay(FeedbackDuration);
+        label = DefaultLabel;
+        StateHasChanged();
+    }
+
+    // 按下當下才判斷：堆疊只給管理員，一般使用者在正式環境拿到的就是畫面上的內容（日誌與例外處理 PRD）。
+    private bool MayCopyDetail()
+        => Detail is not null
+            && (CurrentUserService.CurrentUser.IsAdmin
+                || ExceptionDetailPolicy.ShouldReturnDetails(SecuritySettings.Value, HostEnvironment));
+}

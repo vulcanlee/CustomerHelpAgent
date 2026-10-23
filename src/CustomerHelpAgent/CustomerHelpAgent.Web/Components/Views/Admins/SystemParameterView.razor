@@ -1,0 +1,174 @@
+@using CustomerHelpAgent.Web.Configuration.Parameters
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="system-parameter-toolbar">
+            <div class="system-parameter-toolbar-left">
+                <span class="system-parameter-hint">修改後立即生效，不需重新啟動；有多台主機時約 1 分鐘內同步。沒有修改過的參數沿用設定檔的值；改過的參數以這裡為準，伺服器設定檔或環境變數再改也不會生效，按「還原為設定檔值」才會改回。不在這一頁的設定由部署人員修改設定檔。</span>
+            </div>
+            <div class="system-parameter-toolbar-right">
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+            </div>
+        </div>
+
+        @if (overview is not null)
+        {
+            @foreach (var (section, errors) in overview.BaseInvalid)
+            {
+                <div class="alert alert-warning system-parameter-alert" role="alert">
+                    設定檔的「@section」區段目前有誤，修正之前不能修改這一區的參數：@string.Join(" ", errors)
+                </div>
+            }
+
+            @if (NotAppliedCount > 0)
+            {
+                <div class="alert alert-danger system-parameter-alert" role="alert">
+                    有 @NotAppliedCount 個參數的設定值不合法而沒有套用，目前沿用設定檔的值。請在下方標示「未套用」的那幾列重新修改或還原。
+                </div>
+            }
+
+            @if (overview.Orphans.Count > 0)
+            {
+                <div class="alert alert-warning system-parameter-alert" role="alert">
+                    <div>資料庫裡有系統不認得的參數（通常是舊版本留下的），不會套用，可以移除：</div>
+                    @foreach (var orphan in overview.Orphans)
+                    {
+                        <div class="system-parameter-orphan">
+                            <code>@orphan.ParameterKey</code>
+                            <CrudActionButton Title="移除" Icon="delete"
+                                              OnClick="@(async () => await OnRemoveOrphanAsync(orphan))" />
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        @foreach (var group in Groups)
+        {
+            @* 0.9.133 起：從「資料保留與清理」的「修改」進來（?group=…）時捲到該分類。 *@
+            @if (group.Key == FocusGroup)
+            {
+                <h6 class="system-parameter-group" tabindex="-1" @ref="focusGroupHeading">@group.Key</h6>
+            }
+            else
+            {
+                <h6 class="system-parameter-group">@group.Key</h6>
+            }
+            <div class="system-parameter-table-wrap">
+                <Table TItem="SystemParameterOverviewItem"
+                       Class="system-parameter-table"
+                       DataSource="@group.ToList()"
+                       Loading="@isLoading"
+                       Size="TableSize.Small"
+                       HidePagination="true">
+                    <ColumnDefinitions>
+                        <Column TData="string" Title="參數">
+                            <div class="system-parameter-name">@context.Definition.Label</div>
+                            <code class="system-parameter-key">@context.Definition.Key</code>
+                        </Column>
+                        <Column TData="string" Title="目前值" Width="200">
+                            <div class="system-parameter-value">@SystemParameterValueCodec.Display(context.Definition, context.EffectiveValue)</div>
+                            <StatusPill Text="@SourceText(context.Source)" Tone="@SourceTone(context.Source)" />
+                            @if (context.Override is { } row && context.Source != SystemParameterSource.File)
+                            {
+                                <div class="system-parameter-muted">@row.UpdatedBy @ToLocalText(row.UpdatedAtUtc)</div>
+                            }
+                            @if (context.Problem is { } problem)
+                            {
+                                <div class="system-parameter-problem">@problem</div>
+                            }
+                        </Column>
+                        <Column TData="string" Title="設定檔的值" Width="160">
+                            <span class="system-parameter-muted">@SystemParameterValueCodec.Display(context.Definition, context.BaseValue)</span>
+                        </Column>
+                        <Column TData="string" Title="說明">
+                            <div>@context.Definition.Description</div>
+                            @if (RangeText(context.Definition) is { } range)
+                            {
+                                <div class="system-parameter-muted">範圍：@range</div>
+                            }
+                            <div class="system-parameter-muted">生效：@context.Definition.EffectNote</div>
+                        </Column>
+                        <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                            <Space>
+                                <SpaceItem>
+                                    <CrudActionButton Title="修改" Icon="edit"
+                                                      OnClick="@(() => OnEdit(context))" />
+                                </SpaceItem>
+                                <SpaceItem>
+                                    <CrudActionButton Title="還原為設定檔值" Icon="undo"
+                                                      Disabled="@(context.Override is null)"
+                                                      OnClick="@(async () => await OnResetAsync(context))" />
+                                </SpaceItem>
+                            </Space>
+                        </ActionColumn>
+                    </ColumnDefinitions>
+                </Table>
+            </div>
+        }
+
+        @*
+            修改窗：小型表單，刻意不用 EditForm（含 EditForm 的窗依慣例是 95vw 的大窗，見 FormModalConventionTests）。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的 .system-parameter-modal（速查 §6.4）。
+        *@
+        <Modal Title="修改系統參數"
+               Class="system-parameter-modal"
+               @bind-Visible="@modalVisible"
+               Keyboard="true"
+               MaskClosable="false"
+               OkText="@("儲存")"
+               CancelText="@("取消")"
+               OnOk="OnModalOkAsync"
+               OnCancel="OnModalCancelAsync">
+            @if (editing is { } item)
+            {
+                <div class="system-parameter-edit-name">@item.Definition.Label</div>
+                <div class="system-parameter-muted">@item.Definition.Description</div>
+                <div class="system-parameter-edit-facts">
+                    <div>目前值：@SystemParameterValueCodec.Display(item.Definition, item.EffectiveValue)（@SourceText(item.Source)）</div>
+                    <div>設定檔的值：@SystemParameterValueCodec.Display(item.Definition, item.BaseValue)</div>
+                    @if (RangeText(item.Definition) is { } range)
+                    {
+                        <div>範圍：@range</div>
+                    }
+                    <div>生效：@item.Definition.EffectNote</div>
+                </div>
+
+                <AntDesign.Form TModel="ParameterEditModel" Model="@editForm" Layout="FormLayout.Vertical">
+                    <FormItem Label="新的值" Required="@(item.Definition.Kind != SystemParameterKind.String || item.Definition.Required)">
+                        @switch (item.Definition.Kind)
+                        {
+                            case SystemParameterKind.Int:
+                                <AntDesign.InputNumber TValue="int" @bind-Value="editForm.Number"
+                                                       Min="@(item.Definition.Min ?? int.MinValue)" Max="@(item.Definition.Max ?? int.MaxValue)"
+                                                       Step="1" Style="width: 100%;" />
+                                break;
+                            case SystemParameterKind.Bool:
+                                <Switch @bind-Value="editForm.Flag" CheckedChildren="開啟" UnCheckedChildren="關閉" />
+                                break;
+                            default:
+                                <Input @bind-Value="editForm.Text" MaxLength="@(item.Definition.MaxLength ?? 2000)" />
+                                break;
+                        }
+                    </FormItem>
+                    @if (!string.IsNullOrEmpty(editErrorMessage))
+                    {
+                        <AntDesign.Alert Message="@editErrorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
+                    }
+                </AntDesign.Form>
+            }
+        </Modal>
+    </div>
+}

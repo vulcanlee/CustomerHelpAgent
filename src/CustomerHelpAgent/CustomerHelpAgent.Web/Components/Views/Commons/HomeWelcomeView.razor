@@ -1,0 +1,56 @@
+﻿@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <section class="home-welcome" aria-label="系統介紹">
+        <div class="home-hero">
+            <div class="home-hero-image-wrap">
+                <img class="home-hero-image"
+                     src="@Assets["images/brand-logo.png"]"
+                     alt="系統品牌圖示" />
+            </div>
+
+            <div class="home-hero-copy">
+                <p class="home-eyebrow">Welcome</p>
+                <h1 class="home-title">@SystemName</h1>
+                <p class="home-description">@SystemDescription</p>
+                <p class="home-hero-meta">系統版本 @SystemVersion · 執行環境 @WebHostEnvironment.EnvironmentName</p>
+            </div>
+        </div>
+
+        @if (quickLinks.Count > 0)
+        {
+            <div class="home-section">
+                <h2 class="home-section-title">快速入口</h2>
+                <div class="home-quick-links">
+                    @foreach (var link in quickLinks)
+                    {
+                        <a class="home-quick-link" href="@link.Url">
+                            <span class="home-quick-link-icon" aria-hidden="true">
+                                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@link.Icon" />
+                            </span>
+                            <span class="home-quick-link-title">@link.Title</span>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+
+        @* 小工具區（0.9.106 起）：只建立看得到的小工具，每個各自有錯誤邊界。 *@
+        @if (widgets.Count > 0)
+        {
+            <div class="home-section">
+                <h2 class="home-section-title">儀表板</h2>
+                <CustomerHelpAgent.Web.Components.Views.Dashboard.DashboardGrid Widgets="widgets" />
+            </div>
+        }
+    </section>
+}

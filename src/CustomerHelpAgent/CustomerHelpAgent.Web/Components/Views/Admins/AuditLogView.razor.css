@@ -1,0 +1,52 @@
+﻿.audit-log-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.audit-log-toolbar-left {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.audit-log-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.audit-log-range-separator {
+    color: var(--app-muted);
+}
+
+.audit-log-account-input,
+.audit-log-ip-input {
+    width: 140px;
+}
+
+.audit-log-search-input {
+    width: 240px;
+}
+
+.audit-log-alert {
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+}
+
+/* 欄位多，窄螢幕一定會超出，讓表格自己橫向捲動而不是把整頁撐寬。 */
+.audit-log-table-wrap {
+    overflow-x: auto;
+}
+
+@media (max-width: 640.98px) {
+    .audit-log-account-input,
+    .audit-log-ip-input,
+    .audit-log-search-input {
+        width: 100%;
+    }
+}

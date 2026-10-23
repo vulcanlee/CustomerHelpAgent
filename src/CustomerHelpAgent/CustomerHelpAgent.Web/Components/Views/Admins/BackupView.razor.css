@@ -1,0 +1,46 @@
+.backup-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.backup-toolbar-left,
+.backup-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.backup-hint,
+.backup-muted,
+.backup-label {
+    color: var(--app-muted);
+    font-size: 0.88rem;
+}
+
+.backup-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.backup-summary > div {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* 欄位多，窄螢幕讓表格自己橫向捲動而不是把整頁撐寬。 */
+.backup-table-wrap {
+    overflow-x: auto;
+}
+
+.backup-name {
+    white-space: nowrap;
+}

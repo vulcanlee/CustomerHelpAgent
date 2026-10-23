@@ -1,0 +1,464 @@
+﻿.top-row {
+    min-height: 5rem;
+    padding: 1.1rem 1rem 1rem;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.sidebar-hamburger {
+    align-items: center;
+    background: var(--app-rail-cta);
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 12px 24px rgba(var(--app-shadow-rgb), 0.45);
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 auto;
+    height: 2.75rem;
+    justify-content: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+    width: 2.75rem;
+}
+
+.sidebar-hamburger:hover {
+    box-shadow: 0 16px 30px rgba(var(--app-shadow-rgb), 0.55);
+    filter: brightness(1.03);
+    transform: translateY(-1px);
+}
+
+.sidebar-hamburger:focus-visible {
+    outline: 3px solid var(--app-rail-ring);
+    outline-offset: 3px;
+}
+
+/* ⚠️ 圖示大小只能從 MaterialIcon 的 Size 參數改（側邊欄選單走
+   Components/Layout/MaterialIconOpticalSize.cs）：該元件會輸出行內的
+   style="font-size:…"，CSS 的 font-size 蓋不過去。
+   0.9.16 已把本檔原本無效的 font-size 宣告全數移除。 */
+
+.sidebar-brand {
+    align-items: center;
+    display: flex;
+    gap: 0.9rem;
+    min-width: 0;
+}
+
+.sidebar-brand-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-width: 0;
+    opacity: 1;
+    transition: opacity 0.2s ease, width 0.2s ease;
+}
+
+.sidebar-brand-collapsed .sidebar-brand-text {
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+}
+
+.navbar-brand {
+    color: var(--app-rail-text-strong);
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    /* 0.9.13 起品牌文字取自 SystemName，長度不再由程式碼控制。
+       超出側邊欄寬度時以刪節號收尾（完整名稱放在 title 屬性），
+       而不是被側邊欄邊界靜靜切掉。 */
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.navbar-subtitle {
+    color: var(--app-rail-faint);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+}
+
+.nav-section-title {
+    color: var(--app-rail-faint);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 0.25rem 1.5rem 1rem;
+    text-transform: uppercase;
+    transition: opacity 0.2s ease;
+}
+
+.nav-item ::deep .nav-link-disabled {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    color: var(--app-rail-faint);
+    cursor: default;
+    display: flex;
+    min-height: 3rem;
+}
+
+.nav-scrollable {
+    display: block;
+    overflow-y: auto;
+    padding-bottom: 1.2rem;
+}
+
+.sidebar-menu-shell {
+    padding: 0 1rem 1rem;
+}
+
+.sidebar-menu-shell ::deep .sidebar-menu,
+.sidebar-menu-shell ::deep .ant-menu,
+.sidebar-menu-shell ::deep .ant-menu-sub {
+    background: transparent !important;
+    border-inline-end: none !important;
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title {
+    align-items: center;
+    border-radius: 14px;
+    color: var(--app-rail-text) !important;
+    display: flex;
+    font-size: 0.92rem;
+    font-weight: 500;
+    gap: 0.4rem;
+    height: 3rem !important;
+    line-height: 3rem !important;
+    margin: 0 0 0.55rem 0 !important;
+    overflow: hidden;
+    padding-right: 1rem !important;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item:hover,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title:hover {
+    background: var(--app-rail-hover) !important;
+    box-shadow: none;
+    color: var(--app-rail-text-strong) !important;
+    transform: translateX(2px);
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item-selected,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title {
+    background: var(--app-rail-active) !important;
+    box-shadow: 0 14px 28px rgba(var(--app-shadow-rgb), 0.45);
+    color: var(--app-on-accent) !important;
+}
+
+/* ⚠️ AntDesign 的 MenuItem 只要有 RouterLink，就會在 <li class="ant-menu-item"> 裡面
+   **再包一層 <a>**，而它出廠自帶 `.ant-menu-item a { color: rgba(0,0,0,.85) }`、
+   `.ant-menu-item-selected a { color: #1890ff }`。color 在子元素被直接指定時不會繼承，
+   所以上面三個區塊打在 <li> 上的顏色**到不了葉節點的文字** ——
+   深梅底上會變成黑字，選中的變藍字，幾乎看不見。
+   「登出」之所以一直正常，是因為它走 OnClick 沒有 <a>；群組標題是 <div> 也沒有 <a>。
+   圖示正常則是因為下面那兩組用的是後代選擇器，本來就穿得過 <a>。
+   ⚠️ 必須 !important：scoped CSS 束在 App.razor 裡排在 AntDesign **之前**。
+   由 SidebarLinkColorConventionTests 守門。 */
+.sidebar-menu-shell ::deep .ant-menu-item a {
+    color: var(--app-rail-text-sub) !important;
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item:hover a,
+.sidebar-menu-shell ::deep .ant-menu-item a:hover {
+    color: var(--app-rail-text-strong) !important;
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item-selected a,
+.sidebar-menu-shell ::deep .ant-menu-item-selected a:hover {
+    color: var(--app-on-accent) !important;
+}
+
+/* 右緣的選中指示條。AntDesign 出廠是 3px 的 #1890ff。
+   實算它對深梅底是 3.48:1，**有**通過非文字元素的 3:1 門檻 —— 換掉純粹是配色一致性，
+   不是無障礙問題（真正不合格的是文字：黑字 1.78:1、選中藍字對莓紅 2.09:1）。
+   改用 --app-accent-light，對底色 6.76:1，與莓紅膠囊同一個色系家族。 */
+.sidebar-menu-shell ::deep .ant-menu-item::after {
+    border-right-color: var(--app-accent-light) !important;
+}
+
+
+.sidebar-menu-shell ::deep .ant-menu-item .material-icons,
+.sidebar-menu-shell ::deep .ant-menu-item .material-icons-outlined,
+.sidebar-menu-shell ::deep .ant-menu-item .material-icons-round,
+.sidebar-menu-shell ::deep .ant-menu-item .material-icons-sharp,
+.sidebar-menu-shell ::deep .ant-menu-item .material-icons-two-tone,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-outlined,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-round,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-sharp,
+.sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-two-tone {
+    color: var(--app-rail-icon);
+}
+
+.sidebar-menu-shell ::deep .ant-menu-item-selected .material-icons,
+.sidebar-menu-shell ::deep .ant-menu-item-selected .material-icons-outlined,
+.sidebar-menu-shell ::deep .ant-menu-item-selected .material-icons-round,
+.sidebar-menu-shell ::deep .ant-menu-item-selected .material-icons-sharp,
+.sidebar-menu-shell ::deep .ant-menu-item-selected .material-icons-two-tone,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title .material-icons,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title .material-icons-outlined,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title .material-icons-round,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title .material-icons-sharp,
+.sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title .material-icons-two-tone,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-outlined,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-round,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-sharp,
+.sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-two-tone {
+    color: var(--app-rail-text-strong);
+}
+
+.sidebar-menu-shell ::deep .ant-menu-inline .ant-menu-sub {
+    padding-top: 0.1rem;
+}
+
+.sidebar-menu-shell ::deep .ant-menu-submenu-arrow {
+    color: var(--app-rail-faint) !important;
+}
+
+@media (max-width: 640.98px) {
+    .nav-scrollable-collapsed {
+        display: none;
+    }
+}
+
+@media (min-width: 641px) {
+    .top-row-collapsed {
+        justify-content: center;
+        min-height: auto;
+        padding: 0.45rem 0.35rem 0.25rem;
+    }
+
+    .top-row-collapsed .sidebar-hamburger {
+        border-radius: 12px;
+        height: 2.2rem;
+        width: 2.2rem;
+    }
+
+    .top-row-collapsed .sidebar-brand {
+        display: none;
+    }
+
+    .nav-scrollable {
+        height: calc(100vh - 5rem);
+    }
+
+    .nav-scrollable::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .nav-scrollable::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.28);
+        border-radius: 999px;
+    }
+
+    .sidebar-menu-shell-collapsed {
+        padding-left: 0.3rem;
+        padding-right: 0.3rem;
+    }
+
+    .sidebar-menu-shell-collapsed .nav-section-title {
+        display: none;
+    }
+
+    /* 收合時停用該層捲動，讓向右展開的飛出子選單不被 overflow 裁切（飛出才能顯示）。 */
+    .nav-scrollable-collapsed {
+        overflow: visible;
+    }
+
+}
+
+/* ===== 收合側邊欄：自訂飛出子選單（兩層）=====
+   以透明 ::before 橋接維持 hover（滑鼠在圖示與飛出之間移動時不關閉）。
+
+   ⚠️ 焦點條件用 :has(:focus-visible)，**不要改回 :focus-within**。
+   :focus-within 會在滑鼠點完子項後讓焦點黏在該連結上、flyout 收不起來
+   （這正是它當初被移除的原因）；:focus-visible 本身就會區分鍵盤與滑鼠，
+   滑鼠點擊不成立、鍵盤 Tab 才成立，因而能同時滿足鍵盤可用與點完即收。 */
+.collapsed-sidebar-menu {
+    display: block;
+    position: relative;
+}
+
+.collapsed-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.collapsed-menu-item {
+    height: 3rem;
+    position: relative;
+    width: 100%;
+}
+
+.collapsed-menu-trigger {
+    align-items: center;
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    color: var(--app-rail-icon);
+    cursor: pointer;
+    display: inline-flex;
+    height: 3rem;
+    justify-content: center;
+    padding: 0;
+    text-decoration: none;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    width: 100%;
+}
+
+.collapsed-menu-link {
+    display: flex;
+}
+
+.collapsed-menu-trigger:hover,
+.collapsed-menu-trigger:focus-visible,
+.collapsed-menu-item:hover > .collapsed-menu-trigger,
+.collapsed-menu-item-active > .collapsed-menu-trigger {
+    background: var(--app-rail-active);
+    box-shadow: 0 14px 28px rgba(var(--app-shadow-rgb), 0.45);
+    color: var(--app-on-accent);
+    outline: none;
+}
+
+.collapsed-menu-trigger ::deep .material-icons,
+.collapsed-menu-trigger ::deep .material-icons-outlined,
+.collapsed-menu-trigger ::deep .material-icons-round,
+.collapsed-menu-trigger ::deep .material-icons-sharp,
+.collapsed-menu-trigger ::deep .material-icons-two-tone {
+    line-height: 1;
+}
+
+.collapsed-menu-flyout {
+    background: rgba(255, 250, 252, 0.98);
+    border: 1px solid var(--app-line);
+    border-radius: 8px;
+    box-shadow: 0 18px 38px rgba(var(--app-shadow-rgb), 0.20);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    left: calc(100% + 0.55rem);
+    min-width: 10rem;
+    opacity: 0;
+    padding: 0.45rem;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    transform: translateX(-0.25rem);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    z-index: 40;
+}
+
+.collapsed-menu-flyout::before {
+    bottom: 0;
+    content: "";
+    left: -0.75rem;
+    position: absolute;
+    top: 0;
+    width: 0.75rem;
+}
+
+.collapsed-menu-item:hover > .collapsed-menu-flyout,
+.collapsed-menu-item:has(:focus-visible) > .collapsed-menu-flyout {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* 群組列（可再展開的第二層觸發鈕）與其飛出面板的定位基準。 */
+.collapsed-flyout-group {
+    position: relative;
+}
+
+.collapsed-flyout-group-trigger {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    width: 100%;
+}
+
+.collapsed-flyout-group-label {
+    flex: 1 1 auto;
+}
+
+.collapsed-flyout-group-arrow {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 0.25rem;
+}
+
+/* 第二層飛出：視覺樣式沿用 .collapsed-menu-flyout，這裡只覆寫定位。
+   top 以負值抵銷父層 flyout 的 padding，讓面板頂端與群組列切齊。 */
+.collapsed-flyout-submenu {
+    left: calc(100% + 0.8rem);
+    top: -0.45rem;
+}
+
+/* 橋接寬度（1rem）需大於上方的水平間距（0.8rem），
+   否則滑鼠從群組列平移到第二層的途中會脫離 hover 而關閉。 */
+.collapsed-flyout-submenu::before {
+    left: -1rem;
+    width: 1rem;
+}
+
+.collapsed-flyout-group:hover > .collapsed-flyout-submenu,
+.collapsed-flyout-group:has(:focus-visible) > .collapsed-flyout-submenu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+.collapsed-flyout-item {
+    align-items: center;
+    border-radius: 6px;
+    color: var(--app-text);
+    display: flex;
+    font-size: 0.92rem;
+    font-weight: 500;
+    gap: 0.75rem;
+    min-height: 2.7rem;
+    padding: 0.55rem 0.75rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.collapsed-flyout-item:hover,
+.collapsed-flyout-item:focus-visible,
+.collapsed-flyout-item-active {
+    background: var(--app-tint);
+    color: var(--app-accent);
+    outline: none;
+}
+
+.collapsed-flyout-item ::deep .material-icons,
+.collapsed-flyout-item ::deep .material-icons-outlined,
+.collapsed-flyout-item ::deep .material-icons-round,
+.collapsed-flyout-item ::deep .material-icons-sharp,
+.collapsed-flyout-item ::deep .material-icons-two-tone {
+    color: var(--app-muted);
+}
+
+.collapsed-flyout-item:hover ::deep .material-icons,
+.collapsed-flyout-item:hover ::deep .material-icons-outlined,
+.collapsed-flyout-item-active ::deep .material-icons,
+.collapsed-flyout-item-active ::deep .material-icons-outlined {
+    color: var(--app-accent);
+}
+
+.collapsed-flyout-group-arrow ::deep .material-icons,
+.collapsed-flyout-group-arrow ::deep .material-icons-outlined {
+    color: var(--app-accent-dim);
+}

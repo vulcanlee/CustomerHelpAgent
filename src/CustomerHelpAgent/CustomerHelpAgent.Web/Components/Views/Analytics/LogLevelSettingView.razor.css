@@ -1,0 +1,83 @@
+.log-level-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* 兩張卡片：用 repeat(2, ...) 而非資料庫用量頁的三欄，否則右側會空一格 */
+.log-level-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.log-level-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px;
+    border: 1px solid var(--app-line);
+    background: #fff;
+}
+
+.log-level-card-label {
+    color: var(--app-muted);
+}
+
+.log-level-card-value {
+    color: var(--app-accent);
+    font-size: 32px;
+    line-height: 1.1;
+}
+
+.log-level-card-caption {
+    color: var(--app-muted);
+    overflow-wrap: anywhere;
+}
+
+.log-level-banner {
+    padding: 12px 16px;
+    margin: 0;
+}
+
+.log-level-banner p {
+    margin: 0 0 6px;
+}
+
+.log-level-banner p:last-child {
+    margin-bottom: 0;
+}
+
+.log-level-choices-title {
+    margin: 0 0 12px;
+    font-weight: 600;
+}
+
+.log-level-choice {
+    padding: 4px 0;
+}
+
+.log-level-choice-description {
+    color: var(--app-muted);
+}
+
+.log-level-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--app-tint);
+}
+
+code {
+    padding: 1px 4px;
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    font-family: Consolas, Menlo, monospace;
+}
+
+@media (max-width: 640px) {
+    .log-level-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

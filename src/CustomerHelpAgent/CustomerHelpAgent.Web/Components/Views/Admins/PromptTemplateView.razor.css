@@ -1,0 +1,59 @@
+.prompt-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.prompt-hint,
+.prompt-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+}
+
+.prompt-section {
+    margin-bottom: 1.25rem;
+}
+
+.prompt-section-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.prompt-section-title {
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+}
+
+/* 提示詞原文：保留換行、長行自動折行，不讓整頁被撐寬。 */
+.prompt-content {
+    background: var(--app-thead);
+    border: 1px solid var(--app-line);
+    border-radius: 12px;
+    font-family: var(--app-code-font);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0.5rem 0 0;
+    max-height: 26rem;
+    overflow: auto;
+    padding: 0.75rem 1rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.prompt-locked {
+    max-height: none;
+}
+
+/* 窄螢幕讓版本紀錄橫向捲動，而不是把欄位擠成一個字寬。 */
+.prompt-table-wrap {
+    overflow-x: auto;
+}
+
+.prompt-table-wrap ::deep table {
+    min-width: 640px;
+}

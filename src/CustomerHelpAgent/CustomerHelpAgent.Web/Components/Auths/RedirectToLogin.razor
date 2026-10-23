@@ -1,0 +1,18 @@
+@inject NavigationManager NavigationManager
+
+@*
+    AuthorizeRouteView 的 NotAuthorized 內容：不渲染任何東西，直接整頁導向登入頁並帶上原本要去的網址。
+
+    正常情況下走不到這裡 —— 未登入的頁面請求早在 HTTP 層就被 [Authorize] 302 走了
+    （見 Components/Pages/_Imports.razor）。這是 circuit 內導覽的第二道網。
+*@
+
+@code {
+    protected override void OnInitialized()
+    {
+        var returnUrl = "/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.NavigateTo(
+            $"/Auths/Login?ReturnUrl={Uri.EscapeDataString(returnUrl)}",
+            forceLoad: true);
+    }
+}

@@ -1,0 +1,18 @@
+.category-view-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.category-view-toolbar-left,
+.category-view-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.category-view-search-input {
+    width: 260px;
+}

@@ -1,0 +1,382 @@
+﻿@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+
+    <div>
+        <div class="my-user-toolbar">
+            <div class="my-user-toolbar-left">
+                @if (!showDeleted)
+                {
+                    <ToolbarIconButton Title="新增" Icon="add"
+                                       OnClick="@(async()=>await OnAddAsync(true))" />
+                }
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                @* 0.9.107 起：依目前的搜尋、篩選、排序與「顯示已刪除」匯出（團隊範圍與畫面相同）。 *@
+                <ToolbarIconButton Title="匯出 Excel" Icon="file_download"
+                                   OnClick="@(async () => await OnExportExcelAsync())" />
+                @if (!showDeleted)
+                {
+                    <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                       OnClick="@(async () => await OnBatchDeleteAsync())" />
+                }
+                @* 0.9.95 起刪除為軟刪除：切換到已刪除的資料，可還原或永久刪除（本頁只有管理員能進）。 *@
+                <ToolbarIconButton Title="@(showDeleted ? "返回清單" : "顯示已刪除")"
+                                   Icon="@(showDeleted ? "arrow_back" : "auto_delete")"
+                                   OnClick="@(async () => await OnToggleDeletedAsync())" />
+            </div>
+            <div class="my-user-toolbar-right">
+                <Input class="my-user-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <ToolbarIconButton Title="清空搜尋" Icon="close"
+                                       OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })" />
+                }
+                <ToolbarIconButton Title="搜尋" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+            </div>
+        </div>
+        <div class="my-user-table-wrap">
+            <Table @ref="table"
+                   TItem="MyUserAdapterModel"
+                   Class="my-user-table"
+                   RemoteDataSource="true"
+                   DataSource="@myUserAdapterModels"
+                   OnChange=OnTableChange
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total"
+                   @bind-SelectedRows="selectedRows">
+                @* 0.9.132 起：勾選後可「刪除選取」；自己與 support 不可勾（同刪除按鈕），已刪除的資料不可勾選。 *@
+                @if (!showDeleted)
+                {
+                    <Selection Disabled="@(!myUserService.CanDelete(context))" />
+                }
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleViewName)" Title="角色" Sortable />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable>
+                    @* 0.9.120 起：點標籤直接切換（停用先確認）；自己與 support 不可停用，已刪除的資料不可點。 *@
+                    @if (!showDeleted && myUserService.CanToggleStatus(context))
+                    {
+                        <StatusPill Text="@context.StatusText"
+                                    Tone="@(context.Status ? StatusTone.Positive : StatusTone.Muted)"
+                                    Hint="@(context.Status ? "點一下切換為停用" : "點一下切換為啟用")"
+                                    OnClick="@(async () => await OnToggleStatusAsync(context))" />
+                    }
+                    else
+                    {
+                        <StatusPill Text="@context.StatusText"
+                                    Tone="@(context.Status ? StatusTone.Positive : StatusTone.Muted)" />
+                    }
+                    @* 登入鎖定（0.9.101 起）：到期自動解除，管理員可按「解鎖」立即解除。 *@
+                    @if (IsLocked(context))
+                    {
+                        <StatusPill Text="@LockedText(context)" Tone="StatusTone.Warning" />
+                    }
+                    @if (context.TwoFactorEnabled)
+                    {
+                        <StatusPill Text="兩步驟驗證" Tone="StatusTone.Accent" />
+                    }
+                </Column>
+                @* 只有「是」值得一個徽章；每一列都掛一顆「否」只會讓這一欄變成雜訊。 *@
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.IsAdminText)" Title="管理員" Sortable>
+                    @if (context.IsAdmin)
+                    {
+                        <StatusPill Text="@context.IsAdminText" Tone="StatusTone.Accent" />
+                    }
+                    else
+                    {
+                        <span>—</span>
+                    }
+                </Column>
+                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                @if (showDeleted)
+                {
+                    <Column TData="DateTime?" DataIndex="@nameof(MyUserAdapterModel.DeletedAt)" Title="刪除時間" />
+                    <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.DeletedBy)" Title="刪除者" />
+                }
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    @if (showDeleted)
+                    {
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="還原" Icon="restore_from_trash"
+                                                  OnClick="@(async () => await OnRestoreAsync(@context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="永久刪除" Icon="delete_forever" Danger
+                                                  OnClick="@(async () => await OnPurgeAsync(@context))" />
+                            </SpaceItem>
+                        </Space>
+                    }
+                    else
+                    {
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(@context))" />
+                            </SpaceItem>
+                            @* support 不可當範本（0.9.127 起）。 *@
+                            @if (myUserService.CanCopy(context))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="複製" Icon="content_copy"
+                                                      OnClick="@(async () => await OnCopyAsync(@context))" />
+                                </SpaceItem>
+                            }
+                            @if (IsLocked(context))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="解鎖" Icon="lock_open"
+                                                      OnClick="@(async () => await OnUnlockAsync(@context))" />
+                                </SpaceItem>
+                            }
+                            @* support 與自己不可刪除（伺服器端仍會再檢查）。 *@
+                            @if (CanForceLogout(context))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="強制登出" Icon="logout"
+                                                      OnClick="@(async () => await OnForceLogoutAsync(@context))" />
+                                </SpaceItem>
+                            }
+                            @if (CanResetTwoFactor(context))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="重設兩步驟驗證" Icon="phonelink_erase"
+                                                      OnClick="@(async () => await OnResetTwoFactorAsync(@context))" />
+                                </SpaceItem>
+                            }
+                            @if (myUserService.CanDelete(context))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                      OnClick="@(async () => await OnDeleteAsync(@context))" />
+                                </SpaceItem>
+                            }
+                        </Space>
+                    }
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    @*
+        大量資料輸入對話窗：接近滿版、欄位 2 欄、區塊分組。
+        規範見 docs/architecture/對話窗 UI 設計規範.md，樣式在 Components/Commons/OverlayStyles.razor。
+        ⚠️ EditForm 上絕不可掛 @@onkeydown（§6.3，ModalKeyboardConventionTests 守門）。
+    *@
+    <Modal Title="@modalTitle"
+           Class="form-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("儲存")"
+           CancelText="@("取消")"
+           OnOk="OnModalOKHandleAsync"
+           OnCancel="OnModalCancelHandleAsync">
+        <EditForm Model="@CurrentRecord" Context="editContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <InputWatcher EditContextActionChanged="OnEditContestChanged" />
+
+            <AntDesign.Form TModel="MyUserAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+
+                <FormSection Title="帳號與登入">
+                    <FormItem Label="帳號" Required>
+                        <Input @bind-Value="CurrentRecord.Account" Placeholder="請輸入帳號" />
+                        <ValidationMessage For="() => CurrentRecord.Account" />
+                    </FormItem>
+
+                    <FormItem Label="密碼" Required="@isNewRecordMode">
+                        <Input Password @bind-Value="CurrentRecord.Password" @bind-Value:after="OnPasswordTyped" Placeholder="新增時請輸入密碼，編輯時留白表示不變更" />
+                        <div class="form-field-hint">@(isNewRecordMode ? string.Empty : "留白表示沿用既有密碼。")密碼規則：@PasswordPolicy.Describe()</div>
+                        <ValidationMessage For="() => CurrentRecord.Password" />
+                    </FormItem>
+
+                    <FormItem>
+                        <Checkbox Checked="@CurrentRecord.MustChangePassword"
+                                  CheckedChanged="@(value => CurrentRecord.MustChangePassword = value)">
+                            下次登入須變更密碼
+                        </Checkbox>
+                        <div class="form-field-hint">勾選後，這位使用者登入時會先被帶到「變更密碼」頁。新增帳號與替使用者設定密碼時預設勾選。</div>
+                    </FormItem>
+                </FormSection>
+
+                <FormSection Title="基本資料">
+                    <FormItem Label="名稱" Required>
+                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
+                        <ValidationMessage For="() => CurrentRecord.Name" />
+                    </FormItem>
+
+                    <FormItem Label="Email">
+                        <Input @bind-Value="CurrentRecord.Email" Placeholder="請輸入 Email" />
+                        <ValidationMessage For="() => CurrentRecord.Email" />
+                    </FormItem>
+                </FormSection>
+
+                <FormSection Title="角色與團隊" Hint="多選欄位獨占整行">
+                    <FormItem Label="角色" Required>
+                        <Select TItem="RoleViewAdapterModel" TItemValue="int?"
+                                DataSource="@roleViewAdapterModels"
+                                @bind-Value="CurrentRecord.RoleViewId"
+                                LabelName="@nameof(RoleViewAdapterModel.Name)"
+                                ValueName="@nameof(RoleViewAdapterModel.Id)"
+                                Placeholder="請選擇角色"
+                                Style="width: 100%;" />
+                        <ValidationMessage For="() => CurrentRecord.RoleViewId" />
+                    </FormItem>
+
+                    @* 多選：選項一多就換行，半欄寬度會讓它一直長高、把右邊欄位擠歪，因此獨占整行。 *@
+                    <FormItem Label="額外角色（多角色，權限取聯集）" Class="form-field-full">
+                        <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
+                                Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
+                                AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var r in roleViewAdapterModels)
+                            {
+                                <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="團隊（直接綁定此使用者）" Class="form-field-full">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
+                                Placeholder="指派此使用者可存取的團隊（不設定則沿用其角色的預設團隊）"
+                                AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var t in availableTeams)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+                </FormSection>
+
+                <FormSection Title="狀態">
+                    <FormItem>
+                        <Checkbox Checked="@CurrentRecord.Status"
+                                  CheckedChanged="@(value => CurrentRecord.Status = value)">
+                            啟用
+                        </Checkbox>
+                        <div class="form-field-hint">停用後無法登入，但保留歷史紀錄。</div>
+                    </FormItem>
+
+                    <FormItem>
+                        <Checkbox Checked="@CurrentRecord.IsAdmin"
+                                  CheckedChanged="@(value => CurrentRecord.IsAdmin = value)">
+                            管理員
+                        </Checkbox>
+                        <div class="form-field-hint">管理員不受角色權限限制，可以使用所有功能。</div>
+                    </FormItem>
+                </FormSection>
+
+            </AntDesign.Form>
+        </EditForm>
+    </Modal>
+
+    @*
+        複製使用者（0.9.127 起）：以清單上的某一列為範本，只填個人資料就建立新帳號；
+        角色、團隊、狀態、管理員照抄來源、唯讀顯示，要改就建完再按「修改」。
+        獨立的 copyRecord，不與修改窗的 CurrentRecord 共用。
+    *@
+    <Modal Title="@copyModalTitle"
+           Class="form-modal"
+           @bind-Visible="@copyModalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("建立")"
+           CancelText="@("取消")"
+           OnOk="OnCopyModalOKHandleAsync"
+           OnCancel="OnCopyModalCancelHandleAsync">
+        <EditForm Model="@copyRecord" Context="copyFormEditContext">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <InputWatcher EditContextActionChanged="OnCopyEditContextChanged" />
+
+            <AntDesign.Form TModel="MyUserAdapterModel" Model="@copyRecord" Layout="FormLayout.Vertical" Context="copyFormContext">
+
+                <FormSection Title="新帳號">
+                    <FormItem Label="帳號" Required>
+                        <Input @bind-Value="copyRecord.Account" Placeholder="請輸入帳號" />
+                        <ValidationMessage For="() => copyRecord.Account" />
+                    </FormItem>
+
+                    <FormItem Label="名稱" Required>
+                        <Input @bind-Value="copyRecord.Name" Placeholder="請輸入名稱" />
+                        <ValidationMessage For="() => copyRecord.Name" />
+                    </FormItem>
+
+                    <FormItem Label="密碼" Required>
+                        <Input Password="@(!copyPasswordVisible)" @bind-Value="copyRecord.Password" Placeholder="請輸入密碼，或按「產生」" />
+                        <Button Size="ButtonSize.Small" OnClick="OnGeneratePassword">產生</Button>
+                        <div class="form-field-hint">密碼規則：@PasswordPolicy.Describe()</div>
+                    </FormItem>
+
+                    <FormItem Label="Email">
+                        <Input @bind-Value="copyRecord.Email" Placeholder="請輸入 Email" />
+                    </FormItem>
+
+                    <FormItem>
+                        <Checkbox Checked="@copyRecord.MustChangePassword"
+                                  CheckedChanged="@(value => copyRecord.MustChangePassword = value)">
+                            下次登入須變更密碼
+                        </Checkbox>
+                    </FormItem>
+                </FormSection>
+
+                <FormSection Title="將從來源帶入" Hint="要調整請建立後按「修改」">
+                    <FormItem Label="角色">
+                        <div>@CopyRoleSummary</div>
+                    </FormItem>
+                    <FormItem Label="團隊">
+                        <div>@(copyRecord.TeamNames.Count > 0 ? string.Join("、", copyRecord.TeamNames) : "（未直接綁定）")</div>
+                        @if (copySkippedTeams.Count > 0)
+                        {
+                            <div class="form-field-hint">已停用、不帶入：@string.Join("、", copySkippedTeams)</div>
+                        }
+                    </FormItem>
+                    <FormItem Label="狀態">
+                        <div>@copyRecord.StatusText</div>
+                    </FormItem>
+                    <FormItem Label="管理員">
+                        @if (copyRecord.IsAdmin)
+                        {
+                            <strong>是（新帳號將擁有所有權限）</strong>
+                        }
+                        else
+                        {
+                            <div>否</div>
+                        }
+                    </FormItem>
+                </FormSection>
+
+            </AntDesign.Form>
+        </EditForm>
+    </Modal>
+
+    @* 複製建立成功後的交付資訊：建立時已嘗試自動複製；被瀏覽器拒絕時用「複製」再試一次。 *@
+    <Modal Title="@("已建立使用者")"
+           Class="user-copy-result-modal"
+           @bind-Visible="@copyResultVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("複製")"
+           CancelText="@("關閉")"
+           OnOk="OnCopyResultCopyAsync"
+           OnCancel="OnCopyResultClose">
+        <pre class="user-copy-result-text">@copyResultText</pre>
+        <div class="user-copy-result-hint">密碼只會在這裡顯示一次，關閉後就無法再查看。</div>
+    </Modal>
+}

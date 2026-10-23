@@ -1,0 +1,19 @@
+.project-view-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.project-view-toolbar-left,
+.project-view-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.project-view-search-input {
+    width: 260px;
+}
+

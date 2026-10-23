@@ -1,0 +1,126 @@
+@using CustomerHelpAgent.Web.Diagnostics
+@using CustomerHelpAgent.Share.Helpers
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (report is null)
+{
+    <div class="db-usage-loading">正在讀取資料庫用量...</div>
+}
+else if (string.IsNullOrWhiteSpace(report.ErrorMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">@report.ErrorMessage</div>
+}
+else
+{
+    <div class="db-usage-page">
+        <div class="db-usage-cards">
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">磁碟占用總計</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.TotalOnDiskBytes)</strong>
+                <span class="db-usage-card-caption">主檔 + WAL + SHM 三個檔案</span>
+            </article>
+
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">主資料庫檔</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.MainDbBytes)</strong>
+                <span class="db-usage-card-caption">@report.DatabaseFileName</span>
+            </article>
+
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">預寫日誌</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.WalBytes)</strong>
+                <span class="db-usage-card-caption">
+                    @(report.WalFileExists
+                        ? $"{report.DatabaseFileName}-wal"
+                        : "目前無此檔案（已 checkpoint）")
+                </span>
+            </article>
+
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">共享記憶體索引</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.ShmBytes)</strong>
+                <span class="db-usage-card-caption">
+                    @(report.ShmFileExists
+                        ? $"{report.DatabaseFileName}-shm"
+                        : "目前無此檔案")
+                </span>
+            </article>
+
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">已配置</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.AllocatedBytes)</strong>
+                <span class="db-usage-card-caption">
+                    @report.PageCount.ToString("N0") 頁 × @report.PageSize.ToString("N0") B，含尚未併回主檔的頁
+                </span>
+            </article>
+
+            <article class="db-usage-card">
+                <span class="db-usage-card-label">可回收</span>
+                <strong class="db-usage-card-value">@SizeFormatHelper.FormatBytes(report.ReclaimableBytes)</strong>
+                <span class="db-usage-card-caption">
+                    @report.FreelistCount.ToString("N0") 個閒置頁，VACUUM 可釋放
+                </span>
+            </article>
+        </div>
+
+        <div class="db-usage-banner" role="note">
+            <strong>預寫日誌（WAL）比主檔大是正常的。</strong>
+            它是尚未 checkpoint 的交易紀錄，SQLite 會在適當時機把內容併回主檔並回收，不代表資料量暴漲。
+        </div>
+
+        <p class="db-usage-note">
+            <strong>「資料量估算」不是磁碟占用量。</strong>
+            它是各欄位內容的位元組加總，<strong>不含索引、頁面碎片與已配置的閒置頁</strong>，與實際磁碟占用會有差距。
+            本專案綁的 SQLite 沒有編入 <code>dbstat</code> 虛擬表，而那是取得每表實際頁數的唯一途徑。
+        </p>
+
+        @if (string.IsNullOrWhiteSpace(report.Message) == false)
+        {
+            <div class="alert alert-warning db-usage-alert" role="alert">@report.Message</div>
+        }
+
+        @foreach (var warning in report.Warnings)
+        {
+            <div class="alert alert-warning db-usage-alert" role="alert">@warning</div>
+        }
+
+        <div class="db-usage-table-wrap">
+            <Table TItem="TableUsage"
+                   DataSource="@report.Tables"
+                   Size="TableSize.Small"
+                   RowKey="@(row => row.TableName)"
+                   HidePagination="true">
+                @* 排序綁在原始數值（DataIndex）上、顯示才格式化，
+                   否則「資料量估算」會按字串排序，1.5 MB 會排在 900 KB 之下。 *@
+                <Column TData="string" DataIndex="@nameof(TableUsage.TableName)"
+                        Title="資料表" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="long?" DataIndex="@nameof(TableUsage.RowCount)"
+                        Title="紀錄筆數" Sortable Align="ColumnAlign.Right">
+                    @(context.RowCount?.ToString("N0") ?? "—")
+                </Column>
+                <Column TData="long?" DataIndex="@nameof(TableUsage.EstimatedBytes)"
+                        Title="資料量估算" Sortable Align="ColumnAlign.Right">
+                    @if (context.EstimatedBytes is null)
+                    {
+                        <span class="db-usage-muted" title="@context.Note">—</span>
+                    }
+                    else
+                    {
+                        @SizeFormatHelper.FormatBytes(context.EstimatedBytes.Value)
+                    }
+                </Column>
+                <Column TData="int" DataIndex="@nameof(TableUsage.IndexCount)"
+                        Title="索引數" Sortable Align="ColumnAlign.Right" />
+            </Table>
+        </div>
+    </div>
+}

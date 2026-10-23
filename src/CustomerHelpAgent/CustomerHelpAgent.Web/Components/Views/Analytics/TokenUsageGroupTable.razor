@@ -1,0 +1,55 @@
+﻿@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Web.Diagnostics
+
+@*
+    四個統計頁籤（依使用者／作業／模型／型別）共用同一張表，
+    只有第一欄的標題不同，所以抽成一個小元件而不是複製四份。
+*@
+<div class="token-usage-table-wrap">
+    <Table TItem="TokenUsageGroupRow"
+           DataSource="@Rows"
+           Size="TableSize.Small"
+           RowKey="@(row => row.Key)"
+           HidePagination="true">
+        <Column TData="string" Title="@KeyTitle">@context.Key</Column>
+        <Column TData="string" Title="輸入" Width="120" Align="ColumnAlign.Right">
+            @TokenUsageFormat.Compact(context.InputCount)
+        </Column>
+        <Column TData="string" Title="輸出" Width="120" Align="ColumnAlign.Right">
+            @TokenUsageFormat.Compact(context.OutputCount)
+        </Column>
+        <Column TData="string" Title="快取" Width="120" Align="ColumnAlign.Right">
+            @TokenUsageFormat.Compact(context.CachedInputCount)
+        </Column>
+        <Column TData="string" Title="推理" Width="120" Align="ColumnAlign.Right">
+            @TokenUsageFormat.Compact(context.ReasoningCount)
+        </Column>
+        <Column TData="string" Title="合計" Width="130" Align="ColumnAlign.Right">
+            <strong>@TokenUsageFormat.Compact(context.TotalCount)</strong>
+        </Column>
+        @*
+            這裡的 Tooltip 刻意不顯示匯率：一個分組可能橫跨多次匯率調整，
+            沒有單一匯率能代表整組。要看匯率請到明細列或明細窗。
+        *@
+        <Column TData="string" Title="費用" Width="140" Align="ColumnAlign.Right">
+            <Tooltip Title="@($"US$ {TokenUsageFormat.CostUsdTotal(context.CostUsd)}")">
+                <span>NT$ @TokenUsageFormat.CostTwdTotal(context.CostTwd)</span>
+            </Tooltip>
+            @if (context.UnpricedCount > 0)
+            {
+                <span class="token-usage-unpriced">（@context.UnpricedCount 未計）</span>
+            }
+        </Column>
+        <Column TData="string" Title="次數" Width="100" Align="ColumnAlign.Right">
+            @context.CallCount.ToString("N0")
+        </Column>
+    </Table>
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<TokenUsageGroupRow> Rows { get; set; } = [];
+
+    [Parameter]
+    public string KeyTitle { get; set; } = string.Empty;
+}

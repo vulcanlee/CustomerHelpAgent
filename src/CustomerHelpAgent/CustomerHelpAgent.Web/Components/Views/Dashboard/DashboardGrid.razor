@@ -1,0 +1,37 @@
+@using CustomerHelpAgent.Web.Dashboard
+@using CustomerHelpAgent.Web.Diagnostics
+
+@*
+    首頁小工具區（0.9.106 起）。每個小工具包在自己的錯誤邊界裡：一個壞掉只影響那一張卡片，錯誤寫進日誌並顯示追蹤碼。
+    只渲染傳進來的（已依權限過濾），沒權限的小工具根本不會被建立。
+*@
+<div class="dashboard-grid">
+    @foreach (var widget in Widgets)
+    {
+        <section class="dashboard-card" @key="widget.Id" data-widget="@widget.Id" aria-label="@widget.Title">
+            <header class="dashboard-card-header">
+                <span class="dashboard-card-icon" aria-hidden="true">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@widget.Icon" />
+                </span>
+                <h2 class="dashboard-card-title">@widget.Title</h2>
+            </header>
+            <div class="dashboard-card-body">
+                <LoggingErrorBoundary>
+                    <ChildContent>
+                        <DynamicComponent Type="@widget.ComponentType" />
+                    </ChildContent>
+                    <ErrorContent Context="exception">
+                        <div class="dashboard-card-error" role="alert">
+                            這個區塊暫時無法顯示，其他區塊不受影響@TraceCode.Suffix(TraceCode.FromException(exception))。
+                        </div>
+                    </ErrorContent>
+                </LoggingErrorBoundary>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DashboardWidgetDescriptor> Widgets { get; set; } = [];
+}

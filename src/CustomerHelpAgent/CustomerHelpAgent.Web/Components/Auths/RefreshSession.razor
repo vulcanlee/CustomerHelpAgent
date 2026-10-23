@@ -1,0 +1,8 @@
+@page "/Auths/RefreshSession"
+@* 與登出頁相同：不可套用 MainLayout（它會先跑 AuthenticationStateHelper.Check，舊 Cookie 的版本不符又導去登出）。 *@
+@layout EmptyLayout
+
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>更新登入狀態</PageTitle>

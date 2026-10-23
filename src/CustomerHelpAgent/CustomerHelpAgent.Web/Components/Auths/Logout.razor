@@ -1,0 +1,9 @@
+﻿@page "/Auths/Logout"
+@* 不可套用預設的 MainLayout（0.9.95 修正）：它會先跑 AuthenticationStateHelper.Check，使用者已停用或已刪除時
+   又導向 /Auths/Logout —— 導向發生在這一頁清掉 Cookie 之前，瀏覽器就陷入「重新導向太多次」。 *@
+@layout EmptyLayout
+
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>登出</PageTitle>

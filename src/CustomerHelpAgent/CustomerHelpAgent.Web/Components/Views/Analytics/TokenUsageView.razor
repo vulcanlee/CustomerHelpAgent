@@ -1,0 +1,534 @@
+﻿@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Web.Ai
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="token-usage-intro">
+            <p>
+                記錄每次呼叫大語言模型的 token 用量：是哪個<strong>作業</strong>、哪個 <strong>API 型別</strong>、
+                哪個<strong>模型</strong>、哪個<strong>使用者</strong>，以及供應商回傳的各類 token 數。本頁僅管理員可見。
+            </p>
+            <p>
+                輸入（送出／prompt）與輸出（接收／completion）計價不同；<strong>快取</strong>是輸入的折扣子集、
+                <strong>推理</strong>計入輸出，兩者都只是「其中多少」，不另外加進合計。按每列「詳細」可看到完整分組與原始明細。
+            </p>
+            <p>
+                失敗的呼叫也會記錄。其中<strong>回應成功但內容為空</strong>特別值得注意 ——
+                上游照常計費，使用者卻什麼都沒拿到。依音訊時長計費、不回傳 token 數的模型不計入 token 合計。
+            </p>
+            <p>
+                <strong>費用</strong>是呼叫當下依 <code>AiPricingSettings</code> 的單價與匯率算好、連同單價快照一起存下來的，
+                <strong>事後調整設定不會改變已經記錄的帳</strong>。找不到該模型費率設定的呼叫標示為「未定價」，不計入合計；
+                0.9.17 之前的紀錄沒有單價快照，一律未定價。合計的美金與台幣<strong>各自為逐列加總</strong>，
+                區間橫跨匯率調整時兩者彼此推不出來。
+            </p>
+        </div>
+
+        @* AI 用量上限（0.9.109 起）：全系統的今日、本月已用 vs 上限，與每人上限的設定值。 *@
+        <div class="token-usage-quota">
+            <div class="token-usage-cards-caption">AI 用量上限　—　在「系統參數」的「AI 用量」調整；未定價的呼叫以 0 計</div>
+            <div class="token-usage-quota-items">
+                @foreach (var status in quotaStatus)
+                {
+                    <span class="token-usage-quota-item">
+                        @QuotaText(status)
+                        @if (status.IsReached)
+                        {
+                            <StatusPill Text="已達上限" Tone="StatusTone.Warning" />
+                        }
+                        else if (status.Ratio >= 0.8)
+                        {
+                            <StatusPill Text="已達 80%" Tone="StatusTone.Warning" />
+                        }
+                    </span>
+                }
+                <span class="token-usage-quota-item">每人每日上限：@LimitText(QuotaOptions.CurrentValue.PerUserDailyTwd)</span>
+                <span class="token-usage-quota-item">每人每月上限：@LimitText(QuotaOptions.CurrentValue.PerUserMonthlyTwd)</span>
+            </div>
+        </div>
+
+        <div class="token-usage-toolbar">
+            <div class="token-usage-toolbar-left">
+                <Input class="token-usage-account-input" @bind-Value="accountFilter" Placeholder="帳號" />
+                <DatePicker TValue="DateTime?" @bind-Value="startDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("起始日")" Style="width: 140px;" />
+                <DatePicker TValue="DateTime?" @bind-Value="endDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("結束日")" Style="width: 140px;" />
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedOperation" Style="width: 150px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="全部作業" />
+                    @foreach (var item in filterOptions.Operations)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@item" Label="@item" />
+                    }
+                </Select>
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedCallKind" Style="width: 130px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="全部型別" />
+                    @foreach (var item in filterOptions.CallKinds)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@item" Label="@item" />
+                    }
+                </Select>
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedModel" Style="width: 170px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="全部模型" />
+                    @foreach (var item in filterOptions.Models)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@item" Label="@item" />
+                    }
+                </Select>
+            </div>
+            <div class="token-usage-toolbar-right">
+                <ToolbarIconButton Title="查詢" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                <ToolbarIconButton Title="匯出目前查詢結果（CSV）" Icon="file_download"
+                                   Disabled="@(summary.CallCount == 0)"
+                                   OnClick="@(async () => await OnExportCsvAsync())" />
+                <ToolbarIconButton Title="下載全部頁籤的 PDF 報表" Icon="picture_as_pdf"
+                                   Disabled="@(summary.CallCount == 0 || isExportingPdf)"
+                                   OnClick="@(async () => await OnExportPdfAsync(TokenUsageReportScope.All))" />
+                @* 只匯出目前這一個頁籤。條件區與合計仍然保留，否則報表看不出是在什麼條件下產生的。 *@
+                <ToolbarIconButton Title="@($"只匯出目前頁籤（{ActiveTabLabel}）的 PDF")" Icon="description"
+                                   Disabled="@(summary.CallCount == 0 || isExportingPdf)"
+                                   OnClick="@(async () => await OnExportPdfAsync(ActiveScope))" />
+                <ToolbarIconButton Title="清空全部紀錄" Icon="delete_forever"
+                                   OnClick="@(async () => await OnClearAllAsync())" />
+            </div>
+        </div>
+
+        <div class="token-usage-purge">
+            <DatePicker TValue="DateTime?" @bind-Value="purgeBeforeDate" Picker="@DatePickerType.Date"
+                        Format="yyyy-MM-dd" Placeholder="@("清除此日之前")" Style="width: 160px;" />
+            <Button Danger Disabled="@(purgeBeforeDate is null)"
+                    OnClick="@(async () => await OnPurgeAsync())">批次清除</Button>
+            @* 0.9.132 起：「明細」頁籤勾選後出現。 *@
+            <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                               OnClick="@(async () => await OnBatchDeleteAsync())" />
+        </div>
+
+        @*
+            篩選範圍合計。四張卡而不是六張：快取是輸入的折扣子集、推理計入輸出，
+            兩者都不另計入合計，所以各自寫在【輸入】【輸出】卡裡面 ——
+            若拆成六張對等的卡，讀的人會很自然地把它們相加，那是錯的。
+        *@
+        <div class="token-usage-totals">
+            @* 條件含日期，與下排刻意不同（下排的卡會自己換掉日期）。 *@
+            <div class="token-usage-cards-caption">篩選範圍合計　—　套用條件：@FilterScopeText</div>
+            <div class="token-usage-total-cards">
+                <article class="token-usage-stat-card">
+                    <span class="token-usage-stat-label">輸入（送出／prompt）</span>
+                    <span class="token-usage-stat-value">@FormatCompact(summary.InputCount)</span>
+                    <span class="token-usage-stat-meta">其中快取 @FormatCompact(summary.CachedInputCount)</span>
+                    <span class="token-usage-stat-note">快取是輸入的折扣子集，不另計入合計</span>
+                </article>
+
+                <article class="token-usage-stat-card">
+                    <span class="token-usage-stat-label">輸出（接收／completion）</span>
+                    <span class="token-usage-stat-value">@FormatCompact(summary.OutputCount)</span>
+                    <span class="token-usage-stat-meta">其中推理 @FormatCompact(summary.ReasoningCount)</span>
+                    <span class="token-usage-stat-note">推理計入輸出，不另計入合計</span>
+                </article>
+
+                <article class="token-usage-stat-card">
+                    <span class="token-usage-stat-label">合計</span>
+                    <span class="token-usage-stat-value">@FormatCompact(summary.TotalCount)</span>
+                    <span class="token-usage-stat-note">輸入 ＋ 輸出；子集不重複計入</span>
+                </article>
+
+                <article class="token-usage-stat-card">
+                    <span class="token-usage-stat-label">花費</span>
+                    <span class="token-usage-stat-value">NT$ @FormatCostTwdTotal(summary.CostTwd)</span>
+                    <span class="token-usage-stat-meta">US$ @FormatCostUsdTotal(summary.CostUsd)</span>
+                    @if (summary.UnpricedCount > 0)
+                    {
+                        <span class="token-usage-unpriced">⚠ 其中 @summary.UnpricedCount 筆未定價未計入</span>
+                    }
+                    else
+                    {
+                        <span class="token-usage-stat-note">美金與台幣各自逐列加總</span>
+                    }
+                </article>
+            </div>
+        </div>
+
+        @*
+            最近 N 天摘要卡。三張卡沿用目前的帳號／作業／型別／模型篩選，只把日期換成自己的窗，
+            所以選了某個模型之後，卡片回答的是「這個模型近 1／7／30 天花了多少」。
+            近 1／7／30 天彼此是巢狀區間，三張卡都從同一次「近 30 天」查詢切片加總（見 CardOf）。
+        *@
+        <div class="token-usage-ranges">
+            <div class="token-usage-cards-caption">最近用量與費用（點卡片可套用該區間）　—　套用條件：@ActiveFilterText</div>
+            <div class="token-usage-range-cards">
+                @foreach (var (days, label) in RangeCards)
+                {
+                    var card = CardOf(days);
+                    <button type="button"
+                            class="token-usage-stat-card token-usage-range-card @(IsRangeActive(days) ? "is-active" : string.Empty)"
+                            @onclick="@(async () => await OnApplyRangeAsync(days))">
+                        <span class="token-usage-stat-label">@label</span>
+                        <span class="token-usage-stat-value">NT$ @FormatCostTwdTotal(card.CostTwd)</span>
+                        <span class="token-usage-stat-meta">US$ @FormatCostUsdTotal(card.CostUsd)</span>
+                        <span class="token-usage-stat-meta">
+                            呼叫 @card.CallCount.ToString("N0") 次・合計 @FormatCompact(card.TotalCount)
+                        </span>
+                        @if (card.UnpricedCount > 0)
+                        {
+                            <span class="token-usage-unpriced">⚠ 其中 @card.UnpricedCount 筆未定價未計入</span>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+
+        <Tabs @bind-ActiveKey="activeTabKey" OnTabClick="OnTabChangedAsync">
+            <TabPane Key="@TabTrend" Tab="趨勢圖">
+                @if (isTrendTruncated)
+                {
+                    <div class="token-usage-trend-note">
+                        篩選區間超過 @MaxTrendDays 天，以下只顯示最後 @MaxTrendDays 天。
+                    </div>
+                }
+
+                @if (trendPoints.Count == 0)
+                {
+                    <div class="token-usage-trend-empty">這段期間沒有任何呼叫紀錄。</div>
+                }
+                else
+                {
+                    <div class="token-usage-chart-caption">
+                        @TokenUsageTrendChart.DescribeGrain(trendGrain)，共 @trendPoints.Count 點；滑鼠移到點上可看數字。
+                    </div>
+                    @foreach (var chart in TrendCharts)
+                    {
+                        var axis = TokenUsageTrendChart.Axis(chart.Values.Max());
+                        var labelStep = TokenUsageTrendChart.LabelStep(trendPoints.Count);
+                        <div class="token-usage-chart">
+                            <div class="token-usage-chart-title">@chart.Title</div>
+                            @* 固定 viewBox、保持預設的等比縮放（不用 preserveAspectRatio="none"），
+                               否則寬螢幕上刻度文字會被橫向拉扁。 *@
+                            <svg class="token-usage-chart-svg @chart.CssClass"
+                                 viewBox="0 0 @ChartWidth @ChartHeight" role="img" aria-label="@chart.Title">
+                                @foreach (var tick in axis.Ticks())
+                                {
+                                    var y = TokenUsageTrendChart.Num(TokenUsageTrendChart.Y(tick, axis.Max, PlotTop, PlotHeight));
+                                    @* SVG 的 <text> 必須包在元素裡：直接寫在 C# 區塊中會被 Razor 當成 <text> 指令標籤。 *@
+                                    <g>
+                                        <line class="token-usage-chart-grid" x1="@TokenUsageTrendChart.Num(PlotLeft)" x2="@TokenUsageTrendChart.Num(PlotRight)" y1="@y" y2="@y" />
+                                        <text class="token-usage-chart-tick" x="@TokenUsageTrendChart.Num(PlotLeft - 8)" y="@y"
+                                              text-anchor="end" dominant-baseline="middle">@chart.FormatTick(tick)</text>
+                                    </g>
+                                }
+
+                                @for (var index = 0; index < trendPoints.Count; index += labelStep)
+                                {
+                                    <g>
+                                        <text class="token-usage-chart-tick" text-anchor="middle"
+                                              x="@TokenUsageTrendChart.Num(TokenUsageTrendChart.X(index, trendPoints.Count, PlotLeft, PlotWidth))"
+                                              y="@(ChartHeight - 8)">@TokenUsageTrendChart.AxisLabel(trendPoints[index])</text>
+                                    </g>
+                                }
+
+                                @if (trendPoints.Count > 1)
+                                {
+                                    <polyline class="token-usage-chart-line"
+                                              points="@TokenUsageTrendChart.Polyline(chart.Values, axis.Max, PlotLeft, PlotTop, PlotWidth, PlotHeight)" />
+                                }
+
+                                @for (var index = 0; index < trendPoints.Count; index++)
+                                {
+                                    var point = trendPoints[index];
+                                    var cx = TokenUsageTrendChart.Num(TokenUsageTrendChart.X(index, trendPoints.Count, PlotLeft, PlotWidth));
+                                    var cy = TokenUsageTrendChart.Num(TokenUsageTrendChart.Y(chart.Values[index], axis.Max, PlotTop, PlotHeight));
+                                    <g class="token-usage-chart-point">
+                                        <title>@TrendTooltip(point)</title>
+                                        @* 透明的大圈只負責接滑鼠，小點太小很難對準。 *@
+                                        <circle class="token-usage-chart-hit" cx="@cx" cy="@cy" r="9" />
+                                        <circle class="token-usage-chart-dot" cx="@cx" cy="@cy" r="3" />
+                                    </g>
+                                }
+                            </svg>
+                        </div>
+                    }
+                    @if (trendPoints.Any(x => x.UnpricedCount > 0))
+                    {
+                        <div class="token-usage-trend-note">
+                            區間內有未定價的呼叫，未計入費用，因此那些點的費用會低於實際用量。
+                        </div>
+                    }
+                }
+            </TabPane>
+            <TabPane Key="@TabDaily" Tab="@($"每日趨勢（{dailyRows.Count}）")">
+                @if (isTrendTruncated)
+                {
+                    <div class="token-usage-trend-note">
+                        篩選區間超過 @MaxTrendDays 天，以下只顯示最後 @MaxTrendDays 天。
+                    </div>
+                }
+
+                @if (dailyRows.Count == 0)
+                {
+                    <div class="token-usage-trend-empty">這段期間沒有任何呼叫紀錄。</div>
+                }
+                else
+                {
+                    <div class="token-usage-trend">
+                        <div class="token-usage-trend-legend">
+                            <span class="token-usage-trend-key token-usage-trend-key-cost"></span>費用（NT$）
+                            <span class="token-usage-trend-key token-usage-trend-key-count"></span>合計 token
+                            <span class="token-usage-trend-hint">
+                                兩條長條各自以區間內的最大值歸一化，彼此不可互相比較。
+                            </span>
+                        </div>
+                        @foreach (var day in dailyRows)
+                        {
+                            <div class="token-usage-trend-row">
+                                <span class="token-usage-trend-date">@day.Date.ToString("MM/dd (ddd)")</span>
+                                <span class="token-usage-trend-bars">
+                                    <span class="token-usage-trend-track">
+                                        <span class="token-usage-trend-bar token-usage-trend-bar-cost"
+                                              style="width:@BarWidth(day.CostTwd, maxDailyCostTwd)"></span>
+                                    </span>
+                                    <span class="token-usage-trend-track">
+                                        <span class="token-usage-trend-bar token-usage-trend-bar-count"
+                                              style="width:@BarWidth(day.TotalCount, maxDailyTotalCount)"></span>
+                                    </span>
+                                </span>
+                                <span class="token-usage-trend-cost">NT$ @FormatCostTwdTotal(day.CostTwd)</span>
+                                <span class="token-usage-trend-count">@FormatCompact(day.TotalCount)</span>
+                                <span class="token-usage-trend-calls">@day.CallCount.ToString("N0") 次</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </TabPane>
+            <TabPane Key="@TabByAccount" Tab="@($"依使用者（{groupedByAccount.Count}）")">
+                <TokenUsageGroupTable Rows="groupedByAccount" KeyTitle="使用者" />
+            </TabPane>
+            <TabPane Key="@TabByOperation" Tab="@($"依作業（{groupedByOperation.Count}）")">
+                <TokenUsageGroupTable Rows="groupedByOperation" KeyTitle="作業" />
+            </TabPane>
+            <TabPane Key="@TabByModel" Tab="@($"依模型（{groupedByModel.Count}）")">
+                <TokenUsageGroupTable Rows="groupedByModel" KeyTitle="模型" />
+            </TabPane>
+            <TabPane Key="@TabByCallKind" Tab="@($"依型別（{groupedByCallKind.Count}）")">
+                <TokenUsageGroupTable Rows="groupedByCallKind" KeyTitle="型別" />
+            </TabPane>
+            <TabPane Key="@TabDetail" Tab="@($"明細（{_total}）")">
+                <div class="token-usage-table-wrap">
+                    <Table @ref="table"
+                           TItem="TokenUsageLogAdapterModel"
+                           RemoteDataSource="true"
+                           DataSource="@rows"
+                           Loading="@isLoading"
+                           Size="TableSize.Small"
+                           OnChange="OnTableChange"
+                           @bind-PageIndex="_pageIndex"
+                           @bind-PageSize="_pageSize"
+                           @bind-Total="_total"
+                           @bind-SelectedRows="selectedRows">
+                        @* 0.9.132 起：勾選後可「刪除選取」。 *@
+                        <Selection />
+                        <Column TData="DateTime" DataIndex="@nameof(TokenUsageLogAdapterModel.OccurredAt)"
+                                Title="時間" Width="160" Sortable DefaultSortOrder="SortDirection.Descending">
+                            @context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")
+                        </Column>
+                        <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.Account ?? "（系統自動）")</Column>
+                        <Column TData="string" Title="作業" Width="140" Ellipsis>@context.Operation</Column>
+                        <Column TData="string" Title="型別" Width="90">@context.CallKind</Column>
+                        <Column TData="string" Title="模型" Width="150" Ellipsis>@context.Model</Column>
+                        <Column TData="string" Title="輸入" Width="90" Align="ColumnAlign.Right">@FormatCell(context.InputCount)</Column>
+                        <Column TData="string" Title="輸出" Width="90" Align="ColumnAlign.Right">@FormatCell(context.OutputCount)</Column>
+                        <Column TData="string" Title="推理" Width="80" Align="ColumnAlign.Right">@FormatCell(context.ReasoningCount)</Column>
+                        <Column TData="string" Title="快取" Width="80" Align="ColumnAlign.Right">@FormatCell(context.CachedInputCount)</Column>
+                        <Column TData="string" Title="合計" Width="100" Align="ColumnAlign.Right">
+                            @if (context.Success == false)
+                            {
+                                <Tooltip Title="@context.FailureReason">
+                                    <Tag Color=@("red")>失敗</Tag>
+                                </Tooltip>
+                            }
+                            else if (context.IsDurationBilled)
+                            {
+                                <span>時長 @context.DurationSeconds!.Value.ToString("N0") 秒</span>
+                            }
+                            else
+                            {
+                                <strong>@FormatCell(context.TotalCount)</strong>
+                            }
+                        </Column>
+                        @*
+                            ⚠️ 不要在這一欄加 Fixed="ColumnFixPlacement.Right"。
+                            AntDesign 的 ColumnBase.CalcFixedStyle() 會去讀相鄰釘住欄的寬度，
+                            而隔壁的 ActionColumn 沒有設 Width，會丟 ArgumentNullException 讓整頁掛掉。
+                            要釘就得連 ActionColumn 的寬度一起定，不值得為此改動既有欄位 ——
+                            這張表在加費用欄之前就已經橫向捲動（見 token-usage-table-wrap 的註解）。
+                            不捲動也看得到的金額在上方合計橫幅與四張分組統計表。
+                        *@
+                        <Column TData="double?" DataIndex="@nameof(TokenUsageLogAdapterModel.CostTwd)"
+                                Title="費用" Width="110" Align="ColumnAlign.Right" Sortable>
+                            @if (context.IsUnpriced)
+                            {
+                                <Tooltip Title="@("找不到此模型的費率設定（appsettings.json 的 AiPricingSettings），因此不估算費用。")">
+                                    <span class="token-usage-unpriced">未定價</span>
+                                </Tooltip>
+                            }
+                            else
+                            {
+                                <Tooltip Title="@BuildCostTooltip(context)">
+                                    <span>@FormatCostTwdCell(context.CostTwd)</span>
+                                </Tooltip>
+                            }
+                        </Column>
+                        <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                            <Space>
+                                <SpaceItem>
+                                    <CrudActionButton Title="詳細" Icon="visibility"
+                                                      OnClick="@(async () => await OnViewAsync(@context))" />
+                                </SpaceItem>
+                                <SpaceItem>
+                                    <CrudActionButton Title="刪除" Icon="delete" Danger="true"
+                                                      OnClick="@(async () => await OnDeleteAsync(@context))" />
+                                </SpaceItem>
+                            </Space>
+                        </ActionColumn>
+                    </Table>
+                </div>
+            </TabPane>
+        </Tabs>
+
+        @*
+            明細窗：尺寸與內容樣式都寫在 Components/Commons/OverlayStyles.razor 的全域 style
+            （AntDesign 的 Modal 渲染在元件 DOM 之外，scoped CSS 連 ::deep 都打不到）。
+        *@
+        <Modal Title="Token 用量明細"
+               Class="token-usage-modal"
+               @bind-Visible="@detailVisible"
+               Keyboard="true"
+               Footer="null"
+               OnCancel="@(() => detailVisible = false)">
+            @if (detailItem is not null)
+            {
+                <dl class="token-usage-detail-list">
+                    <div><dt>時間</dt><dd>@detailItem.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                    <div><dt>使用者</dt><dd>@DetailAccountText</dd></div>
+                    <div><dt>作業</dt><dd>@detailItem.Operation</dd></div>
+                    <div><dt>型別</dt><dd>@detailItem.CallKind</dd></div>
+                    <div><dt>供應商</dt><dd>@detailItem.Provider</dd></div>
+                    <div><dt>模型</dt><dd>@detailItem.Model</dd></div>
+                    <div><dt>耗時</dt><dd>@detailItem.ElapsedMilliseconds.ToString("N0") ms</dd></div>
+                    <div>
+                        <dt>結果</dt>
+                        <dd>
+                            @if (detailItem.Success)
+                            {
+                                <Tag Color=@("green")>成功</Tag>
+                            }
+                            else
+                            {
+                                <Tag Color=@("red")>失敗</Tag>
+                                <span>@detailItem.FailureReason</span>
+                            }
+                        </dd>
+                    </div>
+                    <div><dt>紀錄 Id</dt><dd>@detailItem.Id</dd></div>
+                    <div>
+                        <dt>AI 對話紀錄</dt>
+                        <dd>
+                            @if (detailHasConversation)
+                            {
+                                <ToolbarIconButton Title="查看這次呼叫送出的 Prompt 與取得的 Response" Icon="forum"
+                                                   OnClick="@OnViewConversation" />
+                            }
+                            else
+                            {
+                                <span>@(detailItem.CallId is null ? "（0.9.72 之前的紀錄沒有對話可看）" : "（對話紀錄已清除，或當時未啟用記錄）")</span>
+                            }
+                        </dd>
+                    </div>
+                </dl>
+
+                <h3 class="token-usage-detail-title">輸入 (Input) — 送出／prompt，計價較低（快取更便宜）</h3>
+                <dl class="token-usage-detail-list">
+                    <div><dt>輸入合計（prompt）</dt><dd>@FormatCell(detailItem.InputCount)</dd></div>
+                    <div><dt>快取命中（cached，輸入折扣）</dt><dd>@FormatCell(detailItem.CachedInputCount)</dd></div>
+                    <div><dt>圖片輸入（含於上方，不另計）</dt><dd>@FormatCell(detailItem.ImageInputCount)</dd></div>
+                    <div><dt>圖片輸入快取（含於上方，不另計）</dt><dd>@FormatCell(detailItem.ImageCachedInputCount)</dd></div>
+                </dl>
+
+                <h3 class="token-usage-detail-title">輸出 (Output) — 接收／completion，計價較高（含推理）</h3>
+                <dl class="token-usage-detail-list">
+                    <div><dt>輸出合計（completion）</dt><dd>@FormatCell(detailItem.OutputCount)</dd></div>
+                    <div><dt>推理（reasoning，計入輸出）</dt><dd>@FormatCell(detailItem.ReasoningCount)</dd></div>
+                    <div><dt>圖片輸出（含於上方，不另計）</dt><dd>@FormatCell(detailItem.ImageOutputCount)</dd></div>
+                </dl>
+
+                <h3 class="token-usage-detail-title">其他</h3>
+                <dl class="token-usage-detail-list">
+                    <div>
+                        <dt>音訊時長（秒；依時長計費，未回傳 token）</dt>
+                        <dd>@FormatCell(detailItem.DurationSeconds)</dd>
+                    </div>
+                    <div><dt>字元數（語音合成計費單位）</dt><dd>@FormatCell(detailItem.CharacterCount)</dd></div>
+                    <div><dt>合計 (total)</dt><dd><strong>@FormatCell(detailItem.TotalCount)</strong></dd></div>
+                </dl>
+
+                <h3 class="token-usage-detail-title">費用 — 呼叫當下的快照，事後改設定不影響這一列</h3>
+                @if (detailItem.IsUnpriced)
+                {
+                    <p class="token-usage-detail-empty">
+                        未定價 —— 找不到模型「@detailItem.Model」的費率設定（appsettings.json 的 AiPricingSettings）。
+                    </p>
+                }
+                else
+                {
+                    <dl class="token-usage-detail-list">
+                        <div><dt>費用 (TWD)</dt><dd><strong>NT$ @FormatCostTwdCell(detailItem.CostTwd)</strong></dd></div>
+                        <div><dt>費用 (USD)</dt><dd>US$ @FormatCostUsdCell(detailItem.CostUsd)</dd></div>
+                        <div><dt>當時匯率</dt><dd>@FormatExchangeRate(detailItem.CostExchangeRate)</dd></div>
+                        <div><dt>計價依據</dt><dd>@DetailPriceKeyText</dd></div>
+                        <div><dt>長脈絡費率</dt><dd>@(detailItem.CostLongContext ? "是" : "否")</dd></div>
+                    </dl>
+
+                    @if (detailCostRateRows.Count > 0)
+                    {
+                        <dl class="token-usage-detail-list token-usage-raw-list">
+                            @foreach (var item in detailCostRateRows)
+                            {
+                                <div><dt>套用費率 @item.Key</dt><dd>@item.Value</dd></div>
+                            }
+                        </dl>
+                    }
+                }
+
+                <h3 class="token-usage-detail-title">原始明細（供應商回傳）</h3>
+                @if (detailRawRows.Count == 0)
+                {
+                    <p class="token-usage-detail-empty">@detailRawMessage</p>
+                }
+                else
+                {
+                    <dl class="token-usage-detail-list token-usage-raw-list">
+                        @foreach (var item in detailRawRows)
+                        {
+                            <div><dt>@item.Key</dt><dd>@item.Value</dd></div>
+                        }
+                    </dl>
+                }
+            }
+        </Modal>
+    </div>
+}

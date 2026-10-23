@@ -1,0 +1,14 @@
+.submenu-title-content,
+.menu-item-content {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.submenu-title-text,
+.menu-item-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+}

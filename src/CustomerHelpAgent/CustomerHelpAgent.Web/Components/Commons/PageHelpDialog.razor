@@ -1,0 +1,106 @@
+@*
+    頂欄的「操作說明」按鈕與近滿版說明窗。掛在 MainLayout 的頁名旁，全站一處、依路由自動對應。
+    尺寸與捲動版型寫在 OverlayStyles.razor 的 .page-help-modal；內文樣式寫在本元件的 .razor.css
+    （Markdown 注入的 HTML 沒有 scope 屬性，一律用 ::deep）。
+    內容格式與守門規則見 docs/architecture/開發慣例與限制速查.md「頁面操作說明」一節。
+*@
+
+@if (topic is not null)
+{
+    <Tooltip Title="@("這個畫面怎麼用？")">
+        <button type="button" class="page-help-button" aria-label="@ModalTitle" @onclick="OpenAsync">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="help_outline" />
+        </button>
+    </Tooltip>
+
+    <Modal Title="@ModalTitle"
+           Class="page-help-modal"
+           Visible="@visible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="Close">
+        <TitleTemplate>
+            @* 字體大小（0.9.121 起）：小／中／大，記在這個瀏覽器，所有頁面的說明窗共用。 *@
+            <div class="page-help-title-bar">
+                <span class="page-help-title-text">@ModalTitle</span>
+                <div class="page-help-font-switch" role="group" aria-label="字體大小">
+                    <span class="page-help-font-switch-label">字體</span>
+                    @foreach (var option in PageHelpFontSizes.Options)
+                    {
+                        var size = option.Size;
+                        <button type="button"
+                                class="@FontButtonCssClass(size)"
+                                aria-pressed="@(fontSize == size ? "true" : "false")"
+                                @onclick="@(() => SetFontSizeAsync(size))">
+                            @option.Label
+                        </button>
+                    }
+                </div>
+            </div>
+        </TitleTemplate>
+        <ChildContent>
+            @if (document is not null)
+            {
+                <div class="page-help-layout @PageHelpFontSizes.CssClass(fontSize)">
+                    <nav class="page-help-nav" aria-label="說明目錄">
+                        <button type="button"
+                                class="@NavCssClass(AllSectionsKey)"
+                                aria-current="@(activeSection == AllSectionsKey ? "true" : null)"
+                                @onclick="@(() => SelectSection(AllSectionsKey))">
+                            全部
+                        </button>
+                        @foreach (var section in document.Sections)
+                        {
+                            var heading = section.Heading;
+                            <button type="button"
+                                    class="@NavCssClass(heading)"
+                                    aria-current="@(activeSection == heading ? "true" : null)"
+                                    @onclick="@(() => SelectSection(heading))">
+                                @heading
+                            </button>
+                        }
+                    </nav>
+
+                    @* @key 讓切換章節時整塊重建，捲動位置自然回到頂端。 *@
+                    <div class="page-help-content" @key="activeSection">
+                        @if (activeSection == AllSectionsKey && !string.IsNullOrWhiteSpace(document.Preamble))
+                        {
+                            @((MarkupString)HelpMarkdownRenderer.ToHtml(document.Preamble))
+                        }
+
+                        @foreach (var section in VisibleSections)
+                        {
+                            <h2>@section.Heading</h2>
+                            @if (section.Heading == PageHelpMarkdownParser.RelatedPagesHeading)
+                            {
+                                @* 相關頁面不用 Markdown 連結渲染：改成結構化卡片，先關窗再導覽，並依權限過濾。 *@
+                                @((MarkupString)HelpMarkdownRenderer.ToHtml(PageHelpMarkdownParser.RelatedPagesIntro(section.Markdown)))
+                                @if (visibleRelatedPages.Count == 0)
+                                {
+                                    <p class="page-help-related-empty">目前沒有你可前往的相關頁面。</p>
+                                }
+                                @foreach (var related in visibleRelatedPages)
+                                {
+                                    <div class="page-help-related-item">
+                                        <div class="page-help-related-head">
+                                            <Button Type="ButtonType.Link"
+                                                    Class="page-help-related-link"
+                                                    OnClick="@(() => NavigateTo(related.Route))">
+                                                @related.Title
+                                            </Button>
+                                        </div>
+                                        <div class="page-help-related-desc">@related.Description</div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                @((MarkupString)HelpMarkdownRenderer.ToHtml(section.Markdown))
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </ChildContent>
+    </Modal>
+}

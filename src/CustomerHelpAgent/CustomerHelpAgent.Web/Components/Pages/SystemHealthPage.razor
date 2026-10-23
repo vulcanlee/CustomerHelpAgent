@@ -1,0 +1,309 @@
+@page "/system-health"
+@layout MainLayout
+@using CustomerHelpAgent.Web.Health
+@using CustomerHelpAgent.Web.Configuration
+@using CustomerHelpAgent.Web.Email
+@using CustomerHelpAgent.Web.Diagnostics
+@using Microsoft.Extensions.Options
+@inject ISystemHealthService SystemHealthService
+@inject ILogQueryService LogQueryService
+@inject EmailTestService EmailTestService
+@inject NotificationTestService NotificationTestService
+@inject IOptionsMonitor<EmailSettings> EmailOptions
+@inject CustomerHelpAgent.Business.Services.Other.CurrentUserService CurrentUserService
+@inject CustomerHelpAgent.Business.Services.Other.AuthenticationStateHelper AuthenticationStateHelper
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject ILogger<SystemHealthPage> Logger
+
+<PageTitle>系統健康監控</PageTitle>
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrWhiteSpace(roleMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @roleMessage
+    </div>
+}
+else if (report is null)
+{
+    <div class="system-health-loading">正在讀取系統健康狀態...</div>
+}
+else
+{
+    <div class="system-health-page">
+        <section class="system-health-summary @GetLightClass(report.Light)">
+            <div class="summary-main">
+                <span class="traffic-light @GetLightClass(report.Light)" aria-hidden="true"></span>
+                <div>
+                    <h1>系統健康監控</h1>
+                    <p>最後檢查時間：@report.CheckedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</p>
+                </div>
+            </div>
+            <div class="summary-score">
+                <strong>@report.Score%</strong>
+                <span>@GetStatusText(report.Status)</span>
+            </div>
+        </section>
+
+        <section class="system-health-section">
+            <h2>檢查項目</h2>
+            <div class="health-items">
+                @foreach (var item in report.Items)
+                {
+                    <article class="health-item @GetLightClass(item.Light)">
+                        <div class="health-item-heading">
+                            <span class="traffic-light @GetLightClass(item.Light)" aria-hidden="true"></span>
+                            <div>
+                                <h3>@item.Name</h3>
+                                <span>@item.Category · 權重 @item.Weight</span>
+                            </div>
+                            <strong>@GetStatusText(item.Status)</strong>
+                        </div>
+                        <p>@item.Evidence</p>
+                        @if (!string.IsNullOrWhiteSpace(item.FailureMessage))
+                        {
+                            <div class="health-failure">@item.FailureMessage</div>
+                        }
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="system-health-section">
+            <h2>寄信測試</h2>
+            <div class="email-test">
+                <p>寄一封測試信確認寄信設定。目前的寄送方式：<strong>@emailProviderText</strong></p>
+                <div class="email-test-form">
+                    <Input TValue="string" @bind-Value="testEmailTo" Placeholder="收件者 Email"
+                           Disabled="@(!isEmailEnabled || isSendingTestEmail)" />
+                    <Button Type="@ButtonType.Primary" Loading="@isSendingTestEmail" Disabled="@(!isEmailEnabled)"
+                            OnClick="SendTestEmailAsync">
+                        寄出測試信
+                    </Button>
+                </div>
+                @if (!isEmailEnabled)
+                {
+                    <div class="email-test-hint">寄信功能未啟用。請在 EmailSettings 將 Provider 設為 Pickup（開發）或 Smtp。</div>
+                }
+                @if (testEmailResult is { } result)
+                {
+                    <div class="email-test-result @(result.Success ? "is-success" : "is-failure")" role="status">
+                        @result.Message
+                    </div>
+                }
+            </div>
+        </section>
+
+        @* 0.9.122 起：發一則站內通知給全體管理員，確認鈴鐺與即時更新正常（不寄信）。 *@
+        <section class="system-health-section">
+            <h2>站內通知測試</h2>
+            <div class="email-test">
+                <p>發一則「測試通知」給全體管理員（不寄信），確認右上角的鈴鐺與即時更新正常。開著的其他頁面也會立即收到；有多台主機時，其他主機上的頁面最慢約 1 分鐘。</p>
+                <div class="email-test-form">
+                    <Button Type="@ButtonType.Primary" Loading="@isSendingTestNotification"
+                            OnClick="SendTestNotificationAsync">
+                        發送測試通知
+                    </Button>
+                </div>
+                @if (testNotificationResult is { } notificationResult)
+                {
+                    <div class="email-test-result @(notificationResult.Success ? "is-success" : "is-failure")" role="status">
+                        @notificationResult.Message
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="system-health-section">
+            <h2>最近 24 小時警告以上日誌</h2>
+            @if (!string.IsNullOrWhiteSpace(warnLogMessage))
+            {
+                <p class="warn-log-summary">@warnLogMessage</p>
+            }
+            @foreach (var warning in warnLogWarnings)
+            {
+                <div class="warn-log-notice">@warning</div>
+            }
+
+            @if (warnLogEntries is null)
+            {
+                <div class="empty-log">正在讀取日誌...</div>
+            }
+            else if (warnLogEntries.Count == 0)
+            {
+                <div class="empty-log">@warnLogEmptyText</div>
+            }
+            else
+            {
+                <div class="warn-log-table-wrap">
+                    <Table TItem="LogEntry"
+                           DataSource="@warnLogEntries"
+                           Size="TableSize.Small"
+                           RowKey="@(entry => entry.Sequence)"
+                           PageSize="20">
+                        <ColumnDefinitions>
+                            <Column TData="DateTime" Title="時間" Width="180">
+                                @context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                            </Column>
+                            <Column TData="string" Title="等級" Width="90">
+                                <Tag Color="@LogLevelRankHelper.ToTagColor(context.Rank)">@(string.IsNullOrEmpty(context.Level) ? "－" : context.Level)</Tag>
+                            </Column>
+                            <Column TData="string" Title="記錄器" Width="260" Ellipsis>@context.Logger</Column>
+                            <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                            <Column TData="string" Title="TraceId" Width="130" Ellipsis>@context.TraceId</Column>
+                        </ColumnDefinitions>
+                        <ExpandTemplate Context="rowData">
+                            <pre class="warn-log-raw">@rowData.Data.Raw</pre>
+                        </ExpandTemplate>
+                    </Table>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private SystemHealthReport? report;
+    private string? roleMessage;
+    private bool isAccessChecked;
+    private string? testEmailTo;
+    private bool isEmailEnabled;
+    private string emailProviderText = string.Empty;
+    private bool isSendingTestEmail;
+    private CustomerHelpAgent.Models.Systems.VerifyRecordResult? testEmailResult;
+    private bool isSendingTestNotification;
+    private CustomerHelpAgent.Models.Systems.VerifyRecordResult? testNotificationResult;
+
+    /// <summary>最近 24 小時 WARN 以上日誌，新到舊；null 表示讀取中。</summary>
+    private List<LogEntry>? warnLogEntries;
+    private string warnLogMessage = string.Empty;
+    private string warnLogEmptyText = string.Empty;
+    private List<string> warnLogWarnings = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Initializing system health page.");
+
+        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
+        if (checkResult != CustomerHelpAgent.Business.Services.Other.AuthenticationCheckResult.Succeeded)
+        {
+            Logger.LogWarning("System health page initialization stopped because authentication check failed.");
+            return;
+        }
+
+        isAccessChecked = true;
+
+        if (!AuthenticationStateHelper.CheckIsAdmin())
+        {
+            roleMessage = "您沒有權限檢視系統健康監控。";
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/system-health");
+            Logger.LogWarning("System health page denied because current user is not an administrator.");
+            return;
+        }
+
+        var emailSettings = EmailOptions.CurrentValue;
+        isEmailEnabled = emailSettings.TryGetProvider(out var provider) && provider != EmailProvider.None;
+        emailProviderText = isEmailEnabled ? provider.ToString() : "None（未啟用）";
+        testEmailTo = CurrentUserService.CurrentUser.Email;
+
+        report = await SystemHealthService.GetReportAsync();
+        await LoadWarnLogsAsync();
+    }
+
+    /// <summary>
+    /// 與健康報告分開讀取：日誌讀取失敗只影響本區塊，不影響上方的檢查結果。
+    /// 沿用日誌檢視的查詢服務與上限（最新 MaxTake 筆），表格在畫面上分頁。
+    /// </summary>
+    private async Task LoadWarnLogsAsync()
+    {
+        var now = DateTime.Now;
+
+        try
+        {
+            var result = await LogQueryService.QueryAsync(new LogQueryRequest
+            {
+                StartTime = now.AddHours(-24),
+                EndTime = now,
+                MinimumLevel = LogLevelRank.Warn,
+                Take = LogQueryRequest.MaxTake
+            });
+
+            warnLogEntries = Enumerable.Reverse(result.Entries).ToList();
+            warnLogWarnings = result.Warnings;
+            warnLogMessage = $"{result.AppliedStartTime:MM/dd HH:mm} ～ {result.AppliedEndTime:MM/dd HH:mm}，共 {warnLogEntries.Count} 筆 WARN、ERROR、FATAL（新到舊）。";
+
+            // 服務的訊息（目錄不存在、區間內沒有日誌檔等）比通用文字更能說明為什麼是空的。
+            warnLogEmptyText = string.IsNullOrWhiteSpace(result.Message)
+                ? "最近 24 小時沒有 WARN 以上的日誌紀錄。"
+                : result.Message;
+
+            if (warnLogEntries.Count >= LogQueryRequest.MaxTake)
+            {
+                warnLogWarnings.Add($"僅顯示最新 {LogQueryRequest.MaxTake} 筆，完整內容請到「日誌檢視」查詢。");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "System health page failed to load warning logs.");
+            warnLogEntries = new();
+            warnLogMessage = string.Empty;
+            warnLogEmptyText = $"讀取日誌失敗：{ex.GetType().Name}。{TraceCode.Suffix(TraceCode.Current)}";
+        }
+    }
+
+    private async Task SendTestEmailAsync()
+    {
+        isSendingTestEmail = true;
+        testEmailResult = null;
+
+        try
+        {
+            var currentUser = CurrentUserService.CurrentUser;
+            testEmailResult = await EmailTestService.SendAsync(testEmailTo, currentUser.Id, currentUser.Account);
+        }
+        finally
+        {
+            isSendingTestEmail = false;
+        }
+    }
+
+    private async Task SendTestNotificationAsync()
+    {
+        isSendingTestNotification = true;
+        testNotificationResult = null;
+
+        try
+        {
+            var currentUser = CurrentUserService.CurrentUser;
+            testNotificationResult = await NotificationTestService.SendAsync(currentUser.Id, currentUser.Account);
+        }
+        finally
+        {
+            isSendingTestNotification = false;
+        }
+    }
+
+    private static string GetLightClass(SystemHealthLight light)
+    {
+        return light switch
+        {
+            SystemHealthLight.Green => "light-green",
+            SystemHealthLight.Yellow => "light-yellow",
+            _ => "light-red"
+        };
+    }
+
+    private static string GetStatusText(SystemHealthStatus status)
+    {
+        return status switch
+        {
+            SystemHealthStatus.Healthy => "正常",
+            SystemHealthStatus.Degraded => "警示",
+            _ => "異常"
+        };
+    }
+}

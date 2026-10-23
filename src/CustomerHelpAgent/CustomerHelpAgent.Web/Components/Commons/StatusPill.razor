@@ -1,0 +1,73 @@
+@using Microsoft.AspNetCore.Components
+
+@*
+    表格裡的狀態徽章。
+
+    沿革：0.9.30 之前，分類清單與團隊清單各自帶著一份**逐字相同**的
+    .category-status / .team-status（連 #389e0d 的色碼都一樣），
+    而使用者管理與專案項目的狀態則是純文字。同一個概念三種長相。
+    這個元件把它們收成一份。
+
+    ⚠️ 語氣（Tone）由呼叫端決定，不要在這裡判斷字串內容 ——
+       「等待」在專案是中性、在別的模組可能是警示，元件無從得知。
+
+    可點（0.9.120 起）：給了 OnClick 就渲染成 button（清單上點「啟用／停用」直接切換），沒給仍是原本的 span。
+    處理期間按鈕停用，連點不會送出兩次。
+*@
+
+@if (OnClick.HasDelegate)
+{
+    <button type="button" class="status-pill status-pill-@ToneClass status-pill-clickable"
+            title="@Hint" aria-label="@AriaLabel" disabled="@busy" @onclick="HandleClickAsync">@Text</button>
+}
+else
+{
+    <span class="status-pill status-pill-@ToneClass">@Text</span>
+}
+
+@code {
+    private bool busy;
+
+    [Parameter]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter]
+    public StatusTone Tone { get; set; } = StatusTone.Neutral;
+
+    /// <summary>點擊後要做的事；有給才可點。</summary>
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    /// <summary>滑鼠移上去的提示，例如「點一下切換為停用」。</summary>
+    [Parameter]
+    public string? Hint { get; set; }
+
+    private string AriaLabel => string.IsNullOrWhiteSpace(Hint) ? Text : $"{Text}：{Hint}";
+
+    private async Task HandleClickAsync()
+    {
+        if (busy)
+        {
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            await OnClick.InvokeAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private string ToneClass => Tone switch
+    {
+        StatusTone.Positive => "positive",
+        StatusTone.Muted => "muted",
+        StatusTone.Warning => "warning",
+        StatusTone.Accent => "accent",
+        _ => "neutral",
+    };
+}

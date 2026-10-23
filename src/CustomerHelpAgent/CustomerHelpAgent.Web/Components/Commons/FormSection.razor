@@ -1,0 +1,41 @@
+﻿@*
+    表單對話窗的區塊容器：一個小標題 + 一個 2 欄 grid。
+
+    ⚠️ 本元件刻意**不附** FormSection.razor.css。
+    它產生的 class 要與 .ant-form-item（AntDesign 自己渲染、不帶本元件 scope 屬性的元素）
+    一起被同一組規則命中，scoped CSS 做不到這件事。
+    所有樣式一律寫在 Components/Commons/OverlayStyles.razor 的全域 <style>；
+    本元件只負責產生固定的 class 名稱，讓那份全域樣式有東西可以命中。
+
+    用法：在 FormSection 內依序放 FormItem，預設 2 欄由左而右排下來；
+    不適合 2 欄的欄位（多行文字、檔案上傳、清單、權限矩陣…）加上
+    Class="form-field-full" 就會獨占整行。
+*@
+<section class="form-section">
+    @if (string.IsNullOrWhiteSpace(Title) == false)
+    {
+        <h3 class="form-section-title">
+            @Title
+            @if (string.IsNullOrWhiteSpace(Hint) == false)
+            {
+                <span class="form-section-hint">@Hint</span>
+            }
+        </h3>
+    }
+    <div class="form-grid @(SingleColumn ? "form-grid-single" : null)">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    /// <summary>區塊小標題；留白表示不顯示標題（例如整個區塊只有一個整行欄位）。</summary>
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>標題旁的一句補充說明，選填。</summary>
+    [Parameter] public string? Hint { get; set; }
+
+    /// <summary>整個區塊都用單欄（權限矩陣、檔案清單這類區塊用）。</summary>
+    [Parameter] public bool SingleColumn { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    全方案共用的建置屬性。個別 csproj 只保留自己特有的設定（TargetFramework、
+    UserSecretsId、IsPackable 等），共通項目一律收斂到這裡。
+  -->
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!--
+      鎖住「0 warning」這個既有成果，避免警告悄悄回流。
+      需要豁免時請針對「單一規則碼」加 NoWarn 並註明原因與解除條件，不要整包關閉。
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!--
+      NU1900「取得套件弱點資料時發生錯誤」是 NuGet Audit 連不上 nuget.org 弱點索引
+      （逾時／限流／暫時性網路失敗）時發出的警告，與「發現弱點」無關，屬環境問題。
+      被 TreatWarningsAsErrors 升級成 error 後，nuget.org 抖一下就會讓整個建置失敗。
+      這裡只降回警告（仍會印出、看得見），刻意不用 NoWarn 全數隱藏。
+      真正代表發現弱點的 NU1901~NU1904 不在此清單，維持 error。
+      解除條件：無（這是環境噪音的長期處置）。詳見 docs/operations/CI-CD與品質檢查.md。
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!--
+    CVE-2025-6965 / GHSA-2m69-gcr7-jv3q：SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11（bundled SQLite < 3.50.2）。
+    由 Microsoft.EntityFrameworkCore.Sqlite 10.0.5 遞移引入；NuGet 目前無更新版可升級。
+    風險低：0.4.24 起 SQLite 為唯一支援的資料庫，EF Core 採參數化查詢，
+    無未受信任的原始 SQL 進入 SQLite。
+    待 SQLitePCLRaw 釋出 > 2.1.11 修補版（或 EF Core 帶入）後，移除本抑制並升級。
+    詳見 docs/operations/CI-CD與品質檢查.md。
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
+
+</Project>

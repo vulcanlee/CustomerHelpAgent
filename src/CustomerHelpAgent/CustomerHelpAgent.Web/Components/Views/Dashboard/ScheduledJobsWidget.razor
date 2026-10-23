@@ -1,0 +1,50 @@
+@using CustomerHelpAgent.Web.Dashboard
+@using CustomerHelpAgent.Web.Scheduling
+@inject ScheduledJobOverviewService OverviewService
+
+@*
+    首頁「排程作業」（0.9.106 起，只有管理員看得到）：上次失敗、逾期、停用的作業。詳細與「立即執行」在排程作業頁。
+*@
+@if (overview is null)
+{
+}
+else
+{
+    @if (!overview.SchedulingEnabled)
+    {
+        <div class="dashboard-warning">排程總開關已關閉，所有作業都不會依排程執行。</div>
+    }
+
+    @if (attention.Count == 0)
+    {
+        <div class="dashboard-stat">
+            <StatusPill Text="正常" Tone="StatusTone.Positive" />
+            <span class="dashboard-muted">@overview.Items.Count 個作業都沒有異常</span>
+        </div>
+    }
+    else
+    {
+        <ul class="dashboard-list">
+            @foreach (var item in attention)
+            {
+                <li class="dashboard-list-item">
+                    <span>@item.DisplayName</span>
+                    <StatusPill Text="@item.Reason" Tone="@(item.Reason == ScheduledJobAttention.DisabledReason ? StatusTone.Muted : StatusTone.Warning)" />
+                </li>
+            }
+        </ul>
+    }
+
+    <a class="dashboard-link" href="/scheduled-jobs">前往排程作業</a>
+}
+
+@code {
+    private ScheduledJobOverview? overview;
+    private IReadOnlyList<ScheduledJobAttentionItem> attention = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        overview = await OverviewService.GetOverviewAsync();
+        attention = ScheduledJobAttention.From(overview);
+    }
+}

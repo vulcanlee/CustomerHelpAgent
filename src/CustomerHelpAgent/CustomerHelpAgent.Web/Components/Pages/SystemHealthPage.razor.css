@@ -1,0 +1,287 @@
+/* 系統健康監控頁。
+
+   ⚠️ 本頁的外框（圓角、邊框、次要文字）跟著全站色票走，但**號誌色、狀態色條、
+      失敗區塊與深色日誌區刻意維持原色** —— 那是使用者掃這一頁時唯一要讀的訊號，
+      為了視覺統一把它們染粉，等於把訊號拿掉。
+      這些色也刻意**不**收進 theme.css：它們是本頁的語意常數，不是品牌色票，
+      收進去會讓「換品牌色」連帶改到紅綠燈。理由見
+      docs/architecture/介面視覺設計規範.md §8。 */
+
+.system-health-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.system-health-loading,
+.empty-log {
+    padding: 16px;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    background: #fff;
+}
+
+.system-health-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 18px 18px 22px;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    background: #fff;
+}
+
+.summary-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.summary-main h1,
+.system-health-section h2,
+.health-item h3 {
+    margin: 0;
+}
+
+/* 頂部列已經顯示「系統健康監控」了，摘要卡裡再寫一次是同一句話出現兩次。
+   但這是整頁唯一的 h1，直接刪掉會讓文件失去標題層級（頂部列的標題是
+   MainLayout 的一個 div，補不了這個洞），所以改成視覺隱藏、保留給螢幕閱讀器。
+   手法與 CrudActionButton 的 .crud-action-button-label 一致。 */
+.summary-main h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.summary-main p,
+.warn-log-summary,
+.health-item p {
+    margin: 4px 0 0;
+}
+
+.summary-main p {
+    margin-top: 0;
+    font-size: 0.875rem;
+    color: var(--app-muted);
+}
+
+.summary-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 96px;
+}
+
+.summary-score strong {
+    font-size: 32px;
+    line-height: 1.1;
+}
+
+.summary-score span {
+    font-size: 0.85rem;
+    color: var(--app-muted);
+}
+
+.traffic-light {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(var(--app-shadow-rgb), 0.1);
+}
+
+.traffic-light.light-green {
+    background: #1f8f45;
+}
+
+.traffic-light.light-yellow {
+    background: #c78100;
+}
+
+.traffic-light.light-red {
+    background: #c7362f;
+}
+
+.system-health-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.system-health-section h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--app-text);
+}
+
+.health-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.health-item {
+    padding: 14px 14px 14px 18px;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    background: #fff;
+}
+
+/* ⚠️ 狀態色條用 inset box-shadow，不要改回 border-left: 6px。
+   6px 的左邊框與 1px 的上下邊框在圓角轉角處會接成一塊楔形；
+   inset 陰影則會順著圓角裁切，邊框維持均勻 1px。 */
+.health-item.light-green,
+.system-health-summary.light-green {
+    box-shadow: inset 6px 0 0 0 #1f8f45;
+}
+
+.health-item.light-yellow,
+.system-health-summary.light-yellow {
+    box-shadow: inset 6px 0 0 0 #c78100;
+}
+
+.health-item.light-red,
+.system-health-summary.light-red {
+    box-shadow: inset 6px 0 0 0 #c7362f;
+}
+
+.health-item h3 {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.health-item p {
+    font-size: 0.875rem;
+}
+
+.health-item-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.health-item-heading > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.health-item-heading span {
+    font-size: 0.8rem;
+    color: var(--app-muted);
+}
+
+.health-item-heading strong {
+    font-size: 0.85rem;
+}
+
+.health-failure {
+    margin-top: 10px;
+    padding: 10px;
+    color: #8a1f18;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    border-radius: 10px;
+}
+
+.email-test {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    background: #fff;
+}
+
+.email-test p {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+.email-test-form {
+    display: flex;
+    gap: 10px;
+    max-width: 560px;
+}
+
+.email-test-hint {
+    font-size: 0.85rem;
+    color: var(--app-muted);
+}
+
+/* 成功／失敗沿用本頁號誌的語意色（見檔頭註解），不跟品牌色票走。 */
+.email-test-result {
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 0.875rem;
+}
+
+.email-test-result.is-success {
+    color: #135c2d;
+    background: #f0faf3;
+    border: 1px solid #9ad3ad;
+}
+
+.email-test-result.is-failure {
+    color: #8a1f18;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+}
+
+.warn-log-summary {
+    margin: 0;
+    color: var(--app-muted);
+}
+
+/* 條件被夾住、個別檔案讀取失敗、達 10000 筆上限等提示。 */
+.warn-log-notice {
+    padding: 8px 12px;
+    color: #874d00;
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: var(--app-radius-control);
+}
+
+.warn-log-table-wrap {
+    overflow-x: auto;
+}
+
+/*
+ * 展開列的原文渲染在 AntDesign 的標記內，落在本元件 scope 屬性之外，因此需要 ::deep。
+ * 配色與字型走 theme.css 的 --app-code-*，與日誌檢視展開列、例外堆疊同一組。
+ */
+::deep .warn-log-raw {
+    margin: 0;
+    padding: 8px 12px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: var(--app-code-font);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--app-code-text);
+    background: var(--app-code-bg);
+    border: 1px solid var(--app-code-line);
+    border-radius: 4px;
+    color-scheme: dark;
+}
+
+@media (max-width: 720px) {
+    .system-health-summary,
+    .email-test-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .summary-score {
+        align-items: flex-start;
+    }
+}

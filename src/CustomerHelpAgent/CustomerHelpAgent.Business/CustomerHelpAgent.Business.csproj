@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CustomerHelpAgent.AccessDatas\CustomerHelpAgent.AccessDatas.csproj" />
+    <ProjectReference Include="..\CustomerHelpAgent.Dtos\CustomerHelpAgent.Dtos.csproj" />
+    <ProjectReference Include="..\CustomerHelpAgent.Models\CustomerHelpAgent.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Services\Adapter\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+    <PackageReference Include="Newtonsoft.Json" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,39 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace CustomerHelpAgent.AccessDatas.Models;
+
+/// <summary>
+/// __Display__（由 scripts/New-CrudModule.ps1 產生）。
+/// 實作 <see cref="IConcurrencyStamped"/>（樂觀並行）與 <see cref="ISoftDeletable"/>（刪除可還原）：
+/// BackendDBContext 會自動套用 concurrency token 與軟刪除過濾器。
+/// </summary>
+public class __Name__ : IConcurrencyStamped, ISoftDeletable
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "名稱 不可為空白")]
+    public string Name { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+#IF TEAMS
+
+    /// <summary>團隊（多值，以分隔字串儲存；未設定表示公開，所有人都看得到）。見 <c>RecordTeamScope</c>。</summary>
+    public string? Teams { get; set; }
+#ENDIF
+
+    /// <summary>是否啟用</summary>
+    public bool IsEnabled { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+    /// <summary>樂觀並行的版本號（見 <see cref="IConcurrencyStamped"/>）。</summary>
+    public string ConcurrencyStamp { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>軟刪除旗標（見 <see cref="ISoftDeletable"/>）。</summary>
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+
+    public string? DeletedBy { get; set; }
+}

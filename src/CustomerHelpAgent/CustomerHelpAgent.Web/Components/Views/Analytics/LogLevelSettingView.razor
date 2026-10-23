@@ -1,0 +1,81 @@
+@using CustomerHelpAgent.Web.Diagnostics
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (logLevelState.IsAvailable == false)
+{
+    <div class="alert alert-danger" role="alert">
+        無法讀取 NLog 設定，日誌等級無法在執行期調整。請檢查 nlog.config 是否存在且含有
+        <code>&lt;logger name="*"&gt;</code> 規則。
+    </div>
+}
+else
+{
+    <div class="log-level-page">
+        <div class="log-level-cards">
+            <article class="log-level-card">
+                <span class="log-level-card-label">目前生效等級</span>
+                <strong class="log-level-card-value">@LogLevelRankHelper.ToLevelText(effectiveLevel)</strong>
+                <span class="log-level-card-caption">此等級以上的日誌才會寫入檔案</span>
+            </article>
+
+            <article class="log-level-card">
+                <span class="log-level-card-label">系統預設等級</span>
+                <strong class="log-level-card-value">@LogLevelRankHelper.ToLevelText(systemDefaultLevel)</strong>
+                <span class="log-level-card-caption">
+                    來自 nlog.config 的 <code>&lt;logger name="*"&gt;</code> minlevel
+                </span>
+            </article>
+        </div>
+
+        <div class="alert alert-warning log-level-banner" role="alert">
+            <p>
+                <strong>這個設定只在執行期有效。</strong>
+                系統重新啟動之後會回到上面的「系統預設等級」，不會寫進任何設定檔。
+            </p>
+            <p>
+                套用之後即使 <code>nlog.config</code> 被重新載入，這個設定仍會保留 ——
+                要回到檔案裡的值請按「還原為系統預設等級」。
+            </p>
+            <p>
+                本設定<strong>只影響應用程式日誌</strong>；框架日誌（Microsoft、EntityFrameworkCore）
+                另由 nlog.config 的專屬規則控制，不受這裡影響。
+            </p>
+            <p>
+                <strong>調到 Debug 或 Trace 會大幅增加日誌量</strong>，排查完問題請記得調回來。
+            </p>
+        </div>
+
+        <div class="log-level-choices">
+            <p class="log-level-choices-title">選擇要輸出的最低等級</p>
+            <RadioGroup TValue="LogLevelRank" @bind-Value="selectedLevel">
+                @foreach (var option in LevelOptions)
+                {
+                    <div class="log-level-choice">
+                        <Radio TValue="LogLevelRank" Value="@option.Level">
+                            @LogLevelRankHelper.ToLevelText(option.Level)
+                            <span class="log-level-choice-description">（@option.Description）</span>
+                        </Radio>
+                    </div>
+                }
+            </RadioGroup>
+        </div>
+
+        <div class="log-level-actions">
+            <ToolbarIconButton Title="套用" Icon="check"
+                               Disabled="@(selectedLevel == effectiveLevel)"
+                               OnClick="@(async () => await OnApplyAsync())" />
+            <ToolbarIconButton Title="還原為系統預設等級" Icon="history"
+                               Disabled="@(hasOverride == false)"
+                               OnClick="@(async () => await OnRestoreAsync())" />
+        </div>
+    </div>
+}

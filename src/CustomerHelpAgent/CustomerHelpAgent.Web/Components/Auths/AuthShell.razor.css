@@ -1,0 +1,6 @@
+/* 刻意沒有規則。
+
+   本檔存在只是為了讓 AuthShell 取得 scoped CSS 屬性：登入、忘記密碼、重設密碼與 AuthShell
+   四個元件在 CustomerHelpAgent.Web.csproj 以 CssScope="b-auth-shell" 共用同一個 scope，
+   所有外觀規則集中寫在 Login.razor.css。刪掉本檔，AuthShell 的標記就拿不到 scope 屬性，
+   冬景、品牌欄與卡片會整片失去樣式。 */

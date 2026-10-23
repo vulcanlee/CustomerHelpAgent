@@ -1,0 +1,162 @@
+@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Web.Ai
+
+@*
+    AI 對話紀錄明細（0.9.72 起）。尺寸寫在 Components/Commons/OverlayStyles.razor 的 .ai-call-log-modal
+    （AntDesign 的 Modal 外框渲染在元件 DOM 之外），刻意不設 Width（見速查 §6.4）；
+    窗內內容是本元件自己的標記，樣式在本元件的 .razor.css。
+    純唯讀、不含 EditForm，所以 Esc 直接交給 Modal 的 Keyboard 處理。
+    字級由「一般／中／大」寫進 .ai-call-log-body 的 --ai-font-scale（同另外兩個 AI 視窗，AiModalStyleConventionTests 守門）。
+*@
+<Modal Title="AI 對話紀錄明細"
+       Class="ai-call-log-modal"
+       @bind-Visible="@visible"
+       Keyboard="true"
+       Footer="null"
+       OnCancel="@Close">
+    @if (isLoading)
+    {
+        <div class="ai-call-log-loading"><Spin Tip="讀取中…" /></div>
+    }
+    else if (detail is not null)
+    {
+        var item = detail.Item;
+        <div class="ai-call-log-body" style="--ai-font-scale: @FontScaleCss">
+            <div class="ai-call-log-toolbar">
+                <div class="ai-call-log-font-scale">
+                    @foreach (var option in FontScaleOptions)
+                    {
+                        <Button Size="@ButtonSize.Small"
+                                Type="@(fontScalePercent == option.Percent ? ButtonType.Primary : ButtonType.Default)"
+                                OnClick="@(() => fontScalePercent = option.Percent)">@option.Label</Button>
+                    }
+                </div>
+                <div class="ai-call-log-toolbar-right">
+                    <ToolbarIconButton Title="下載完整紀錄（JSON）" Icon="file_download"
+                                       Disabled="@(detail.Content is null || isExporting)"
+                                       OnClick="@(async () => await OnDownloadJsonAsync())" />
+                    <ToolbarIconButton Title="匯出 PDF（中繼資料＋完整對話，不含原始 JSON）" Icon="picture_as_pdf"
+                                       Disabled="@(detail.Content is null || isExporting)"
+                                       OnClick="@(async () => await OnExportPdfAsync())" />
+                </div>
+            </div>
+
+            <dl class="ai-call-log-meta">
+                <div><dt>送出時間</dt><dd>@item.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>作業</dt><dd>@item.Operation</dd></div>
+                <div><dt>發起者</dt><dd>@AccountText(item)</dd></div>
+                <div>
+                    <dt>結果</dt>
+                    <dd>
+                        <StatusPill Text="@AiCallLogPdfBuilder.DescribeOutcome(item)" Tone="@ResolveTone(item)" />
+                        @if (string.IsNullOrEmpty(detail.Content?.ExceptionType) == false)
+                        {
+                            <span class="ai-call-log-muted">@detail.Content!.ExceptionType</span>
+                        }
+                    </dd>
+                </div>
+                <div><dt>供應商／模型</dt><dd>@item.Provider／@ModelText</dd></div>
+                <div><dt>端點</dt><dd>@(detail.Content?.Endpoint ?? "—")</dd></div>
+                <div><dt>HTTP／結束原因</dt><dd>@(item.HttpStatus?.ToString() ?? "（沒有回應）")／@(item.FinishReason ?? "—")</dd></div>
+                <div><dt>耗時</dt><dd>@item.ElapsedMilliseconds.ToString("N0") ms</dd></div>
+                <div><dt>關聯說明</dt><dd>@(item.RelatedInfo ?? "—")</dd></div>
+                <div><dt>用量與費用</dt><dd>@UsageText</dd></div>
+                <div><dt>呼叫識別碼</dt><dd class="ai-call-log-mono">@item.CallId</dd></div>
+            </dl>
+
+            @if (detail.Conversation.Count > 1)
+            {
+                <div class="ai-call-log-thread">
+                    <div class="ai-call-log-thread-title">同一段對話（共 @detail.Conversation.Count 次呼叫）</div>
+                    <ol class="ai-call-log-thread-list">
+                        @foreach (var sibling in detail.Conversation)
+                        {
+                            var current = sibling.Id == item.Id;
+                            <li class="@(current ? "ai-call-log-thread-current" : string.Empty)">
+                                @if (current)
+                                {
+                                    <span>@sibling.OccurredAt.ToString("HH:mm:ss")　@(sibling.RelatedInfo ?? sibling.Operation)（目前這筆）</span>
+                                }
+                                else
+                                {
+                                    <Button Type="ButtonType.Link" Size="ButtonSize.Small"
+                                            OnClick="@(async () => await OpenAsync(sibling.Id))">
+                                        @sibling.OccurredAt.ToString("HH:mm:ss")　@(sibling.RelatedInfo ?? sibling.Operation)
+                                    </Button>
+                                }
+                            </li>
+                        }
+                    </ol>
+                </div>
+            }
+
+            <div class="ai-call-log-views">
+                <div class="ai-call-log-views-left">
+                    @foreach (var view in Views)
+                    {
+                        var key = view.Key;
+                        <Button Size="ButtonSize.Small"
+                                Type="@(activeView == key ? ButtonType.Primary : ButtonType.Default)"
+                                OnClick="@(() => SwitchView(key))">@view.Label</Button>
+                    }
+                </div>
+                @if (IsTextView)
+                {
+                    <Switch @bind-Value="renderMarkdown" CheckedChildren="Markdown" UnCheckedChildren="純文字" />
+                }
+            </div>
+
+            @if (detail.Content is null)
+            {
+                <p class="ai-call-log-empty">內容檔不存在（可能已被清除，或當時寫檔失敗），只能看到上方的中繼資料。</p>
+            }
+            else
+            {
+                @if (IsTextView && detail.Messages is null && activeView != ViewResponse)
+                {
+                    <p class="ai-call-log-empty">無法從原始請求解析出訊息，請改看「原始 Request」。</p>
+                }
+
+                @foreach (var block in CurrentBlocks)
+                {
+                    <section class="ai-call-log-block ai-call-log-role-@block.RoleClass">
+                        <header class="ai-call-log-block-header">
+                            <span class="ai-call-log-block-title">@block.Heading</span>
+                            <StatusPill Text="@block.Direction" Tone="@block.DirectionTone" />
+                            <span class="ai-call-log-muted">@block.Text.Length.ToString("N0") 字元</span>
+                            <span class="ai-call-log-block-spacer"></span>
+                            <CrudActionButton Title="複製" Icon="content_copy"
+                                              Disabled="@(block.Text.Length == 0)"
+                                              OnClick="@(async () => await OnCopyAsync(block))" />
+                        </header>
+
+                        @if (string.IsNullOrEmpty(block.Note) == false)
+                        {
+                            <p class="ai-call-log-note">@block.Note</p>
+                        }
+
+                        @if (block.Text.Length == 0)
+                        {
+                            <p class="ai-call-log-empty">（沒有內容）</p>
+                        }
+                        else if (renderMarkdown && block.AllowMarkdown)
+                        {
+                            <div class="ai-call-log-markdown">@((MarkupString)RenderHtml(block))</div>
+                        }
+                        else
+                        {
+                            <pre class="@(block.AllowMarkdown ? "ai-call-log-text" : "ai-call-log-code")">@DisplayText(block)</pre>
+                        }
+
+                        @if (block.Text.Length > MaxDisplayCharacters)
+                        {
+                            <p class="ai-call-log-note">
+                                本段共 @block.Text.Length.ToString("N0") 字元，畫面只顯示前 @MaxDisplayCharacters.ToString("N0") 字元；完整內容請用「複製」或下載 JSON。
+                            </p>
+                        }
+                    </section>
+                }
+            }
+        </div>
+    }
+</Modal>

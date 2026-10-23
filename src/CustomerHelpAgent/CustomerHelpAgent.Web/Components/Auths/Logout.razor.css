@@ -1,0 +1,81 @@
+.logout-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: var(--app-page);
+}
+
+.logout-card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.16);
+    padding: 36px 32px 28px;
+}
+
+.logout-header {
+    margin: -36px -32px 24px;
+    padding: 12px;
+    border-radius: 8px 8px 0 0;
+    background: var(--app-tint);
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--app-text);
+}
+
+.logout-message {
+    margin: 0 0 24px;
+    text-align: center;
+    font-size: 17px;
+    color: var(--app-muted);
+}
+
+.logout-error {
+    margin-bottom: 20px;
+    color: var(--app-error);
+    text-align: center;
+}
+
+.logout-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.logout-button {
+    min-width: 120px;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.logout-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.logout-button-primary {
+    background: var(--app-tint);
+    color: var(--app-accent);
+}
+
+.logout-button-primary:hover:not(:disabled) {
+    background: rgba(var(--app-inner-rgb), 0.45);
+}
+
+.logout-button-secondary {
+    background: var(--app-off-bg);
+    color: var(--app-muted);
+}
+
+.logout-button-secondary:hover:not(:disabled) {
+    background: var(--app-off-line);
+}

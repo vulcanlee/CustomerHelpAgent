@@ -1,0 +1,114 @@
+@using CustomerHelpAgent.Models.Systems
+@using CustomerHelpAgent.Share.Helpers
+@using CustomerHelpAgent.Web.Backup
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="backup-toolbar">
+            <div class="backup-toolbar-left">
+                <span class="backup-hint">備份含全部資料與登入金鑰，請妥善保管下載的檔案。還原需要停站並執行還原腳本（見操作說明）。</span>
+            </div>
+            <div class="backup-toolbar-right">
+                <ToolbarIconButton Title="立即備份" Icon="backup"
+                                   Disabled="@IsBusy"
+                                   OnClick="@(async () => await OnBackupNowAsync())" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                   OnClick="@(async () => await OnBatchDeleteAsync())" />
+            </div>
+        </div>
+
+        @if (job is not null)
+        {
+            <div class="backup-summary">
+                <div>
+                    <span class="backup-label">下次自動備份</span>
+                    @if (job.NextRunLocal is { } next)
+                    {
+                        <span>@next.ToString("yyyy-MM-dd HH:mm")</span>
+                    }
+                    else
+                    {
+                        <span class="backup-muted">@(job.IsEnabled ? "排程已關閉" : "已停用")</span>
+                    }
+                </div>
+                <div>
+                    <span class="backup-label">上次執行</span>
+                    @if (job.LastRun is { } run)
+                    {
+                        <StatusPill Text="@StatusText(run.Status)" Tone="@ToneOf(run.Status)" />
+                        <span>@ToLocalText(run.StartedAtUtc)</span>
+                        @if (!string.IsNullOrWhiteSpace(run.Message))
+                        {
+                            <span class="backup-muted">@run.Message</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="backup-muted">尚未執行</span>
+                    }
+                </div>
+                <div>
+                    <span class="backup-label">保留份數</span>
+                    <span>@(keepCount == 0 ? "不自動刪除" : $"最新 {keepCount} 份")</span>
+                </div>
+            </div>
+        }
+
+        <div class="backup-table-wrap">
+            <Table TItem="BackupFileInfo"
+                   Class="backup-table"
+                   DataSource="@backups"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   HidePagination="true"
+                   @bind-SelectedRows="selectedRows">
+                <ColumnDefinitions>
+                    @* 0.9.132 起：勾選後可「刪除選取」。備份進行中每 5 秒自動重新整理，勾選會被清掉。 *@
+                    <Selection />
+                    <Column TData="string" Title="檔名">
+                        <code class="backup-name">@context.FileName</code>
+                    </Column>
+                    <Column TData="string" Title="建立時間" Width="160">@context.CreatedAtLocal.ToString("yyyy-MM-dd HH:mm:ss")</Column>
+                    <Column TData="string" Title="大小" Width="110">@SizeFormatHelper.FormatBytes(context.SizeBytes)</Column>
+                    <Column TData="string" Title="系統版本" Width="170">@(context.Manifest?.SystemVersion ?? "—")</Column>
+                    <Column TData="string" Title="觸發" Width="90">@TriggerText(context.Manifest?.Trigger)</Column>
+                    <Column TData="string" Title="內容">
+                        @if (context.Manifest is { } manifest)
+                        {
+                            <span class="backup-muted">@ContentText(manifest)</span>
+                        }
+                        else
+                        {
+                            <span class="backup-muted">（讀不到備份說明檔）</span>
+                        }
+                    </Column>
+                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="下載" Icon="file_download"
+                                                  OnClick="@(() => OnDownload(context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete"
+                                                  OnClick="@(async () => await OnDeleteAsync(context))" />
+                            </SpaceItem>
+                        </Space>
+                    </ActionColumn>
+                </ColumnDefinitions>
+            </Table>
+        </div>
+    </div>
+}

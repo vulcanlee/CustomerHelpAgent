@@ -1,0 +1,67 @@
+/* 兩步驟驗證設定（0.9.104 起）。顏色一律取 theme.css 的色票。 */
+.tfa-page {
+    display: grid;
+    gap: 1rem;
+    max-width: 48rem;
+}
+
+.tfa-section {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    padding: 1rem 1.25rem;
+}
+
+.tfa-heading {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+}
+
+.tfa-page ::deep .tfa-required {
+    margin-top: 0.75rem;
+}
+
+.tfa-muted {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+}
+
+.tfa-actions {
+    margin-top: 0.75rem;
+}
+
+.tfa-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+}
+
+.tfa-qr {
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    display: block;
+    height: 12rem;
+    margin-bottom: 0.75rem;
+    width: 12rem;
+}
+
+.tfa-key {
+    color: var(--app-text);
+    display: block;
+    font-family: var(--app-code-font);
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+    margin-top: 0.4rem;
+    word-break: break-all;
+}
+
+.tfa-codes {
+    display: grid;
+    font-family: var(--app-code-font);
+    gap: 0.35rem 2rem;
+    grid-template-columns: repeat(2, max-content);
+    margin: 0.75rem 0 1rem;
+}

@@ -1,0 +1,131 @@
+@using CustomerHelpAgent.AccessDatas.Models
+@using CustomerHelpAgent.Models.AdapterModel
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="announcement-toolbar">
+            <div class="announcement-toolbar-left">
+                <span class="announcement-hint">公告在起訖時間內顯示在每個登入後頁面的上方；每位使用者可以各自關閉。內容為純文字。</span>
+            </div>
+            <div class="announcement-toolbar-right">
+                <ToolbarIconButton Title="新增" Icon="add" OnClick="OnAdd" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh" OnClick="@(async () => await OnRefreshAsync())" />
+                <BatchDeleteButton Count="@selectedRows.Count()" Busy="@batchDeleting"
+                                   OnClick="@(async () => await OnBatchDeleteAsync())" />
+            </div>
+        </div>
+
+        <div class="announcement-table-wrap">
+            <Table @ref="table"
+                   TItem="AnnouncementAdapterModel"
+                   Class="announcement-table"
+                   DataSource="@items"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   PageSize="20"
+                   OnPageIndexChange="OnPageIndexChange"
+                   @bind-SelectedRows="selectedRows">
+                <ColumnDefinitions>
+                    @* 0.9.132 起：勾選後可「刪除選取」。 *@
+                    <Selection />
+                    <Column TData="string" Title="標題">
+                        <div class="announcement-title">@context.Title</div>
+                        <div class="announcement-content">@context.Content</div>
+                    </Column>
+                    <Column TData="string" Title="狀態" Width="100">
+                        <StatusPill Text="@StatusText(context)" Tone="@ToneOf(StateOf(context))" />
+                    </Column>
+                    <Column TData="string" Title="期間" Width="200">
+                        <div>@context.StartAt.ToString("yyyy-MM-dd HH:mm") 起</div>
+                        <div class="announcement-muted">@(context.EndAt is { } end ? $"{end:yyyy-MM-dd HH:mm} 止" : "不設結束")</div>
+                    </Column>
+                    <Column TData="string" Title="對象" Width="140">@context.TargetName</Column>
+                    <Column TData="string" Title="建立者" Width="110">@context.CreatedByAccount</Column>
+                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit" OnClick="@(() => OnEdit(context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" OnClick="@(async () => await OnDeleteAsync(context))" />
+                            </SpaceItem>
+                        </Space>
+                    </ActionColumn>
+                </ColumnDefinitions>
+            </Table>
+        </div>
+
+        @*
+            編輯窗：小型表單，刻意不用 EditForm（含 EditForm 的窗依慣例是 95vw 的大窗，見 FormModalConventionTests）。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的 .announcement-modal（速查 §6.4）。
+        *@
+        <Modal Title="@(editing.Id == 0 ? "新增公告" : "修改公告")"
+               Class="announcement-modal"
+               @bind-Visible="@modalVisible"
+               Keyboard="true"
+               MaskClosable="false"
+               OkText="@("儲存")"
+               CancelText="@("取消")"
+               OnOk="OnModalOkAsync"
+               OnCancel="OnModalCancelAsync">
+            <AntDesign.Form TModel="AnnouncementAdapterModel" Model="@editing" Layout="FormLayout.Vertical">
+                <FormItem Label="標題" Required>
+                    <Input @bind-Value="editing.Title" MaxLength="100" Placeholder="請輸入標題" />
+                </FormItem>
+                <FormItem Label="內容" Required>
+                    <TextArea @bind-Value="editing.Content" Rows="5" MaxLength="2000" Placeholder="純文字，換行會保留" />
+                </FormItem>
+                <FormItem Label="開始時間" Required>
+                    <DatePicker TValue="DateTime" @bind-Value="editing.StartAt" ShowTime="@true" Format="yyyy-MM-dd HH:mm" Style="width: 100%;" />
+                </FormItem>
+                <FormItem Label="結束時間（留空＝一直顯示到刪除）">
+                    <DatePicker TValue="DateTime?" @bind-Value="editing.EndAt" ShowTime="@true" Format="yyyy-MM-dd HH:mm" Style="width: 100%;" />
+                </FormItem>
+                <FormItem Label="對象" Required>
+                    <Select TItem="string" TItemValue="string" @bind-Value="editing.TargetKind" Style="width: 100%;">
+                        <SelectOption TItemValue="string" TItem="string" Value="@AnnouncementTargetKinds.All" Label="全體" />
+                        <SelectOption TItemValue="string" TItem="string" Value="@AnnouncementTargetKinds.Role" Label="某個角色" />
+                        <SelectOption TItemValue="string" TItem="string" Value="@AnnouncementTargetKinds.Team" Label="某個團隊" />
+                    </Select>
+                </FormItem>
+                @if (editing.TargetKind == AnnouncementTargetKinds.Role)
+                {
+                    <FormItem Label="角色" Required>
+                        <Select TItem="int?" TItemValue="int?" @bind-Value="editing.TargetId" EnableSearch Style="width: 100%;">
+                            @foreach (var role in roleOptions)
+                            {
+                                <SelectOption TItemValue="int?" TItem="int?" Value="@role.Id" Label="@role.Name" />
+                            }
+                        </Select>
+                    </FormItem>
+                }
+                else if (editing.TargetKind == AnnouncementTargetKinds.Team)
+                {
+                    <FormItem Label="團隊" Required>
+                        <Select TItem="int?" TItemValue="int?" @bind-Value="editing.TargetId" EnableSearch Style="width: 100%;">
+                            @foreach (var team in teamOptions)
+                            {
+                                <SelectOption TItemValue="int?" TItem="int?" Value="@team.Id" Label="@team.Name" />
+                            }
+                        </Select>
+                    </FormItem>
+                }
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <AntDesign.Alert Message="@errorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
+                }
+            </AntDesign.Form>
+        </Modal>
+    </div>
+}

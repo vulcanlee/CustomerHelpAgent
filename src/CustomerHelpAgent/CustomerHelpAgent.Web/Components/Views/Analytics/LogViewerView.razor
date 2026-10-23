@@ -1,0 +1,206 @@
+﻿@using CustomerHelpAgent.Web.Diagnostics
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="log-view-toolbar">
+            <div class="log-view-toolbar-left">
+                <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("起始時間")" Style="width: 190px;" />
+                <span class="log-view-range-separator">～</span>
+                <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("結束時間")" Style="width: 190px;" />
+
+                <Select TItem="string" TItemValue="string" @bind-Value="minimumLevel"
+                        Style="width: 118px;">
+                    @foreach (var option in LevelOptions)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@option.Key">@option.Label</SelectOption>
+                    }
+                </Select>
+
+                <AntDesign.InputNumber TValue="int" @bind-Value="takeCount"
+                                       Min="1" Max="@LogQueryRequest.MaxTake" Step="100"
+                                       Style="width: 110px;" />
+            </div>
+            <div class="log-view-toolbar-right">
+                <ToolbarIconButton Title="查詢" Icon="search"
+                                   OnClick="@(async () => await OnQueryAsync())" />
+                <ToolbarIconButton Title="全部展開" Icon="unfold_more"
+                                   Disabled="@(entriesAscending.Count == 0)"
+                                   OnClick="OnExpandAll" />
+                <ToolbarIconButton Title="全部收合" Icon="unfold_less"
+                                   Disabled="@(entriesAscending.Count == 0)"
+                                   OnClick="OnCollapseAll" />
+                <ToolbarIconButton Title="複製本次查詢結果（原始 nlog 格式）" Icon="content_copy"
+                                   Disabled="@(entriesAscending.Count == 0)"
+                                   OnClick="@(async () => await OnCopyAllAsync())" />
+                <ToolbarIconButton Title="匯出本次查詢結果（原始 nlog 格式）" Icon="file_download"
+                                   Disabled="@(entriesAscending.Count == 0)"
+                                   OnClick="@(async () => await OnExportAsync())" />
+                @*
+                    圖示用 classic Material Icons 世代的名稱（insights）。
+                    Icon 打錯只會渲染成破圖方塊，而且沒有任何守門測試會抓到，改動時請目視確認。
+                *@
+                <ToolbarIconButton Title="@AiButtonTitle" Icon="insights"
+                                   Disabled="@(entriesAscending.Count == 0 || isAiRunning || aiAvailable == false)"
+                                   OnClick="@(async () => await OnAiAnalyzeAsync())" />
+            </div>
+        </div>
+
+        <div class="log-view-quick-ranges">
+            <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round"
+                    OnClick="@(async () => await OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromMinutes(5), DateTime.Now)))">最近 5 分</Button>
+            <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round"
+                    OnClick="@(async () => await OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromMinutes(15), DateTime.Now)))">最近 15 分</Button>
+            <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round"
+                    OnClick="@(async () => await OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromHours(1), DateTime.Now)))">最近 1 小時</Button>
+            <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round"
+                    OnClick="@(async () => await OnQuickRangeAsync(LogTimeRanges.Today(DateTime.Now)))">今天</Button>
+        </div>
+
+        <div class="log-view-text-filters">
+            <div><Input @bind-Value="keyword" Placeholder="關鍵字（比對整筆原始內容）" /></div>
+            <div><Input @bind-Value="traceCode" Placeholder="錯誤追蹤碼" /></div>
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(statusMessage) == false)
+        {
+            <div class="alert alert-info log-view-alert" role="alert">@statusMessage</div>
+        }
+
+        @foreach (var warning in warnings)
+        {
+            <div class="alert alert-warning log-view-alert" role="alert">@warning</div>
+        }
+
+        <div class="log-view-table-wrap">
+            <Table @ref="logTable"
+                   TItem="LogEntry"
+                   Class="log-view-table"
+                   DataSource="@entriesDisplay"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   RowKey="@(entry => entry.Sequence)"
+                   RowClassName="@(_ => "log-view-row-copyable")"
+                   DefaultExpandAllRows="@isExpandAll"
+                   OnRowClick="OnRowClickAsync"
+                   PageSize="20">
+                <ColumnDefinitions>
+                    <Column TData="DateTime" Title="時間" Width="180">
+                        @context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                    </Column>
+                    <Column TData="string" Title="等級" Width="90">
+                        <Tag Color="@LogLevelRankHelper.ToTagColor(context.Rank)">@(string.IsNullOrEmpty(context.Level) ? "－" : context.Level)</Tag>
+                    </Column>
+                    <Column TData="string" Title="記錄器" Width="260" Ellipsis>@context.Logger</Column>
+                    <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                    <Column TData="string" Title="TraceId" Width="130" Ellipsis>@context.TraceId</Column>
+                </ColumnDefinitions>
+                <ExpandTemplate Context="rowData">
+                    <div class="log-view-expand-actions">
+                        <Button Size="@ButtonSize.Small"
+                                OnClick="@(async () => await OnAroundEntryAsync(rowData.Data))">查前後 1 分鐘</Button>
+                    </div>
+                    <pre class="log-view-raw">@rowData.Data.Raw</pre>
+                </ExpandTemplate>
+            </Table>
+        </div>
+
+        @*
+            尺寸（96vw／96vh）寫在 Components/Commons/OverlayStyles.razor 的全域 style，
+            刻意不在這裡設 Width —— 那邊是 !important，兩邊都寫只會讓人改錯地方。
+
+            MaskClosable 只在等待中關掉：關窗等於放棄一次已送出、可能已計費的呼叫，
+            誤點遮罩就白花錢；看結果時點外面關掉則是既有的直覺行為，維持不動。
+        *@
+        <Modal Title="@AiModalTitle"
+               Class="log-ai-modal"
+               @bind-Visible="@aiModalVisible"
+               Keyboard="true"
+               MaskClosable="@(isAiRunning == false)"
+               Footer="null"
+               OnCancel="OnAiModalCancel">
+            @*
+                --ai-font-scale 由三顆字級按鈕設定，窗內所有 font-size 都是
+                calc(Npx * var(--ai-font-scale, 1))。自訂屬性會沿 DOM 繼承，
+                所以 MarkupString 注入的 HTML 也吃得到。
+            *@
+            <div class="log-ai-body" style="--ai-font-scale: @AiFontScaleCss">
+                @if (aiModalState == AiModalState.Running)
+                {
+                    <div class="log-ai-loading">
+                        <Spin Size="@SpinSize.Large" />
+                        <p class="log-ai-loading-title">AI 正在分析 @aiSubmittedCount 筆日誌…</p>
+                        <p class="log-ai-loading-elapsed">已等待 @aiElapsedSeconds 秒</p>
+                        <p class="log-ai-loading-hint">
+                            推論模型可能需要數十秒到數分鐘。關閉本視窗將放棄這次分析。
+                        </p>
+                    </div>
+                }
+                else if (aiModalState == AiModalState.Failed)
+                {
+                    <div class="log-ai-failed">
+                        <p class="log-ai-failed-title">AI 分析未完成</p>
+                        <p class="log-ai-failed-message">@aiErrorMessage</p>
+                        <p class="log-ai-failed-hint">
+                            同一則訊息也已寫入應用程式日誌，可在本頁查詢記錄器
+                            CustomerHelpAgent.Web.Ai.AiChatCompletionClient 的紀錄取得完整細節。
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="log-ai-actions">
+                        <div class="log-ai-font-scale">
+                            @foreach (var option in FontScaleOptions)
+                            {
+                                <Button Size="@ButtonSize.Small"
+                                        Type="@(aiFontScalePercent == option.Percent ? ButtonType.Primary : ButtonType.Default)"
+                                        OnClick="@(() => aiFontScalePercent = option.Percent)">@option.Label</Button>
+                            }
+                        </div>
+                        <div class="log-ai-actions-right">
+                            <ToolbarIconButton Title="複製結果（Markdown 原文）" Icon="content_copy"
+                                               OnClick="@(async () => await OnAiCopyAsync())" />
+                            <ToolbarIconButton Title="匯出 PDF 報告並下載" Icon="picture_as_pdf"
+                                               Disabled="@isAiExporting"
+                                               OnClick="@(async () => await OnAiExportPdfAsync())" />
+                        </div>
+                    </div>
+
+                    <dl class="log-ai-meta">
+                        @foreach (var item in aiMetaItems)
+                        {
+                            <div class="log-ai-meta-row">
+                                <dt class="log-ai-meta-term">@item.Key</dt>
+                                <dd class="log-ai-meta-value">@item.Value</dd>
+                            </div>
+                        }
+                    </dl>
+
+                    @*
+                        AI 輸出受日誌內容影響，屬不可信輸入，一律經 AiMarkdownRenderer.ToSafeHtml
+                        的安全管線（DisableHtml、連結 scheme 白名單、移除圖片）之後才能用 MarkupString。
+                        ⚠️ 不要改成直接把模型回應丟進 MarkupString。
+                    *@
+                    <div class="log-ai-report">
+                        @((MarkupString)aiHtml)
+                    </div>
+                }
+            </div>
+        </Modal>
+    </div>
+}

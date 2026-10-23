@@ -1,0 +1,163 @@
+﻿@using CustomerHelpAgent.Models.Systems
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="audit-log-toolbar">
+            <div class="audit-log-toolbar-left">
+                <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("發生時間（起）")" Style="width: 190px;" />
+                <span class="audit-log-range-separator">～</span>
+                <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                            ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                            Placeholder="@("發生時間（迄）")" Style="width: 190px;" />
+
+                @*
+                    動作清單取自資料庫的 DISTINCT，不寫死：代碼雖已集中在 AuditActions，但資料庫裡還有舊版本寫入、
+                    之後改名或移除的代碼，只列常數會查不到這些舊紀錄。
+                *@
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedAction" Style="width: 190px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="動作：不限" />
+                    @foreach (var action in actionOptions)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@action" Label="@action" />
+                    }
+                </Select>
+
+                <Select TItem="string" TItemValue="string" @bind-Value="selectedSuccess" Style="width: 130px;">
+                    <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="結果：不限" />
+                    <SelectOption TItemValue="string" TItem="string" Value="@("true")" Label="成功" />
+                    <SelectOption TItemValue="string" TItem="string" Value="@("false")" Label="失敗" />
+                </Select>
+
+                <Input class="audit-log-account-input" @bind-Value="accountFilter" Placeholder="操作者帳號" />
+                <Input class="audit-log-ip-input" @bind-Value="ipFilter" Placeholder="來源 IP" />
+                <Input class="audit-log-search-input" @bind-Value="keyword" Placeholder="關鍵字（動作／目標／摘要／IP）" />
+            </div>
+            <div class="audit-log-toolbar-right">
+                <ToolbarIconButton Title="查詢" Icon="search"
+                                   OnClick="@(async () => await OnSearchAsync())" />
+                <ToolbarIconButton Title="重新整理" Icon="refresh"
+                                   OnClick="@(async () => await OnRefreshAsync())" />
+                <ToolbarIconButton Title="匯出目前查詢結果（CSV）" Icon="file_download"
+                                   Disabled="@(_total == 0)"
+                                   OnClick="@(async () => await OnExportAsync())" />
+                @*
+                    圖示用 classic Material Icons 世代的名稱。Icon 打錯只會渲染成破圖方塊，
+                    而且沒有任何守門測試會抓到（MenuIconTests 只管 Menu.json），改動時請目視確認。
+                *@
+                <ToolbarIconButton Title="@($"清除 {PurgeDays} 天前的紀錄")" Icon="history"
+                                   OnClick="@(async () => await OnPurgeAsync())" />
+                <ToolbarIconButton Title="清空全部紀錄" Icon="delete_forever"
+                                   OnClick="@(async () => await OnClearAllAsync())" />
+            </div>
+        </div>
+
+        <div class="alert alert-info audit-log-alert" role="alert">
+            本頁記錄「誰、何時、對什麼、做了什麼、結果如何」，涵蓋登入、使用者與角色異動、權限拒絕等事件。
+            時間以<strong>伺服器本地時區</strong>顯示（資料庫存的是 UTC）。
+            清除與清空動作本身也會留下一筆紀錄。
+        </div>
+
+        <div class="audit-log-table-wrap">
+            <Table @ref="table"
+                   TItem="AuditLogAdapterModel"
+                   Class="audit-log-table"
+                   RemoteDataSource="true"
+                   DataSource="@auditLogAdapterModels"
+                   Loading="@isLoading"
+                   Size="TableSize.Small"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total">
+                <ColumnDefinitions>
+                    @*
+                        DataIndex 必須是實體欄位名 OccurredAt（不是顯示用的本地時間），
+                        TableSortHelper.ResolveSortFieldName 會讀它、服務端才對得上。
+                        本地時間與 UTC 單調同序，排序結果一致。
+                    *@
+                    <Column TData="DateTime" DataIndex="@nameof(AuditLogAdapterModel.OccurredAt)"
+                            Title="發生時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                        @context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")
+                    </Column>
+                    <Column TData="bool" Title="結果" Width="80">
+                        <Tag Color="@(context.Success ? "green" : "red")">@(context.Success ? "成功" : "失敗")</Tag>
+                    </Column>
+                    <Column TData="string" Title="動作" Width="175" Ellipsis>
+                        <Tag Color="@GetActionColor(context.ActionCategory)">@context.Action</Tag>
+                    </Column>
+                    <Column TData="string" Title="操作者" Width="130" Ellipsis>@ActorText(context)</Column>
+                    <Column TData="string" Title="來源 IP" Width="130" Ellipsis>@(context.ClientIp ?? "—")</Column>
+                    <Column TData="string" Title="目標" Width="170" Ellipsis>@TargetText(context)</Column>
+                    <Column TData="string" Title="摘要" Ellipsis>@(context.Detail ?? "—")</Column>
+                    <ActionColumn Title="操作" Fixed="ColumnFixPlacement.Right">
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="查看" Icon="visibility"
+                                                  OnClick="@(() => OnViewAsync(@context))" />
+                            </SpaceItem>
+                        </Space>
+                    </ActionColumn>
+                </ColumnDefinitions>
+            </Table>
+        </div>
+
+        @*
+            明細窗：清單放不下的欄位（完整摘要、UTC 原值、操作者 Id）都在這裡。
+            尺寸寫在 Components/Commons/OverlayStyles.razor 的全域 style（.audit-log-modal），
+            刻意不設 Width —— 那邊是 !important，兩邊都寫只會讓下一個人改錯地方（見速查 §6.4）。
+            純唯讀、不含 EditForm，所以 Esc 直接交給 Modal 的 Keyboard 處理（見速查 §6.3）。
+        *@
+        <Modal Title="稽核明細"
+               Class="audit-log-modal"
+               @bind-Visible="@detailVisible"
+               Keyboard="true"
+               Footer="null"
+               OnCancel="@(() => detailVisible = false)">
+            @if (detailItem is not null)
+            {
+                <dl class="audit-log-detail-list">
+                    <div><dt>發生時間（本地）</dt><dd>@detailItem.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                    @*
+                        UTC 原值一併列出：跨時區協查、或要與日誌檔的時間戳對照時會用到。
+                        detailItem.OccurredAt 已是本地時間，所以這裡反向轉回去。
+                    *@
+                    <div><dt>發生時間（UTC）</dt><dd>@detailItem.OccurredAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                    <div>
+                        <dt>結果</dt>
+                        <dd><Tag Color="@(detailItem.Success ? "green" : "red")">@(detailItem.Success ? "成功" : "失敗")</Tag></dd>
+                    </div>
+                    <div><dt>動作代碼</dt><dd>@detailItem.Action</dd></div>
+                    <div><dt>操作者</dt><dd>@ActorText(detailItem)</dd></div>
+                    <div><dt>來源 IP</dt><dd>@(detailItem.ClientIp ?? "—")</dd></div>
+                    <div><dt>目標類型</dt><dd>@(detailItem.TargetType ?? "—")</dd></div>
+                    <div><dt>目標識別</dt><dd>@(detailItem.TargetId ?? "—")</dd></div>
+                </dl>
+
+                <h3 class="audit-log-detail-title">摘要</h3>
+                <pre class="audit-log-detail-text">@(string.IsNullOrWhiteSpace(detailItem.Detail) ? "（無）" : detailItem.Detail)</pre>
+
+                @*
+                    詳細內容（0.9.131 起）：修改前後差異、完整查詢條件。存在 AuditContentPath 底下的檔案，開窗時才讀。
+                *@
+                @if (detailItem.ContentFile is not null)
+                {
+                    <h3 class="audit-log-detail-title">詳細內容</h3>
+                    <pre class="audit-log-detail-text audit-log-detail-content">@(isContentLoading ? "讀取中…" : detailContent)</pre>
+                }
+            }
+        </Modal>
+    </div>
+}

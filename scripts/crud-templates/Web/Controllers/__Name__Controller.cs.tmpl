@@ -1,0 +1,188 @@
+using AutoMapper;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Business.Helpers;
+using CustomerHelpAgent.Business.Repositories;
+using CustomerHelpAgent.Dtos.Commons;
+using CustomerHelpAgent.Dtos.Models;
+using CustomerHelpAgent.Share.Helpers;
+using CustomerHelpAgent.Web.Auth;
+using CustomerHelpAgent.Web.Filters;
+
+namespace CustomerHelpAgent.Web.Controllers;
+
+/// <summary>
+/// __Display__的 Web API（由 scripts/New-CrudModule.ps1 產生）。一律回 <c>ApiResult</c>；每個端點以 [HasPermission] 做動作級授權，
+/// 例外一律走 <c>this.ApiServerError</c>（遵守 Security:ReturnExceptionDetails）。
+/// </summary>
+[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
+[ApiController]
+[ApiValidationFilter]
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+public class __Name__Controller : ControllerBase
+{
+    private readonly ILogger<__Name__Controller> logger;
+    private readonly __Name__Repository repository;
+    private readonly IMapper mapper;
+
+    public __Name__Controller(ILogger<__Name__Controller> logger, __Name__Repository repository, IMapper mapper)
+    {
+        this.logger = logger;
+        this.repository = repository;
+        this.mapper = mapper;
+    }
+
+    [HttpGet("{id}")]
+    [HasPermission(MagicObjectHelper.__PermConst__, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<__Name__Dto>>> GetById(int id)
+    {
+        try
+        {
+            var item = await repository.GetByIdAsync(id);
+            if (item == null)
+            {
+                return NotFound(ApiResult<__Name__Dto>.NotFoundResult($"找不到 ID 為 {id} 的__Item__"));
+            }
+
+            return Ok(ApiResult<__Name__Dto>.SuccessResult(mapper.Map<__Name__Dto>(item), "取得__Item__成功"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get __name__. __Name__Id={__Name__Id}", id);
+            return this.ApiServerError<__Name__Dto>("取得__Item__失敗", ex);
+        }
+    }
+
+    [HttpPost("search")]
+    [HasPermission(MagicObjectHelper.__PermConst__, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<PagedResult<__Name__Dto>>>> Search([FromBody] __Name__SearchRequestDto request)
+    {
+        try
+        {
+            var paged = await repository.GetPagedAsync(request);
+            var result = new PagedResult<__Name__Dto>
+            {
+                Items = mapper.Map<List<__Name__Dto>>(paged.Items),
+                TotalCount = paged.TotalCount,
+                PageIndex = request.PageIndex,
+                PageSize = request.PageSize,
+                TotalPages = (int)Math.Ceiling(paged.TotalCount / (double)request.PageSize),
+            };
+            return Ok(ApiResult<PagedResult<__Name__Dto>>.SuccessResult(result, "搜尋__Item__成功"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to search __name__ records.");
+            return this.ApiServerError<PagedResult<__Name__Dto>>("搜尋__Item__失敗", ex);
+        }
+    }
+
+    [HttpPost]
+    [HasPermission(MagicObjectHelper.__PermConst__, PermissionActions.Create)]
+    public async Task<ActionResult<ApiResult<__Name__Dto>>> Create([FromBody] __Name__CreateUpdateDto dto)
+    {
+        try
+        {
+            if (await repository.ExistsByNameAsync(dto.Name))
+            {
+                return Conflict(ApiResult<__Name__Dto>.ConflictResult($"名稱「{dto.Name}」已存在"));
+            }
+
+            var item = mapper.Map<__Name__>(dto);
+#IF TEAMS
+            if (await repository.CheckTeamAssignmentAsync(null, item.Teams) is { } teamError)
+            {
+                return BadRequest(ApiResult<__Name__Dto>.ValidationError(teamError));
+            }
+
+#ENDIF
+            var created = mapper.Map<__Name__Dto>(await repository.AddAsync(item));
+            logger.LogInformation("__Name__ created via API. __Name__Id={__Name__Id}", created.Id);
+            await this.WriteAuditAsync(AuditActions.__Name__.Create, "__Name__", created.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture), $"name={created.Name}");
+            return Ok(ApiResult<__Name__Dto>.SuccessResult(created, "新增__Item__成功"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create __name__ via API.");
+            return this.ApiServerError<__Name__Dto>("新增__Item__失敗", ex);
+        }
+    }
+
+    [HttpPut("{id}")]
+    [HasPermission(MagicObjectHelper.__PermConst__, PermissionActions.Edit)]
+    public async Task<ActionResult<ApiResult>> Update(int id, [FromBody] __Name__CreateUpdateDto dto)
+    {
+        try
+        {
+            if (id != dto.Id)
+            {
+                return BadRequest(ApiResult.ValidationError("路由 ID 與資料 ID 不一致"));
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.ConcurrencyStamp))
+            {
+                return BadRequest(ApiResult.ValidationError("ConcurrencyStamp 為必填：請帶上 GET 取得的版本號（用來避免覆蓋別人的修改）。"));
+            }
+
+            if (await repository.ExistsByNameAsync(dto.Name, id))
+            {
+                return Conflict(ApiResult.ConflictResult($"名稱「{dto.Name}」已被其他__Item__使用"));
+            }
+
+            var item = mapper.Map<__Name__>(dto);
+#IF TEAMS
+            if (await repository.CheckTeamAssignmentAsync(id, item.Teams) is { } teamError)
+            {
+                return BadRequest(ApiResult.ValidationError(teamError));
+            }
+
+#ENDIF
+            var outcome = await repository.UpdateAsync(item);
+            if (!outcome.Updated)
+            {
+                return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的__Item__"));
+            }
+
+            logger.LogInformation("__Name__ updated via API. __Name__Id={__Name__Id}", id);
+            await this.WriteAuditAsync(AuditActions.__Name__.Update, "__Name__", id.ToString(System.Globalization.CultureInfo.InvariantCulture), $"name={dto.Name}", content: outcome.Diff);
+            return Ok(ApiResult.SuccessResult("更新__Item__成功"));
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger.LogInformation("__Name__ update via API rejected by concurrency conflict. __Name__Id={__Name__Id}", id);
+            return Conflict(ApiResult.ConflictResult(ConcurrencyStampHelper.ConflictMessage));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update __name__ via API. __Name__Id={__Name__Id}", id);
+            return this.ApiServerError("更新__Item__失敗", ex);
+        }
+    }
+
+    [HttpDelete("{id}")]
+    [HasPermission(MagicObjectHelper.__PermConst__, PermissionActions.Delete)]
+    public async Task<ActionResult<ApiResult>> Delete(int id)
+    {
+        try
+        {
+            // 軟刪除，刪除者記入 DeletedBy。
+            if (!await repository.DeleteAsync(id, RequestActorResolver.Resolve(User).Account))
+            {
+                return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的__Item__"));
+            }
+
+            logger.LogInformation("__Name__ deleted via API. __Name__Id={__Name__Id}", id);
+            await this.WriteAuditAsync(AuditActions.__Name__.Delete, "__Name__", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return Ok(ApiResult.SuccessResult("刪除__Item__成功"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to delete __name__ via API. __Name__Id={__Name__Id}", id);
+            return this.ApiServerError("刪除__Item__失敗", ex);
+        }
+    }
+}
