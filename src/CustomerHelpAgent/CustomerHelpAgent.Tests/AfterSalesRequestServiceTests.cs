@@ -44,7 +44,10 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         ctx.MyUser.AddRange(aliceUser, bobUser);
         var product = new Product { Code = "P1", Name = "跑鞋", Category = ProductCategories.Shoes, Price = 1999m };
         var variant = new ProductVariant { Product = product, Color = "黑", Size = "26", Stock = 5 };
-        ctx.ProductVariant.Add(variant);
+        ctx.ProductVariant.AddRange(
+            variant,
+            new ProductVariant { Product = product, Color = "黑", Size = "27", Stock = 2 },
+            new ProductVariant { Product = product, Color = "白", Size = "26", Stock = 1 });
         await ctx.SaveChangesAsync();
         alice = aliceUser.Id;
         bob = bobUser.Id;
@@ -127,6 +130,16 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Description = "尺寸偏小",
     };
 
+    private SubmitAfterSalesInput ColorExchange(int itemId, string? targetColor) => new()
+    {
+        CaseKey = Guid.NewGuid(),
+        OrderItemId = itemId,
+        Type = AfterSalesType.ColorExchange,
+        TargetColor = targetColor,
+        IsWorn = false,
+        Description = "想換顏色",
+    };
+
     private static AfterSalesUploadFile Photo(string name = "photo.jpg", int size = 16) => new()
     {
         FileName = name,
@@ -184,7 +197,10 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
     {
         var input = SizeExchange(aliceItemId);
 
-        var result = await CreateService().SubmitAsync(alice, input, [Photo("IMG_01.JPG")]);
+        // 宣稱的 FileSize 與實際內容不同：資料庫要存實際寫入的位元組數。
+        var photo = new AfterSalesUploadFile { FileName = "IMG_01.JPG", FileSize = 1, Content = new MemoryStream(new byte[16]) };
+
+        var result = await CreateService().SubmitAsync(alice, input, [photo]);
 
         Assert.True(result.Success, result.Message);
         Assert.NotNull(result.RequestId);
@@ -205,6 +221,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var attachment = Assert.Single(row.Attachments);
         Assert.Equal("IMG_01.JPG", attachment.OriginalFileName);
         Assert.Equal("image/jpeg", attachment.ContentType);
+        Assert.Equal(16, attachment.FileSize);
         Assert.StartsWith("2026/10/", attachment.RelativePath);
         Assert.True(File.Exists(Path.Combine(fileRoot, attachment.RelativePath)));
 
@@ -295,7 +312,15 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var service = CreateService();
         var first = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var second = await service.SubmitAsync(bob, SizeExchange(bobItemId), []);
-        await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        // 同一商品同類型已有處理中的申請會被去重，第三筆改送不同類型。
+        await service.SubmitAsync(alice, new SubmitAfterSalesInput
+        {
+            CaseKey = Guid.NewGuid(),
+            OrderItemId = aliceItemId,
+            Type = AfterSalesType.ReturnRefund,
+            IsWorn = false,
+            Description = "不喜歡",
+        }, []);
         await service.RequestMoreInfoAsync(second.RequestId!.Value, "補件");
 
         var submitted = await service.GetReviewQueueAsync(new DataRequest { CurrentPage = 1, PageSize = 1, Take = 1 }, AfterSalesStatus.Submitted);
@@ -352,6 +377,140 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SubmitAsync_DuplicateOpenRequest_IsRejected()
+    {
+        var service = CreateService();
+        var first = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        Assert.True(first.Success, first.Message);
+
+        var whileSubmitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), [Photo()]);
+        await service.RequestMoreInfoAsync(first.RequestId!.Value, "請補照片");
+        var whileNeedMoreInfo = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+
+        var expected = new SubmitResult(false, $"這個商品已有處理中的同類申請（{first.RequestNo}），請到「我的申請」查看。", null, null);
+        Assert.Equal(expected, whileSubmitted);
+        Assert.Equal(expected, whileNeedMoreInfo);
+        Assert.True(FileRootIsEmpty());
+        await using var ctx = NewContext();
+        Assert.Equal(1, await ctx.AfterSalesRequest.CountAsync());
+    }
+
+    [Fact]
+    public async Task SubmitAsync_ClosedPreviousRequest_AllowsNew()
+    {
+        var service = CreateService();
+        var first = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        Assert.True((await service.DecideAsync(first.RequestId!.Value, approve: true, note: null)).Success);
+
+        var again = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+
+        Assert.True(again.Success, again.Message);
+        Assert.NotEqual(first.RequestId, again.RequestId);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_TargetSizeNotExisting_IsRejected()
+    {
+        var service = CreateService();
+
+        // 原規格黑 26：同顏色只有 27、同尺碼只有白色。
+        var size = await service.SubmitAsync(alice, SizeExchange(aliceItemId, targetSize: "30"), [Photo()]);
+        var color = await service.SubmitAsync(alice, ColorExchange(aliceItemId, targetColor: "紅"), [Photo()]);
+
+        Assert.Equal(new SubmitResult(false, "找不到這個尺碼", null, null), size);
+        Assert.Equal(new SubmitResult(false, "找不到這個顏色", null, null), color);
+        Assert.True(FileRootIsEmpty());
+        Assert.True((await service.SubmitAsync(alice, ColorExchange(aliceItemId, targetColor: "白"), [])).Success);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_TargetSizeSameAsCurrent_IsRejected()
+    {
+        var service = CreateService();
+
+        var size = await service.SubmitAsync(alice, SizeExchange(aliceItemId, targetSize: " 26 "), []);
+        var color = await service.SubmitAsync(alice, ColorExchange(aliceItemId, targetColor: "黑"), []);
+
+        Assert.Equal(new SubmitResult(false, "目標規格與原規格相同", null, null), size);
+        Assert.Equal(new SubmitResult(false, "目標規格與原規格相同", null, null), color);
+        await using var ctx = NewContext();
+        Assert.Empty(ctx.AfterSalesRequest);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_NonSeekableOversizeStream_IsRejectedAndNoFileLeft()
+    {
+        // 宣稱 1 KB、實際 11 MB，而且無法預先取得長度：只能靠寫入時的位元組上限擋下。
+        var oversize = new AfterSalesUploadFile
+        {
+            FileName = "big.jpg",
+            FileSize = 1024,
+            Content = new NonSeekableStream(new MemoryStream(new byte[11 * 1024 * 1024])),
+        };
+
+        var result = await CreateService().SubmitAsync(alice, SizeExchange(aliceItemId), [Photo(), oversize]);
+
+        Assert.Equal(new SubmitResult(false, "照片超過 10 MB", null, null), result);
+        Assert.True(FileRootIsEmpty());
+        await using var ctx = NewContext();
+        Assert.Empty(ctx.AfterSalesRequest);
+        Assert.Empty(ctx.AfterSalesAttachment);
+    }
+
+    [Fact]
+    public async Task ResubmitAsync_NonSeekableOversizeStream_IsRejectedAndNoFileLeft()
+    {
+        var service = CreateService();
+        var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        var id = submitted.RequestId!.Value;
+        await service.RequestMoreInfoAsync(id, "請補照片");
+        var oversize = new AfterSalesUploadFile
+        {
+            FileName = "big.png",
+            FileSize = 1024,
+            Content = new NonSeekableStream(new MemoryStream(new byte[11 * 1024 * 1024])),
+        };
+
+        var result = await service.ResubmitAsync(alice, id, null, "補照片", [oversize]);
+
+        Assert.Equal(new SubmitResult(false, "照片超過 10 MB", null, null), result);
+        Assert.True(FileRootIsEmpty());
+        Assert.Equal(AfterSalesStatus.NeedMoreInfo, (await service.GetReviewDetailAsync(id))!.Status);
+    }
+
+    [Fact]
+    public async Task DecideAsync_ApproveWithoutNote_ClearsPreviousStaffNote()
+    {
+        var service = CreateService();
+        var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
+        var id = submitted.RequestId!.Value;
+        await service.RequestMoreInfoAsync(id, "請補鞋底照片");
+        await service.ResubmitAsync(alice, id, null, "已補", [Photo()]);
+
+        var result = await service.DecideAsync(id, approve: true, note: "  ");
+
+        Assert.True(result.Success, result.Message);
+        await using var ctx = NewContext();
+        var row = await ctx.AfterSalesRequest.SingleAsync();
+        Assert.Equal(AfterSalesStatus.Approved, row.Status);
+        Assert.Null(row.StaffNote);
+    }
+
+    [Fact]
+    public async Task FileStore_SaveAsync_ShouldReturnBytesWritten_AndDeleteFileOverLimit()
+    {
+        var store = CreateFileStore();
+
+        var (relativePath, bytesWritten) = await store.SaveAsync(new NonSeekableStream(new MemoryStream(new byte[100])), ".jpg", LocalNow, maxBytes: 100);
+
+        Assert.Equal(100, bytesWritten);
+        Assert.True(File.Exists(Path.Combine(fileRoot, relativePath)));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(new NonSeekableStream(new MemoryStream(new byte[101])), ".jpg", LocalNow, maxBytes: 100));
+        Assert.Single(Directory.EnumerateFiles(fileRoot, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public void FileStore_TryResolveFullPath_ShouldRefuseEscapingRoot()
     {
         var store = CreateFileStore();
@@ -360,5 +519,48 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Assert.Null(store.TryResolveFullPath(null));
         Assert.NotNull(store.TryResolveFullPath("2026/10/a.jpg"));
         Assert.False(store.Delete(@"..\outside.txt"));
+    }
+
+    /// <summary>不能 Seek、也不給 Length 的串流（模擬瀏覽器上傳串流），用來驗證寫入時的位元組上限。</summary>
+    private sealed class NonSeekableStream(Stream inner) : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => inner.ReadAsync(buffer, cancellationToken);
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 }

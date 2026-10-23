@@ -26,6 +26,8 @@ public sealed class DataAccessServiceLifetimeTests
         typeof(AfterSalesPolicyService),
         typeof(ShopOrderService),
         typeof(AfterSalesRequestService),
+        typeof(AgentTraceService),
+        typeof(AgentSessionStore),
         typeof(ProcessMetricService),
         typeof(TeamService),
         typeof(RoleViewService),

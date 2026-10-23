@@ -12,8 +12,9 @@ namespace CustomerHelpAgent.Business.Startup;
 /// <summary>
 /// 售後展示的示範角色與帳號（<see cref="DemoSeedData.Roles"/>、<see cref="DemoSeedData.Accounts"/>；<c>DemoSettings:Enabled</c> 時才執行）。
 /// <list type="bullet">
-/// <item>角色依名稱、帳號依 <c>Account</c> 查找，<b>不存在才建立</b>，並在建立當下同步 RBAC 關聯表；
-/// 已存在的不動（管理員後來調整的權限、密碼、姓名不會被蓋回去）。</item>
+/// <item>角色依名稱、帳號依 <c>Account</c> 查找，不存在才建立。<b>角色的權限鍵每次啟動都對齊 <see cref="DemoSeedData.Roles"/></b>
+/// （舊示範資料庫才拿得到新頁面的權限；管理員對示範角色手動加減的權限會被蓋回）；
+/// 已存在帳號的密碼、姓名不動。</item>
 /// <item>查找連已刪除的一起找、優先取未刪除的；找到已刪除的就還原（同 <see cref="SupportUserSeeder"/>），避免建出重複的列。</item>
 /// <item>每個帳號都指定 <c>RoleViewId</c>：沒有主要角色的使用者每次換頁都會被登出。</item>
 /// </list>
@@ -83,6 +84,10 @@ public sealed class DemoAccountSeeder : IDatabaseSeeder
                 logger.LogWarning("Demo role was soft-deleted; restored it. RoleViewId={RoleViewId}", role.Id);
             }
 
+            // 每次啟動都把權限鍵對齊 DemoSeedData：新版新增的頁面權限，舊的示範資料庫才拿得到。
+            role.TabViewJson = Newtonsoft.Json.JsonConvert.SerializeObject(demoRole.PermissionKeys);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await rbacWriteService.SyncRolePermissionsAsync(dbContext, role.Id, demoRole.PermissionKeys);
             return role.Id;
         }
 

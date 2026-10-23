@@ -1083,6 +1083,32 @@
             overflow-y: auto !important;
         }
 
+    /* 後台 Agent 執行紀錄窗（售後展示 M2）：唯讀步驟時間軸，步驟多時在窗內捲動。 */
+    .agent-run-modal {
+        width: 880px !important;
+        max-width: 94vw !important;
+        top: 6vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+        .agent-run-modal .ant-modal-content {
+            max-height: 88vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        .agent-run-modal .ant-modal-header {
+            flex-shrink: 0;
+        }
+
+        .agent-run-modal .ant-modal-body {
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
     /* 售後規則「新增版本」窗（售後展示 M1）：套 form-modal 骨架，欄位不多，收窄上限。 */
     .form-modal.after-sales-policy-modal {
         max-width: 1100px !important;

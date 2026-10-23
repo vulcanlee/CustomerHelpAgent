@@ -991,6 +991,8 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     [InlineData(typeof(AfterSalesPolicyService))]
     [InlineData(typeof(ShopOrderService))]
     [InlineData(typeof(AfterSalesRequestService))]
+    [InlineData(typeof(AgentTraceService))]
+    [InlineData(typeof(AgentSessionStore))]
     [InlineData(typeof(ProcessMetricService))]
     [InlineData(typeof(TeamService))]
     [InlineData(typeof(RoleViewService))]
@@ -1003,6 +1005,15 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         var service = scope.ServiceProvider.GetRequiredService(serviceType);
 
         Assert.NotNull(service);
+    }
+
+    /// <summary>售後 Agent 的 Runner 依賴十多個服務（1.0.4）；漏註冊任何一個都要到開「線上客服」頁才會炸。</summary>
+    [Fact]
+    public void AfterSalesAgentRunner_ShouldResolveFromContainer()
+    {
+        using var scope = factory.Services.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<CustomerHelpAgent.Web.Agents.AfterSales.AfterSalesAgentRunner>());
     }
 
     [Fact]

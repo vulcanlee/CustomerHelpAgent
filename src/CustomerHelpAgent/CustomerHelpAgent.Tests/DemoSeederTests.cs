@@ -122,6 +122,38 @@ public sealed class DemoSeederTests
         Assert.False(await db.AfterSalesPolicy.AnyAsync());
     }
 
+    [Fact]
+    public async Task DemoSeeders_ExistingRoleGetsNewKeysOnRerun()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.RunAllSeedersAsync(Enabled());
+
+        // 模擬舊版資料庫：客服角色還沒有「Agent 執行紀錄」。
+        await using (var db = fixture.CreateDbContext())
+        {
+            var role = await db.RoleView.SingleAsync(x => x.Name == MagicObjectHelper.客服角色);
+            var map = await db.RolePermissionMap
+                .Where(x => x.RoleViewId == role.Id && x.Permission!.Key == MagicObjectHelper.角色_Agent執行紀錄)
+                .ToListAsync();
+            Assert.NotEmpty(map);
+            db.RolePermissionMap.RemoveRange(map);
+            // 舊版資料庫的 TabViewJson 也還沒有新鍵（否則 RBAC 回填 seeder 會自己補回來）。
+            role.TabViewJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+                Newtonsoft.Json.JsonConvert.DeserializeObject<List<string>>(role.TabViewJson)!
+                    .Where(x => x != MagicObjectHelper.角色_Agent執行紀錄));
+            await db.SaveChangesAsync();
+            var checker = new PermissionChecker(db, NullLogger<PermissionChecker>.Instance);
+            Assert.DoesNotContain(MagicObjectHelper.角色_Agent執行紀錄, await KeysAsync(db, checker, "agent1"));
+        }
+
+        await fixture.RunAllSeedersAsync(Enabled());
+
+        await using var after = fixture.CreateDbContext();
+        var afterChecker = new PermissionChecker(after, NullLogger<PermissionChecker>.Instance);
+        Assert.Contains(MagicObjectHelper.角色_Agent執行紀錄, await KeysAsync(after, afterChecker, "agent1"));
+        Assert.Contains(MagicObjectHelper.角色_Agent執行紀錄, await KeysAsync(after, afterChecker, "merchant1"));
+    }
+
     private static DemoSettings Enabled() => new() { Enabled = true, DemoUserPassword = DemoPassword };
 
     private static async Task<IReadOnlyCollection<string>> KeysAsync(BackendDBContext db, PermissionChecker checker, string account)

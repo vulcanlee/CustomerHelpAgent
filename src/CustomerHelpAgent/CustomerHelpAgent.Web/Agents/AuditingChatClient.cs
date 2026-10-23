@@ -99,6 +99,7 @@ internal sealed class AuditingChatClient : DelegatingChatClient
         var capture = await BeginAsync(list, options, cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         var updates = new List<ChatResponseUpdate>();
+        var finished = false;
         try
         {
             await using var enumerator = base.GetStreamingResponseAsync(list, options, cancellationToken)
@@ -113,6 +114,7 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                 }
                 catch (Exception ex)
                 {
+                    finished = true;
                     stopwatch.Stop();
                     await RecordFailureAsync(capture, ex, stopwatch.Elapsed, cancellationToken);
                     throw;
@@ -127,12 +129,19 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                 yield return enumerator.Current;
             }
 
+            finished = true;
             stopwatch.Stop();
             await RecordSuccessAsync(capture, updates.ToChatResponse(), stopwatch.Elapsed);
         }
         finally
         {
-            // 呼叫端中途放棄列舉時 capture 沒有結果，AI 對話紀錄會記成 Unexpected（與 AiCallCapture 的預設一致）。
+            // 呼叫端中途放棄列舉（DisposeAsync）時才會走到這裡還沒有結果。
+            if (finished == false)
+            {
+                stopwatch.Stop();
+                await RecordAbandonedAsync(capture, updates, stopwatch.Elapsed, cancellationToken);
+            }
+
             await AiCallCapture.RecordSafelyAsync(aiCallLogRecorder, capture, stopwatch.Elapsed, logger);
         }
     }
@@ -163,9 +172,9 @@ internal sealed class AuditingChatClient : DelegatingChatClient
         }
 
         // ⚠️ ChatClientAgent 的 instructions 走 ChatOptions.Instructions 而不是 system 訊息，要一起記才看得到完整提示詞。
-        var requestBody = JsonSerializer.Serialize(
+        var requestBody = Snapshot(
             new { instructions = options?.Instructions, messages, tools = options?.Tools?.Select(t => t.Name) },
-            AIJsonUtilities.DefaultOptions);
+            "RequestBody");
 
         var capture = new AiCallCapture(
             operation,
@@ -181,39 +190,123 @@ internal sealed class AuditingChatClient : DelegatingChatClient
         return capture;
     }
 
+    /// <summary>記錄成功的呼叫。⚠️ 自身不外拋：模型已經回應成功，不可因為記錄失敗而讓呼叫端拿到例外。</summary>
     private async Task RecordSuccessAsync(AiCallCapture capture, ChatResponse response, TimeSpan elapsed)
+    {
+        try
+        {
+            CaptureResponse(capture, response);
+
+            logger.LogInformation(
+                "AI agent chat call completed. Operation={Operation}, ConversationId={ConversationId}, "
+                + "UsageInput={UsageInput}, UsageOutput={UsageOutput}, ElapsedMs={ElapsedMs}",
+                operation,
+                conversationId,
+                response.Usage?.InputTokenCount,
+                response.Usage?.OutputTokenCount,
+                (long)elapsed.TotalMilliseconds);
+
+            // 慢 AI 呼叫（LOG-21）。
+            var slowThreshold = slowOptions.CurrentValue.AiCallMs;
+            if (SlowOperationSettings.IsSlow(elapsed, slowThreshold))
+            {
+                logger.LogWarning(
+                    "Slow AI chat completion. Operation={Operation}, ElapsedMilliseconds={ElapsedMilliseconds}, ThresholdMilliseconds={ThresholdMilliseconds}",
+                    operation, (long)elapsed.TotalMilliseconds, slowThreshold);
+            }
+
+            await RecordUsageAsync(
+                capture,
+                response.ModelId,
+                response.Usage,
+                response.Usage is null ? null : Snapshot(response.Usage, "RawUsageJson"),
+                elapsed,
+                AiAnalysisFailureReason.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to record AI agent chat call. Operation={Operation}, ConversationId={ConversationId}",
+                operation, conversationId);
+        }
+    }
+
+    /// <summary>
+    /// 串流被呼叫端中途放棄（<c>DisposeAsync</c>）。取消 → 與 <see cref="RecordFailureAsync"/> 一致，不記用量；
+    /// 沒取消 → 上游已在計費，以已收到的片段記一筆 <see cref="AiAnalysisFailureReason.Abandoned"/>。
+    /// ⚠️ 在 finally 裡執行，自身不外拋。
+    /// </summary>
+    private async Task RecordAbandonedAsync(
+        AiCallCapture capture,
+        List<ChatResponseUpdate> updates,
+        TimeSpan elapsed,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            capture.SetOutcome(false, AiAnalysisFailureReason.Canceled.ToString());
+            logger.LogInformation(
+                "AI chat completion canceled by the caller. Operation={Operation}, ElapsedMs={ElapsedMs}",
+                operation, (long)elapsed.TotalMilliseconds);
+            return;
+        }
+
+        try
+        {
+            var partial = updates.ToChatResponse();
+            CaptureResponse(capture, partial);
+
+            logger.LogInformation(
+                "AI agent chat stream abandoned by the caller. Operation={Operation}, ConversationId={ConversationId}, "
+                + "UpdateCount={UpdateCount}, ElapsedMs={ElapsedMs}",
+                operation, conversationId, updates.Count, (long)elapsed.TotalMilliseconds);
+
+            await RecordUsageAsync(
+                capture,
+                partial.ModelId,
+                partial.Usage,
+                partial.Usage is null ? null : Snapshot(partial.Usage, "RawUsageJson"),
+                elapsed,
+                AiAnalysisFailureReason.Abandoned);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to record AI agent chat call. Operation={Operation}, ConversationId={ConversationId}",
+                operation, conversationId);
+        }
+    }
+
+    /// <summary>把模型回應（完整或部分）寫進 capture。串流能列舉到片段，代表上游已回 200。</summary>
+    private void CaptureResponse(AiCallCapture capture, ChatResponse response)
     {
         capture.HttpStatus = 200;
         capture.ResponseText = response.Text;
         capture.FinishReason = response.FinishReason?.Value;
         capture.ResponseModel = response.ModelId;
-        capture.ResponseBody = JsonSerializer.Serialize(response.Messages, AIJsonUtilities.DefaultOptions);
+        capture.ResponseBody = Snapshot(response.Messages, "ResponseBody");
+    }
 
-        logger.LogInformation(
-            "AI agent chat call completed. Operation={Operation}, ConversationId={ConversationId}, "
-            + "UsageInput={UsageInput}, UsageOutput={UsageOutput}, ElapsedMs={ElapsedMs}",
-            operation,
-            conversationId,
-            response.Usage?.InputTokenCount,
-            response.Usage?.OutputTokenCount,
-            (long)elapsed.TotalMilliseconds);
-
-        // 慢 AI 呼叫（LOG-21）。
-        var slowThreshold = slowOptions.CurrentValue.AiCallMs;
-        if (SlowOperationSettings.IsSlow(elapsed, slowThreshold))
+    /// <summary>
+    /// 序列化記錄用的快照。失敗（例如工具帶回未登錄的 <see cref="AIContent"/> 子類）改存
+    /// <c>{"snapshotError":"&lt;ExceptionType&gt;"}</c> 並記警告 —— 記錄失敗不可影響模型呼叫本身。
+    /// </summary>
+    private string Snapshot<T>(T value, string part)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(value, AIJsonUtilities.DefaultOptions);
+        }
+        catch (Exception ex)
         {
             logger.LogWarning(
-                "Slow AI chat completion. Operation={Operation}, ElapsedMilliseconds={ElapsedMilliseconds}, ThresholdMilliseconds={ThresholdMilliseconds}",
-                operation, (long)elapsed.TotalMilliseconds, slowThreshold);
+                ex,
+                "Failed to serialize AI agent chat snapshot. Operation={Operation}, Part={Part}",
+                operation, part);
+            return JsonSerializer.Serialize(new { snapshotError = ex.GetType().Name });
         }
-
-        await RecordUsageAsync(
-            capture,
-            response.ModelId,
-            response.Usage,
-            response.Usage is null ? null : JsonSerializer.Serialize(response.Usage, AIJsonUtilities.DefaultOptions),
-            elapsed,
-            AiAnalysisFailureReason.None);
     }
 
     private async Task RecordFailureAsync(
@@ -239,7 +332,7 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                     exception,
                     "AI chat completion timed out. Operation={Operation}, TimeoutSeconds={TimeoutSeconds}",
                     operation, settings.TimeoutSeconds);
-                await RecordUsageAsync(capture, null, null, null, elapsed, AiAnalysisFailureReason.Timeout);
+                await TryRecordFailureUsageAsync(capture, elapsed, AiAnalysisFailureReason.Timeout);
                 break;
 
             case ClientResultException clientException:
@@ -256,7 +349,7 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                     "AI chat completion upstream failure. Operation={Operation}, StatusCode={StatusCode}",
                     operation, clientException.Status);
                 // 上游可能已經計費，至少留下次數。
-                await RecordUsageAsync(capture, null, null, null, elapsed, reason);
+                await TryRecordFailureUsageAsync(capture, elapsed, reason);
                 break;
 
             default:
@@ -264,6 +357,22 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                 capture.SetOutcome(false, AiAnalysisFailureReason.Unexpected.ToString());
                 logger.LogError(exception, "AI chat completion failed unexpectedly. Operation={Operation}", operation);
                 break;
+        }
+    }
+
+    /// <summary>失敗路徑記用量；記錄失敗只記 Warning，不可蓋掉原本的上游例外。</summary>
+    private async Task TryRecordFailureUsageAsync(AiCallCapture capture, TimeSpan elapsed, AiAnalysisFailureReason reason)
+    {
+        try
+        {
+            await RecordUsageAsync(capture, null, null, null, elapsed, reason);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to record AI agent chat call. Operation={Operation}, ConversationId={ConversationId}",
+                operation, conversationId);
         }
     }
 

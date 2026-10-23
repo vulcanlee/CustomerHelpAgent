@@ -1,0 +1,78 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.agent-policy-card {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-source-policy);
+    border-left-width: 4px;
+    border-radius: 16px;
+    color: var(--shop-text);
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+}
+
+.agent-policy-head {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.agent-policy-icon {
+    color: var(--shop-source-policy);
+    display: inline-flex;
+}
+
+.agent-policy-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.agent-policy-version {
+    background: var(--shop-source-policy-bg);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    font-size: 0.8rem;
+    margin-left: auto;
+    padding: 0.1rem 0.6rem;
+    white-space: nowrap;
+}
+
+.agent-policy-content {
+    line-height: 1.7;
+    margin: 0;
+}
+
+.agent-policy-facts {
+    color: var(--shop-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    gap: 0.25rem 1.25rem;
+    margin: 0;
+}
+
+.agent-policy-facts div {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.agent-policy-facts dt {
+    font-weight: 600;
+}
+
+.agent-policy-facts dd {
+    margin: 0;
+}
+
+.agent-policy-note {
+    background: var(--shop-tint);
+    border-radius: 10px;
+    font-size: 0.875rem;
+    margin: 0;
+    padding: 0.35rem 0.75rem;
+}
+
+.agent-policy-note.is-unmet {
+    background: var(--shop-warn-bg);
+    border: 1px solid var(--shop-warn-line);
+}

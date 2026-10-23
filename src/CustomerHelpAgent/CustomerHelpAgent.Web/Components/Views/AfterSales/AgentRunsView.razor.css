@@ -1,0 +1,22 @@
+/* 步驟時間軸的樣式在 AgentStepTimeline；外框尺寸在 OverlayStyles.razor 的 .agent-run-modal。 */
+.agent-runs-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.agent-runs-table-wrap {
+    overflow-x: auto;
+}
+
+/* 點一下任一列即開步驟窗；列由 AntDesign 渲染，需要 ::deep。只改游標，顏色沿用 theme.css 的列 hover。 */
+::deep .agent-runs-row {
+    cursor: pointer;
+}
+
+.agent-runs-summary {
+    color: var(--app-muted);
+    margin: 0 0 0.75rem;
+}

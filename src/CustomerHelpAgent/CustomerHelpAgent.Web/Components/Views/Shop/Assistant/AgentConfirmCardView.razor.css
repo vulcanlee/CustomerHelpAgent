@@ -1,0 +1,142 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.agent-confirm-card {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: 18px;
+    box-shadow: var(--shop-shadow);
+    color: var(--shop-text);
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 1.15rem;
+}
+
+.agent-confirm-card.is-pending {
+    border-color: var(--shop-accent);
+}
+
+.agent-confirm-head {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.agent-confirm-icon {
+    color: var(--shop-accent);
+    display: inline-flex;
+}
+
+.agent-confirm-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.agent-confirm-facts {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.agent-confirm-facts div {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: 3rem 1fr;
+}
+
+.agent-confirm-facts dt {
+    color: var(--shop-muted);
+    font-weight: 600;
+}
+
+.agent-confirm-facts dd {
+    margin: 0;
+}
+
+.agent-confirm-list {
+    background: var(--shop-tint);
+    border-radius: 12px;
+    margin: 0;
+    padding: 0.5rem 0.75rem 0.5rem 1.75rem;
+}
+
+.agent-confirm-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.agent-confirm-hint {
+    color: var(--shop-muted);
+    flex: 1 1 12rem;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.agent-confirm-button {
+    align-items: center;
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 1rem;
+}
+
+.agent-confirm-button:hover:not(:disabled),
+.agent-confirm-button:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+.agent-confirm-button.is-primary {
+    background: var(--shop-accent);
+    border-color: var(--shop-accent);
+    color: var(--shop-on-accent);
+}
+
+.agent-confirm-button.is-primary:hover:not(:disabled),
+.agent-confirm-button.is-primary:focus-visible {
+    background: var(--shop-accent);
+    box-shadow: 0 0 0 3px var(--shop-accent-soft);
+}
+
+.agent-confirm-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.agent-confirm-result {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.agent-confirm-result.is-created {
+    align-items: center;
+    color: var(--shop-text);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
+.agent-confirm-link {
+    align-items: center;
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    display: inline-flex;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.25rem 0.85rem;
+    text-decoration: none;
+}
+
+.agent-confirm-link:hover,
+.agent-confirm-link:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}

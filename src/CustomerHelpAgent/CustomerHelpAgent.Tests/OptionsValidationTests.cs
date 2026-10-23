@@ -113,6 +113,66 @@ public sealed class OptionsValidationTests
             }),
             key);
 
+    // ---------- AfterSalesAgentSettings ----------
+
+    [Fact]
+    public void AfterSalesAgentSettings_Defaults_ShouldPass()
+        => AssertValid(new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings()));
+
+    [Theory]
+    [InlineData(0, 2, 15, "AfterSalesAgentSettings:MaxSteps")]
+    [InlineData(21, 2, 15, "AfterSalesAgentSettings:MaxSteps")]
+    [InlineData(8, 0, 15, "AfterSalesAgentSettings:MaxConsecutiveToolFailures")]
+    [InlineData(8, 6, 15, "AfterSalesAgentSettings:MaxConsecutiveToolFailures")]
+    [InlineData(8, 2, 0, "AfterSalesAgentSettings:ToolTimeoutSeconds")]
+    [InlineData(8, 2, 121, "AfterSalesAgentSettings:ToolTimeoutSeconds")]
+    public void AfterSalesAgentSettings_OutOfRange_ShouldFail(int maxSteps, int maxFailures, int timeoutSeconds, string key)
+        => AssertInvalid(
+            new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings
+            {
+                MaxSteps = maxSteps,
+                MaxConsecutiveToolFailures = maxFailures,
+                ToolTimeoutSeconds = timeoutSeconds,
+            }),
+            key);
+
+    [Theory]
+    [InlineData("Responses", "", null)]
+    [InlineData("chatcompletions", "none", 0.2)]
+    [InlineData("ChatCompletions", "minimal", 0.0)]
+    [InlineData("Responses", "LOW", null)]
+    [InlineData("Responses", "medium", 2.0)]
+    [InlineData("Responses", "high", null)]
+    public void AfterSalesAgentSettings_ValidModelRequestOptions_ShouldPass(string apiStyle, string reasoningEffort, double? temperature)
+        => AssertValid(new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings
+        {
+            ApiStyle = apiStyle,
+            ReasoningEffort = reasoningEffort,
+            Temperature = temperature,
+        }));
+
+    [Theory]
+    [InlineData("Assistants", "", null, "AfterSalesAgentSettings:ApiStyle")]
+    [InlineData("", "", null, "AfterSalesAgentSettings:ApiStyle")]
+    [InlineData("1", "", null, "AfterSalesAgentSettings:ApiStyle")]
+    [InlineData("Responses", "extreme", null, "AfterSalesAgentSettings:ReasoningEffort")]
+    [InlineData("Responses", "", -0.1, "AfterSalesAgentSettings:Temperature")]
+    [InlineData("Responses", "", 2.5, "AfterSalesAgentSettings:Temperature")]
+    public void AfterSalesAgentSettings_InvalidModelRequestOptions_ShouldFail(string apiStyle, string reasoningEffort, double? temperature, string key)
+        => AssertInvalid(
+            new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings
+            {
+                ApiStyle = apiStyle,
+                ReasoningEffort = reasoningEffort,
+                Temperature = temperature,
+            }),
+            key);
+
+    [Fact]
+    public void AfterSalesAgentSettings_OutOfRangeInConfiguration_ShouldFailOnStart()
+        => Assert.Throws<OptionsValidationException>(
+            () => ValidateRegisteredOptions(ShippedConfiguration(), new() { ["AfterSalesAgentSettings:MaxSteps"] = "0" }));
+
     // ---------- AiPricingSettings ----------
 
     [Fact]

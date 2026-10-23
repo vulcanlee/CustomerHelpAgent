@@ -1,5 +1,6 @@
 using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Models.Shop;
+using CustomerHelpAgent.Share.Shop;
 
 namespace CustomerHelpAgent.Tests;
 
@@ -79,4 +80,73 @@ public sealed class AfterSalesEligibilityTests
         Assert.Equal(1, AfterSalesEligibility.DaysSinceDelivery(delivered, now));
         Assert.Null(AfterSalesEligibility.DaysSinceDelivery(null, now));
     }
+
+    [Fact]
+    public void Evaluate_Day7_IsEligible()
+    {
+        var result = AfterSalesEligibility.Evaluate(Policy(), Now.AddDays(-7), false, false, Now);
+
+        Assert.True(result.IsEligible);
+    }
+
+    [Fact]
+    public void Evaluate_Day8_FailsWindow()
+    {
+        var result = AfterSalesEligibility.Evaluate(Policy(), Now.AddDays(-8), false, false, Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Single(result.UnmetReasons);
+    }
+
+    [Fact]
+    public void Evaluate_FutureDelivery_IsUnmet()
+    {
+        var result = AfterSalesEligibility.Evaluate(Policy(), Now.AddDays(1), false, false, Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Equal(["簽收日期異常，請洽客服"], result.UnmetReasons);
+    }
+
+    [Fact]
+    public void Evaluate_Urge_ShippedFourDaysUndelivered_IsEligible()
+    {
+        var result = AfterSalesEligibility.Evaluate(UrgePolicy(), null, null, false, Now, Now.AddDays(-4));
+
+        Assert.True(result.IsEligible);
+        Assert.Empty(result.UnmetReasons);
+    }
+
+    [Fact]
+    public void Evaluate_Urge_Delivered_IsUnmet()
+    {
+        var result = AfterSalesEligibility.Evaluate(UrgePolicy(), Now.AddDays(-1), null, false, Now, Now.AddDays(-4));
+
+        Assert.False(result.IsEligible);
+        Assert.Equal(["商品已簽收，不需催件"], result.UnmetReasons);
+    }
+
+    [Fact]
+    public void Evaluate_Urge_ExactlyThreeDays_IsUnmet()
+    {
+        var result = AfterSalesEligibility.Evaluate(UrgePolicy(), null, null, false, Now, Now.AddDays(-3));
+
+        Assert.False(result.IsEligible);
+        Assert.Equal(["出貨未滿 3 天，請再等候"], result.UnmetReasons);
+    }
+
+    [Fact]
+    public void Evaluate_Urge_NotShipped_IsUnmet()
+    {
+        var result = AfterSalesEligibility.Evaluate(UrgePolicy(), null, null, false, Now);
+
+        Assert.Equal(["訂單尚未出貨"], result.UnmetReasons);
+    }
+
+    [Fact]
+    public void CanRequestUrge_NotShipped_IsFalse()
+    {
+        Assert.False(AfterSalesEligibility.CanRequestUrge(null, null, Now));
+    }
+
+    private static AfterSalesPolicyModel UrgePolicy() => new() { Type = AfterSalesType.ShipmentUrge };
 }

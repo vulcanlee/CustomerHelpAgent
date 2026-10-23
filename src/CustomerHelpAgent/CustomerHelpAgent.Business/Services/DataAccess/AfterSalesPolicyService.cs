@@ -14,6 +14,8 @@ namespace CustomerHelpAgent.Business.Services.DataAccess;
 /// <summary>售後政策服務：以新增版本取代就地編輯，並提供「某時點生效規則」查詢。</summary>
 public class AfterSalesPolicyService
 {
+    private const string StaleBaseVersionMessage = "規則已被其他人更新，請重新整理後再新增版本。";
+
     private readonly IDbContextFactory<BackendDBContext> contextFactory;
     private readonly IAuditLogService auditLogService;
     private readonly CurrentUserService currentUserService;
@@ -115,7 +117,17 @@ public class AfterSalesPolicyService
                 .OrderBy(x => x.Version).ThenBy(x => x.Id)
                 .ToListAsync();
 
-            foreach (var old in existing.Where(x => x.EffectiveTo == null || x.EffectiveTo > now))
+            var currentVersions = existing.Where(x => x.EffectiveTo == null || x.EffectiveTo > now).ToList();
+
+            // 基準版本 = 開窗預填來源的版本；與目前生效版本不同代表這段期間別人已新增過版本。null（全新代碼）不檢查。
+            if (draft.BaseVersion is { } baseVersion
+                && baseVersion != currentVersions.Select(x => (int?)x.Version).Max())
+            {
+                logger.LogInformation("Policy version rejected because the base version is stale. PolicyCode={PolicyCode}, BaseVersion={BaseVersion}", draft.Code, baseVersion);
+                return VerifyRecordResultFactory.Build(false, StaleBaseVersionMessage);
+            }
+
+            foreach (var old in currentVersions)
             {
                 old.EffectiveTo = now;
             }

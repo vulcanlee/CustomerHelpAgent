@@ -111,6 +111,8 @@ public partial class AfterSalesPolicyView
     private void OnAddVersion(AfterSalesPolicyModel policy)
     {
         draft = policy.Clone();
+        // 服務以此比對目前生效版本，期間若有別人新增過版本就拒絕（避免覆蓋別人剛改的規則）。
+        draft.BaseVersion = policy.Version;
         modalTitle = $"新增規則版本：{policy.Code}";
         // ⚠️ 必須是開窗前的最後一步：任何預設值都要先塞完，否則會被當成使用者的變更。
         dirtyTracker.Capture(draft);

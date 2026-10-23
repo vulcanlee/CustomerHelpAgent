@@ -94,6 +94,12 @@ public static class TokenUsageOperations
     /// 追問會帶上前文，所以輪數越多、單筆輸入量越大。
     /// </summary>
     public const string AiExceptionAnalysis = "AI 例外分析";
+
+    /// <summary>
+    /// 顧客商店的 AI 售後客服 Agent（1.0.4 起）。同一輪對話的每次模型呼叫（含工具呼叫後的續問）各記一筆，
+    /// 以會話識別碼串起來。
+    /// </summary>
+    public const string AfterSalesAgent = "AI 售後客服 Agent";
 }
 
 /// <summary>

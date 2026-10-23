@@ -40,5 +40,8 @@ public static class PromptTemplateKeys
     /// <summary>系統例外紀錄的 AI 例外分析（含追問）。</summary>
     public const string ExceptionAnalysis = "ExceptionAnalysis";
 
-    public static readonly IReadOnlyList<string> All = [LogAnalysis, ExceptionAnalysis];
+    /// <summary>顧客端「線上客服」售後 Agent 的系統指示（1.0.4 起）。</summary>
+    public const string AfterSalesAgent = "AfterSalesAgent";
+
+    public static readonly IReadOnlyList<string> All = [LogAnalysis, ExceptionAnalysis, AfterSalesAgent];
 }

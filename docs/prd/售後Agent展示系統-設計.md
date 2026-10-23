@@ -1,12 +1,12 @@
 ﻿# 售後 Agent 展示系統 — 設計文件
 
-- 文件版本：0.2
-- 文件狀態：部分實作（M0、M1 已實作；M2–M6 規劃中）
-- 現行系統版本：1.0.3
+- 文件版本：0.3
+- 文件狀態：部分實作（M0、M1、M2 已實作；M3–M6 規劃中）
+- 現行系統版本：1.0.4
 - 首次實作版本：1.0.2（M0）
 - 最後核對日期：2026/10/23
 
-> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）與 M1（1.0.3）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)），內容屬「規劃中」，不代表系統已提供。
+> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）、M1（1.0.3）與 M2（1.0.4）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)），內容屬「規劃中」，不代表系統已提供。
 > 配套文件：[對外版企劃書](售後Agent示範系統企劃書.md)、[內部版企劃規劃說明書](售後Agent示範系統企劃規劃說明書.md)。
 ## 緣由（為什麼做）
 
@@ -190,8 +190,9 @@ AI 成本（新台幣）、Agent 停下詢問次數。並排呈現傳統 vs Agen
 | M5 | Handoff 切換＋長期記憶頁 | 交接事件出現在面板；刪除記憶後不再注入 |
 | M6 | 效益對照頁 | 以種子劇本跑兩種流程後數字合理、AI 成本與 TokenUsage 頁一致 |
 
-> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；M2–M6 尚未實作。
+> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；**M2 已完成（1.0.4）**——`/shop/assistant` 單一售後 Agent（`AfterSalesAgentRunner`／`AfterSalesAgentGuard`／6 個受控工具）、`ApprovalRequiredAIFunction` 確認卡、幕後面板、`AgentSessionRecord` 會話持久化（migration `AddAgentRuntime`）、`/agent-runs` 後台紀錄頁，並補強 M1 服務（重複申請、目標規格、照片位元組上限、規則版本基準）；M3–M6 尚未實作。
 > M1 實際狀態機為 `Submitted`／`NeedMoreInfo`／`Approved`／`Rejected`（§4.1 的「草稿／初審中／待人工／已完成」留待 M2、M4 視需要擴充），詳見 [售後 Agent 示範系統](../features/售後Agent示範系統.md) §4。
+> M2 實作與本文 §4.3 的差異：`track_shipment` 與 `check_variant_stock` 的參數是 `orderItemId`（不是 `orderId`／規格）；`ToolOutcome` 多了 `blocked`／`invalid` 兩種 status 與 `withheld_fields`；模型呼叫預設走 Responses API（`store=false`），因為實機推論模型在 Chat Completions 帶工具會被拒；`ChatClientAgent` 外加 `TracingChatClient` 與函式中介層 `AfterSalesAgentGuard`；§4.3「不確定即停」中「`not_found`／`timeout`／`conflict` 後模型仍下結論時面板標紅」**M2 未實作**（M2 改以程式封鎖寫入、逾時／權限／服務不可用以固定說明取代模型輸出來強制），延到 M3；實作與使用說明見 [售後 Agent 示範系統 §5](../features/售後Agent示範系統.md)。
 
 **核准後的第一步**：把本設計存成 `docs/prd/售後Agent展示系統-設計.md`（UTF-8 含 BOM，更新 `docs/prd/README.md` 與 `docs/README.md` 索引），
 並寫出兩份企劃書初版（見 §8），再依 superpowers:writing-plans 為 M0＋M1 寫出逐步實作計畫（後續里程碑各自再寫），逐里程碑實作、驗證。

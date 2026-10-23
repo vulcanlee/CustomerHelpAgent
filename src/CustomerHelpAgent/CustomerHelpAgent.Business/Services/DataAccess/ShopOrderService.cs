@@ -117,14 +117,9 @@ public class ShopOrderService
     public async Task<IReadOnlyList<(string Color, string Size)>> GetVariantOptionsAsync(int customerUserId, int orderItemId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
-        var productId = await context.SalesOrderItem
-            .AsNoTracking()
-            .Where(x => x.Id == orderItemId && x.SalesOrder!.CustomerUserId == customerUserId)
-            .Select(x => (int?)x.ProductVariant!.ProductId)
-            .FirstOrDefaultAsync();
+        var productId = await FindOwnedProductIdAsync(context, customerUserId, orderItemId);
         if (productId is null)
         {
-            logger.LogInformation("Order item not found for customer. OrderItemId={OrderItemId}", orderItemId);
             return [];
         }
 
@@ -135,6 +130,40 @@ public class ShopOrderService
             .Select(x => new { x.Color, x.Size })
             .ToListAsync();
         return variants.Select(x => (x.Color, x.Size)).ToList();
+    }
+
+    /// <summary>訂單商品所屬商品的全部規格與庫存（含目前這一個，依 Id 排序）。不是本人的訂單商品回空清單。</summary>
+    public async Task<IReadOnlyList<ShopVariantStock>> GetVariantStockAsync(int customerUserId, int orderItemId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var productId = await FindOwnedProductIdAsync(context, customerUserId, orderItemId);
+        if (productId is null)
+        {
+            return [];
+        }
+
+        return await context.ProductVariant
+            .AsNoTracking()
+            .Where(x => x.ProductId == productId)
+            .OrderBy(x => x.Id)
+            .Select(x => new ShopVariantStock(x.Color, x.Size, x.Stock))
+            .ToListAsync();
+    }
+
+    /// <summary>本人訂單商品所屬的商品 Id；不是本人的（或不存在）回 null。</summary>
+    private async Task<int?> FindOwnedProductIdAsync(BackendDBContext context, int customerUserId, int orderItemId)
+    {
+        var productId = await context.SalesOrderItem
+            .AsNoTracking()
+            .Where(x => x.Id == orderItemId && x.SalesOrder!.CustomerUserId == customerUserId)
+            .Select(x => (int?)x.ProductVariant!.ProductId)
+            .FirstOrDefaultAsync();
+        if (productId is null)
+        {
+            logger.LogInformation("Order item not found for customer. OrderItemId={OrderItemId}", orderItemId);
+        }
+
+        return productId;
     }
 
     private static ShopOrderSummary ToSummary(SalesOrder order, DateTime? shippedAt) => new(

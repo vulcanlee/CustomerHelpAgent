@@ -51,6 +51,10 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<AfterSalesRequest> AfterSalesRequest { get; set; }
     public virtual DbSet<AfterSalesAttachment> AfterSalesAttachment { get; set; }
     public virtual DbSet<ProcessMetric> ProcessMetric { get; set; }
+    public virtual DbSet<AgentSessionRecord> AgentSessionRecord { get; set; }
+    public virtual DbSet<AgentRunTrace> AgentRunTrace { get; set; }
+    public virtual DbSet<AgentRunStep> AgentRunStep { get; set; }
+    public virtual DbSet<AgentConfirmation> AgentConfirmation { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -339,6 +343,31 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<ProcessMetric>(entity =>
         {
             entity.HasIndex(x => x.CaseKey);
+        });
+        #endregion
+
+        #region 售後 Agent 執行底座（會話、執行軌跡、確認關卡）
+        // 同樣不實作 ISoftDeletable／IConcurrencyStamped。只有 AgentRunStep → AgentRunTrace 設外鍵（Restrict）；
+        // SessionKey、CustomerUserId、AfterSalesRequestId 只作比對與回查，刻意不設外鍵。
+        modelBuilder.Entity<AgentSessionRecord>(entity =>
+        {
+            entity.HasIndex(x => x.SessionKey).IsUnique();
+            entity.HasIndex(x => x.CustomerUserId);
+        });
+
+        modelBuilder.Entity<AgentRunTrace>(entity =>
+        {
+            entity.HasIndex(x => x.SessionKey);
+        });
+
+        modelBuilder.Entity<AgentRunStep>(entity =>
+        {
+            entity.HasOne(x => x.AgentRunTrace).WithMany(x => x.Steps).HasForeignKey(x => x.AgentRunTraceId);
+        });
+
+        modelBuilder.Entity<AgentConfirmation>(entity =>
+        {
+            entity.HasIndex(x => x.SessionKey);
         });
         #endregion
 

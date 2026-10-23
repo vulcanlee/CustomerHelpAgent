@@ -1,0 +1,58 @@
+@using CustomerHelpAgent.Models.Agents
+@using CustomerHelpAgent.Share.Agents
+@using CustomerHelpAgent.Web.Components.Views.Shop.Assistant
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="agent-runs-toolbar">
+            <ToolbarIconButton Title="重新整理" Icon="refresh"
+                               OnClick="@(async () => await OnRefreshAsync())" />
+        </div>
+
+        <div class="agent-runs-table-wrap">
+            <Table TItem="AgentRunSummary"
+                   Class="agent-runs-table"
+                   RemoteDataSource="true"
+                   DataSource="@runs"
+                   OnRowClick="OnRowClickAsync"
+                   RowClassName="@(_ => "agent-runs-row")"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total">
+                <Column TData="DateTime" Title="時間">@context.StartedAt.ToString("yyyy/MM/dd HH:mm:ss")</Column>
+                <Column TData="string" DataIndex="@nameof(AgentRunSummary.CustomerName)" Title="顧客" />
+                <Column TData="string" Title="停止原因">@StopText(context.StopReason)</Column>
+                <Column TData="int" DataIndex="@nameof(AgentRunSummary.ModelCallCount)" Title="模型呼叫數" />
+                <Column TData="int" DataIndex="@nameof(AgentRunSummary.ToolCallCount)" Title="工具呼叫數" />
+            </Table>
+        </div>
+    </div>
+
+    @* 唯讀的步驟時間軸，不含 EditForm（不是表單對話窗）。尺寸在 OverlayStyles.razor 的 .agent-run-modal。 *@
+    <Modal Title="@("Agent 執行步驟")"
+           Class="agent-run-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="@(() => CloseModal())">
+        @if (current is not null)
+        {
+            <p class="agent-runs-summary">
+                @current.CustomerName　·　@current.StartedAt.ToString("yyyy/MM/dd HH:mm:ss")　·　@StopText(current.StopReason)
+            </p>
+            <AgentStepTimeline Events="@steps" EmptyText="這一輪沒有留下任何步驟。" />
+        }
+    </Modal>
+}

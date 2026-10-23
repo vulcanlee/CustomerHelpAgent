@@ -133,6 +133,27 @@
     --shop-shadow: var(--app-shadow);
     --shop-radius-card: var(--app-radius-card);
     --shop-radius-pill: var(--app-radius-pill);
+    --shop-on-accent: var(--app-on-accent);
+    --shop-warn: var(--app-warn);
+    --shop-warn-bg: var(--app-warn-bg);
+    --shop-warn-line: var(--app-warn-line);
+    --shop-code-bg: var(--app-code-bg);
+    --shop-code-text: var(--app-code-text);
+    --shop-code-font: var(--app-code-font);
+
+    /* 線上客服幕後面板的來源標色（1.0.4 起）：對話／資料庫／規則／記憶／程式五種一眼分得開。
+       沿用既有語意色，不新增字面值：資料庫＝綠（真實狀態）、規則＝琥珀（要留意的條文）、
+       程式＝原文區塊的深梅黑、記憶＝灰（需與顧客確認的舊資訊）。 */
+    --shop-source-conversation: var(--app-accent);
+    --shop-source-conversation-bg: var(--app-accent-soft);
+    --shop-source-database: var(--app-ok);
+    --shop-source-database-bg: var(--app-ok-bg);
+    --shop-source-policy: var(--app-warn);
+    --shop-source-policy-bg: var(--app-warn-bg);
+    --shop-source-memory: var(--app-muted);
+    --shop-source-memory-bg: var(--app-off-bg);
+    --shop-source-program: var(--app-code-text);
+    --shop-source-program-bg: var(--app-code-bg);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

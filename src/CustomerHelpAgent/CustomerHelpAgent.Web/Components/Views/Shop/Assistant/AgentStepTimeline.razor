@@ -1,0 +1,38 @@
+@using CustomerHelpAgent.Share.Agents
+
+@*
+    步驟時間軸：每一列是「來源色標＋白話一句」，有原始資料的列可展開 <pre>。
+    幕後面板（顧客端）與後台「Agent 執行紀錄」窗共用。白話與原始資料一律以純文字輸出，不經 MarkupString。
+*@
+<ol class="backstage-timeline">
+    @if (Events.Count == 0)
+    {
+        <li class="backstage-empty">@EmptyText</li>
+    }
+
+    @for (var index = 0; index < Events.Count; index++)
+    {
+        var rowIndex = index;
+        var item = Events[rowIndex];
+        <li class="backstage-row @(item.Kind == AgentStepKind.Stop ? "is-stop" : null)" data-kind="@item.Kind">
+            <div class="backstage-line">
+                <AgentSourceTag Source="@item.Source" />
+                <span class="backstage-text">@item.PlainText</span>
+                <time class="backstage-time">@item.OccurredAt.ToString("HH:mm:ss")</time>
+            </div>
+            @if (!string.IsNullOrEmpty(item.RawJson))
+            {
+                var expanded = expandedRows.Contains(rowIndex);
+                <button type="button" class="backstage-raw-toggle" data-action="raw" aria-expanded="@(expanded ? "true" : "false")"
+                        @onclick="() => ToggleRaw(rowIndex)">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@(expanded ? "expand_less" : "expand_more")" />
+                    <span>@(expanded ? "收起原始資料" : "看原始資料")</span>
+                </button>
+                @if (expanded)
+                {
+                    <pre class="backstage-raw">@FormatRaw(item.RawJson)</pre>
+                }
+            }
+        </li>
+    }
+</ol>

@@ -1,0 +1,96 @@
+@using CustomerHelpAgent.Web.Agents.AfterSales
+
+@*
+    寫入前的確認卡：內容全部由程式依模型提出的參數重新查詢後組成（ConfirmationCard），不採模型文字。
+    按下「確認送出」前不會建立申請；送出後由程式再重核一次資格才寫入。
+*@
+<article class="agent-confirm-card @(State == CardState.Pending ? "is-pending" : null)" aria-label="@Card.Title">
+    <header class="agent-confirm-head">
+        <span class="agent-confirm-icon" aria-hidden="true"><MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="fact_check" /></span>
+        <h3 class="agent-confirm-title">@Card.Title</h3>
+    </header>
+
+    <dl class="agent-confirm-facts">
+        <div><dt>商品</dt><dd>@Card.ProductLine</dd></div>
+        <div><dt>規格</dt><dd>@Card.FromSpec@(Card.ToSpec is null ? null : " → " + Card.ToSpec)</dd></div>
+        <div><dt>類型</dt><dd>@Card.IssueLabel</dd></div>
+        <div><dt>規則</dt><dd>@Card.PolicyLine</dd></div>
+        <div><dt>照片</dt><dd>@Card.PhotoCount 張</dd></div>
+    </dl>
+
+    @if (Card.Facts.Count > 0)
+    {
+        <ul class="agent-confirm-list">
+            @foreach (var fact in Card.Facts)
+            {
+                <li>@fact</li>
+            }
+        </ul>
+    }
+
+    @switch (State)
+    {
+        case CardState.Pending:
+            <footer class="agent-confirm-actions">
+                <p class="agent-confirm-hint">按下「確認送出」前不會建立申請。</p>
+                <button type="button" class="agent-confirm-button is-primary" data-action="confirm" disabled="@Disabled" @onclick="OnConfirm">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="check" />
+                    <span>確認送出</span>
+                </button>
+                <button type="button" class="agent-confirm-button" data-action="cancel" disabled="@Disabled" @onclick="OnCancel">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="close" />
+                    <span>取消</span>
+                </button>
+            </footer>
+            break;
+        case CardState.Submitting:
+            <p class="agent-confirm-result" role="status">處理中，請稍候…</p>
+            break;
+        case CardState.Created:
+            <div class="agent-confirm-result is-created" role="status">
+                <span>已建立申請，申請編號 <strong>@RequestNo</strong></span>
+                <a class="agent-confirm-link" href="/shop/after-sales">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="list_alt" />
+                    <span>到我的申請查看</span>
+                </a>
+            </div>
+            break;
+        case CardState.Canceled:
+            <p class="agent-confirm-result" role="status">已取消，沒有建立申請。</p>
+            break;
+        default:
+            <p class="agent-confirm-result" role="status">沒有建立申請，請看下方的說明。</p>
+            break;
+    }
+</article>
+
+@code {
+    /// <summary>確認卡在畫面上的狀態。</summary>
+    public enum CardState
+    {
+        Pending,
+        Submitting,
+        Created,
+        Canceled,
+        NotCreated,
+    }
+
+    [Parameter, EditorRequired]
+    public ConfirmationCard Card { get; set; } = default!;
+
+    [Parameter]
+    public CardState State { get; set; }
+
+    /// <summary><see cref="CardState.Created"/> 時顯示的申請編號。</summary>
+    [Parameter]
+    public string? RequestNo { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+}

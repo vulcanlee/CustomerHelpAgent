@@ -35,6 +35,7 @@ public sealed class MenuPermissionConsistencyTests
         ["TeamViewView.razor.cs"] = 52,
         ["AfterSalesReviewView.razor.cs"] = 91,
         ["AfterSalesPolicyView.razor.cs"] = 92,
+        ["AgentRunsView.razor.cs"] = 93,
     };
 
     /// <summary>

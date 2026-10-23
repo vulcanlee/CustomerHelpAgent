@@ -1,0 +1,33 @@
+@using CustomerHelpAgent.Share.Agents
+
+@*
+    幕後面板：Agent 每一步的白話說明＋來源標色；「看原始資料」展開 RawJson。
+    步驟列由 AgentStepTimeline 渲染（後台「Agent 執行紀錄」窗共用）；白話與原始資料一律以純文字輸出，不經 MarkupString。
+*@
+<aside class="backstage" data-role="backstage" aria-label="幕後面板">
+    <header class="backstage-head">
+        <h2 class="backstage-title">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="manage_search" />
+            <span>幕後面板</span>
+        </h2>
+        <p class="backstage-hint">Agent 每一步做了什麼、資料從哪裡來。</p>
+        <ul class="backstage-legend" aria-label="來源標色">
+            @foreach (var source in LegendOrder)
+            {
+                <li><AgentSourceTag Source="@source" /></li>
+            }
+        </ul>
+    </header>
+
+    <div class="backstage-scroll">
+        <AgentStepTimeline Events="@Events" EmptyText="送出訊息後，這裡會即時顯示 Agent 在幕後做的每一步。" />
+    </div>
+
+    @if (LatestStop is { } stop)
+    {
+        <footer class="backstage-stop" role="status">
+            <span class="backstage-stop-label">本輪停止原因</span>
+            <span>@stop.PlainText</span>
+        </footer>
+    }
+</aside>

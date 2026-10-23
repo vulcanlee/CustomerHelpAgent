@@ -1,6 +1,7 @@
 using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
@@ -16,8 +17,6 @@ namespace CustomerHelpAgent.Web.Components.Views.Shop;
 /// </summary>
 public partial class ShopOrderDetailView
 {
-    private static readonly TimeSpan UrgeAfter = TimeSpan.FromDays(3);
-
     private const string UrgeDescription = "已出貨超過 3 天仍未收到包裹，請協助催件。";
 
     [Parameter]
@@ -93,15 +92,10 @@ public partial class ShopOrderDetailView
             return;
         }
 
-        canUrge = CanRequestUrge(detail, TimeProvider.GetLocalNow().DateTime);
+        canUrge = AfterSalesEligibility.CanRequestUrge(
+            detail.Summary.DeliveredAt, detail.Shipment?.ShippedAt, TimeProvider.GetLocalNow().DateTime);
         await ProcessMetricService.RecordAsync(caseKey, AfterSalesChannel.Traditional, ProcessActor.Customer, ProcessMetricActions.ViewShipment, userId);
     }
-
-    /// <summary>未簽收，且出貨時間距今超過 3 天（剛好 3 天不算）。</summary>
-    internal static bool CanRequestUrge(ShopOrderDetail detail, DateTime now)
-        => detail.Summary.DeliveredAt is null
-            && detail.Shipment?.ShippedAt is { } shippedAt
-            && now - shippedAt > UrgeAfter;
 
     private async Task OnUrgeClickAsync()
     {

@@ -1,0 +1,33 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.backstage-source {
+    border-radius: var(--shop-radius-pill);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.05rem 0.55rem;
+    white-space: nowrap;
+}
+
+.backstage-source.is-conversation {
+    background: var(--shop-source-conversation-bg);
+    color: var(--shop-source-conversation);
+}
+
+.backstage-source.is-database {
+    background: var(--shop-source-database-bg);
+    color: var(--shop-source-database);
+}
+
+.backstage-source.is-policy {
+    background: var(--shop-source-policy-bg);
+    color: var(--shop-source-policy);
+}
+
+.backstage-source.is-memory {
+    background: var(--shop-source-memory-bg);
+    color: var(--shop-source-memory);
+}
+
+.backstage-source.is-program {
+    background: var(--shop-source-program-bg);
+    color: var(--shop-source-program);
+}

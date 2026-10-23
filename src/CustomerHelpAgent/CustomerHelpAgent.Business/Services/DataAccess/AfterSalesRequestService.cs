@@ -23,6 +23,8 @@ public class AfterSalesRequestService
     public const int MaxFileCount = 3;
     public const long MaxFileSize = 10 * 1024 * 1024;
     public const string StatusChangedMessage = "這筆申請的狀態已經變更，請重新整理後再操作。";
+    private const string SameVariantMessage = "目標規格與原規格相同";
+    private const string FileTooLargeMessage = "照片超過 10 MB";
 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -131,7 +133,7 @@ public class AfterSalesRequestService
             foreach (var file in files)
             {
                 var originalFileName = Path.GetFileName(file.FileName);
-                var relativePath = await fileStore.SaveAsync(file.Content, Path.GetExtension(originalFileName).ToLowerInvariant(), now);
+                var (relativePath, bytesWritten) = await fileStore.SaveAsync(file.Content, Path.GetExtension(originalFileName).ToLowerInvariant(), now, MaxFileSize);
                 attachments.Add(new AfterSalesAttachment
                 {
                     OriginalFileName = originalFileName,
@@ -139,7 +141,8 @@ public class AfterSalesRequestService
                     RelativePath = relativePath,
                     // 不採用呼叫端宣稱的 ContentType，一律依（已通過白名單的）副檔名決定。
                     ContentType = UploadFileTypePolicy.ResolveContentType(originalFileName),
-                    FileSize = file.FileSize,
+                    // 呼叫端宣稱的 FileSize 不可信，存實際寫入的位元組數。
+                    FileSize = bytesWritten,
                     CreatedAt = now,
                 });
             }
@@ -161,6 +164,57 @@ public class AfterSalesRequestService
         }
     }
 
+    /// <summary>
+    /// 換尺碼／換顏色的目標規格檢查：換尺碼是同顏色的其他尺碼、換顏色是同尺碼的其他顏色（與表單的選項一致），
+    /// 而且必須真的存在於同款商品。其他類型不檢查。通過回 null。
+    /// </summary>
+    private async Task<string?> ValidateTargetVariantAsync(int customerUserId, SubmitAfterSalesInput input, ShopOrderItemView item)
+    {
+        if (input.Type is not (AfterSalesType.SizeExchange or AfterSalesType.ColorExchange))
+        {
+            return null;
+        }
+
+        var variants = await shopOrderService.GetVariantOptionsAsync(customerUserId, item.OrderItemId);
+        if (input.Type == AfterSalesType.SizeExchange)
+        {
+            var size = input.TargetSize!.Trim();
+            if (size == item.Size)
+            {
+                return SameVariantMessage;
+            }
+
+            return variants.Any(x => x.Color == item.Color && x.Size == size) ? null : "找不到這個尺碼";
+        }
+
+        var color = input.TargetColor!.Trim();
+        if (color == item.Color)
+        {
+            return SameVariantMessage;
+        }
+
+        return variants.Any(x => x.Size == item.Size && x.Color == color) ? null : "找不到這個顏色";
+    }
+
+    /// <summary>同一個訂單商品、同類型、仍在處理中（已提交／待補件）的申請編號；沒有回 null。</summary>
+    private static Task<string?> FindOpenRequestNoAsync(BackendDBContext context, int orderItemId, AfterSalesType type)
+        => context.AfterSalesRequest
+            .AsNoTracking()
+            .Where(x => x.SalesOrderItemId == orderItemId
+                && x.Type == type
+                && (x.Status == AfterSalesStatus.Submitted || x.Status == AfterSalesStatus.NeedMoreInfo))
+            .OrderBy(x => x.Id)
+            .Select(x => (string?)x.RequestNo)
+            .FirstOrDefaultAsync();
+
+    private SubmitResult DuplicateFail(SubmitAfterSalesInput input, string openRequestNo)
+    {
+        logger.LogInformation(
+            "After-sales submission rejected because an open request of the same type exists. OrderItemId={OrderItemId}, RequestType={RequestType}",
+            input.OrderItemId, input.Type);
+        return Fail($"這個商品已有處理中的同類申請（{openRequestNo}），請到「我的申請」查看。");
+    }
+
     public async Task<SubmitResult> SubmitAsync(int customerUserId, SubmitAfterSalesInput input, IReadOnlyList<AfterSalesUploadFile> files)
     {
         var item = await shopOrderService.GetMyOrderItemAsync(customerUserId, input.OrderItemId);
@@ -179,6 +233,21 @@ public class AfterSalesRequestService
             return Fail("換顏色請選擇想換的顏色。");
         }
 
+        var variantError = await ValidateTargetVariantAsync(customerUserId, input, item);
+        if (variantError is not null)
+        {
+            logger.LogInformation("After-sales submission rejected by target variant validation. OrderItemId={OrderItemId}, RequestType={RequestType}", input.OrderItemId, input.Type);
+            return Fail(variantError);
+        }
+
+        await using (var lookupContext = await contextFactory.CreateDbContextAsync())
+        {
+            if (await FindOpenRequestNoAsync(lookupContext, item.OrderItemId, input.Type) is { } openRequestNo)
+            {
+                return DuplicateFail(input, openRequestNo);
+            }
+        }
+
         var fileError = ValidateFiles(files);
         if (fileError is not null)
         {
@@ -195,6 +264,11 @@ public class AfterSalesRequestService
         {
             attachments = await SaveFilesAsync(files, now);
         }
+        catch (InvalidDataException)
+        {
+            logger.LogInformation("After-sales submission rejected because a file exceeds the size limit. OrderItemId={OrderItemId}", input.OrderItemId);
+            return Fail(FileTooLargeMessage);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to save after-sales files. OrderItemId={OrderItemId}", input.OrderItemId);
@@ -206,6 +280,13 @@ public class AfterSalesRequestService
         {
             await using var context = await contextFactory.CreateDbContextAsync();
             await using var transaction = await context.Database.BeginTransactionAsync();
+            // 交易內再查一次：上面的檢查到這裡之間（寫檔期間）可能有另一個送出已經成功。
+            if (await FindOpenRequestNoAsync(context, item.OrderItemId, input.Type) is { } openRequestNo)
+            {
+                DeleteFiles(attachments);
+                return DuplicateFail(input, openRequestNo);
+            }
+
             row = new AfterSalesRequest
             {
                 // 編號要用到 Id，先放唯一的暫時值，取得 Id 後在同一個交易內改成正式編號。
@@ -299,6 +380,11 @@ public class AfterSalesRequestService
         try
         {
             attachments = await SaveFilesAsync(files, now);
+        }
+        catch (InvalidDataException)
+        {
+            logger.LogInformation("After-sales resubmission rejected because a file exceeds the size limit. RequestId={RequestId}", requestId);
+            return Fail(FileTooLargeMessage);
         }
         catch (Exception ex)
         {
@@ -442,10 +528,8 @@ public class AfterSalesRequestService
                     s.SetProperty(x => x.UpdatedAt, now);
                     s.SetProperty(x => x.DecidedAt, now);
                     s.SetProperty(x => x.DecidedByUserId, staffUserId);
-                    if (text is not null)
-                    {
-                        s.SetProperty(x => x.StaffNote, text);
-                    }
+                    // 一律覆寫：沒填備註時要清掉要求補件時留下的備註，不能讓顧客在結案後還看到「請補照片」。
+                    s.SetProperty(x => x.StaffNote, text);
                 });
             if (affected == 0)
             {

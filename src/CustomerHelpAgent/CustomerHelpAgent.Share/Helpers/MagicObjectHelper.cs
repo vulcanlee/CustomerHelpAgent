@@ -109,6 +109,7 @@ public class MagicObjectHelper
     public const string 角色_售後服務 = "售後服務";
     public const string 角色_售後審核 = "售後審核";
     public const string 角色_售後規則 = "售後規則管理";
+    public const string 角色_Agent執行紀錄 = "Agent 執行紀錄";
 
     /// <summary>
     /// 監控與診斷群組（0.9.113 前名為「統計與分析」）。刻意不列入 <c>RolePermissionService.GetRoleListPermissionAllName()</c>：

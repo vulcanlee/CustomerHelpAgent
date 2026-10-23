@@ -115,6 +115,44 @@ public sealed class AfterSalesPolicyServiceTests
     }
 
     [Fact]
+    public async Task AddVersionAsync_StaleBaseVersion_IsRejected()
+    {
+        var (conn, ctx) = await CreateDbAsync();
+        await using var connection = conn;
+        await using var context = ctx;
+        ctx.AfterSalesPolicy.AddRange(
+            Row("SIZE", 1, ProductCategories.Shoes, LocalNow.AddDays(-30), LocalNow.AddDays(-10)),
+            Row("SIZE", 2, ProductCategories.Shoes, LocalNow.AddDays(-10)));
+        await ctx.SaveChangesAsync();
+        var audit = new RecordingAuditLogService();
+        var service = Create(conn, audit);
+        AfterSalesPolicyModel Draft(int? baseVersion) => new()
+        {
+            Code = "SIZE",
+            Type = AfterSalesType.SizeExchange,
+            Category = ProductCategories.Shoes,
+            Title = "新版",
+            Content = "新內容",
+            Source = "來源",
+            BaseVersion = baseVersion,
+        };
+
+        // 開窗時看到的是 v1，但別人已經新增了 v2。
+        var stale = await service.AddVersionAsync(Draft(1));
+
+        Assert.False(stale.Success);
+        Assert.Equal("規則已被其他人更新，請重新整理後再新增版本。", stale.Message);
+        Assert.Equal(2, await ctx.AfterSalesPolicy.CountAsync());
+        Assert.Null((await ctx.AfterSalesPolicy.AsNoTracking().SingleAsync(x => x.Version == 2)).EffectiveTo);
+        Assert.Empty(audit.Entries);
+
+        var fresh = await service.AddVersionAsync(Draft(2));
+
+        Assert.True(fresh.Success, fresh.Message);
+        Assert.Equal([3, 2, 1], (await service.GetVersionsAsync(true)).Select(x => x.Version));
+    }
+
+    [Fact]
     public async Task GetByIdAsync_ShouldReturnThatVersionEvenWhenExpired_OrNullWhenMissing()
     {
         var (conn, ctx) = await CreateDbAsync();

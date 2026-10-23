@@ -48,6 +48,7 @@ public sealed class MenuIconTests
         "build",
         "support_agent",
         "rule",
+        "timeline",
     };
 
     [Fact]

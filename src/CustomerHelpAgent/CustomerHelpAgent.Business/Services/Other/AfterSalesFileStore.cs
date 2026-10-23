@@ -23,8 +23,12 @@ public class AfterSalesFileStore
 
     private string RootPath => systemSettingsOptions.Value.ExternalFileSystem.AfterSalesFilePath;
 
-    /// <summary>寫入一個照片檔並回傳相對路徑。寫到一半失敗會先刪掉殘檔再丟出例外。</summary>
-    public async Task<string> SaveAsync(Stream content, string extension, DateTime now)
+    /// <summary>
+    /// 寫入一個照片檔並回傳相對路徑與實際寫入的位元組數。
+    /// 邊寫邊計數：超過 <paramref name="maxBytes"/> 就丟 <see cref="InvalidDataException"/>（呼叫端宣稱的大小與串流長度都不可信，
+    /// 串流也可能無法預先取得長度）。寫到一半失敗（含超過上限）會先刪掉殘檔再丟出例外。
+    /// </summary>
+    public async Task<(string RelativePath, long BytesWritten)> SaveAsync(Stream content, string extension, DateTime now, long maxBytes)
     {
         var relativePath = string.Create(CultureInfo.InvariantCulture, $"{now:yyyy}/{now:MM}/{Guid.NewGuid():N}{extension}");
         var fullPath = TryResolveFullPath(relativePath)
@@ -36,10 +40,22 @@ public class AfterSalesFileStore
             content.Position = 0;
         }
 
+        long bytesWritten = 0;
         try
         {
             await using var target = File.Create(fullPath);
-            await content.CopyToAsync(target);
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await content.ReadAsync(buffer)) > 0)
+            {
+                bytesWritten += read;
+                if (bytesWritten > maxBytes)
+                {
+                    throw new InvalidDataException($"After-sales file exceeds the size limit of {maxBytes} bytes.");
+                }
+
+                await target.WriteAsync(buffer.AsMemory(0, read));
+            }
         }
         catch
         {
@@ -47,8 +63,8 @@ public class AfterSalesFileStore
             throw;
         }
 
-        logger.LogDebug("After-sales file saved. RelativePath={RelativePath}", relativePath);
-        return relativePath;
+        logger.LogDebug("After-sales file saved. RelativePath={RelativePath}, BytesWritten={BytesWritten}", relativePath, bytesWritten);
+        return (relativePath, bytesWritten);
     }
 
     /// <summary>

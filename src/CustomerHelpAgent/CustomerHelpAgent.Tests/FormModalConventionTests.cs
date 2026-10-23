@@ -31,6 +31,7 @@ public sealed class FormModalConventionTests
 
     private static readonly Regex ModalOpenTag = new(@"<Modal\b[^>]*>", RegexOptions.Compiled);
     private static readonly Regex ClassAttribute = new(@"Class=""(?<value>[^""]*)""", RegexOptions.Compiled);
+    private static readonly Regex ModalConfirmCall = new(@"(?<!Runner\.)ConfirmAsync\(", RegexOptions.Compiled);
 
     /// <summary>
     /// 含 <c>&lt;EditForm&gt;</c> 的對話窗＝表單型對話窗，必須套用共用骨架。
@@ -200,7 +201,8 @@ public sealed class FormModalConventionTests
                 continue;
             }
 
-            if (File.ReadAllText(file).Contains("ConfirmAsync(", StringComparison.Ordinal))
+            // AfterSalesAgentRunner.ConfirmAsync 是售後 Agent 的「顧客按下確認卡」，不是確認窗（1.0.4 起，線上客服頁）。
+            if (ModalConfirmCall.IsMatch(File.ReadAllText(file)))
             {
                 violations.Add(Path.GetFileName(file));
             }

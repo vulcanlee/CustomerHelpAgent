@@ -193,6 +193,162 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("AfterSalesRequest");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentConfirmation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AfterSalesRequestId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ApprovalRequestId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("Approved")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ArgumentsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CardJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SessionKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionKey");
+
+                    b.ToTable("AgentConfirmation");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentRunStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AgentRunTraceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlainText")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RawJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentRunTraceId");
+
+                    b.ToTable("AgentRunStep");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentRunTrace", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ModelCallCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("SessionKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("StopReason")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ToolCallCount")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionKey");
+
+                    b.ToTable("AgentRunTrace");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentSessionRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LastStopReason")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("SessionKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerUserId");
+
+                    b.HasIndex("SessionKey")
+                        .IsUnique();
+
+                    b.ToTable("AgentSessionRecord");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AiCallLog", b =>
                 {
                     b.Property<int>("Id")
@@ -1552,6 +1708,17 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Navigation("SalesOrderItem");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentRunStep", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.AgentRunTrace", "AgentRunTrace")
+                        .WithMany("Steps")
+                        .HasForeignKey("AgentRunTraceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AgentRunTrace");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AnnouncementDismissal", b =>
                 {
                     b.HasOne("CustomerHelpAgent.AccessDatas.Models.Announcement", "Announcement")
@@ -1778,6 +1945,11 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", b =>
                 {
                     b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentRunTrace", b =>
+                {
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Product", b =>

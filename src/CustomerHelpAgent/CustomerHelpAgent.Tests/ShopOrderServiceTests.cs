@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using CustomerHelpAgent.AccessDatas;
 using CustomerHelpAgent.AccessDatas.Models;
 using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Models.Shop;
 using CustomerHelpAgent.Share.Shop;
 
 namespace CustomerHelpAgent.Tests;
@@ -154,6 +155,44 @@ public sealed class ShopOrderServiceTests
         Assert.Equal([("黑", "26"), ("黑", "27"), ("白", "26")], options);
         Assert.Empty(await service.GetVariantOptionsAsync(bob, order.Items[0].Id));
         Assert.Empty(await service.GetVariantOptionsAsync(alice, 999));
+    }
+
+    [Fact]
+    public async Task GetVariantStock_OtherCustomer_ReturnsEmpty()
+    {
+        var (conn, ctx) = await CreateDbAsync();
+        await using var connection = conn;
+        await using var context = ctx;
+        var (alice, bob, v) = await SeedAsync(ctx);
+        var order = Order("A1", alice, v, Base);
+        ctx.SalesOrder.Add(order);
+        await ctx.SaveChangesAsync();
+        var service = Create(conn);
+
+        Assert.Empty(await service.GetVariantStockAsync(bob, order.Items[0].Id));
+        Assert.Empty(await service.GetVariantStockAsync(alice, 999));
+    }
+
+    [Fact]
+    public async Task GetVariantStock_ReturnsStockPerVariant()
+    {
+        var (conn, ctx) = await CreateDbAsync();
+        await using var connection = conn;
+        await using var context = ctx;
+        var (alice, _, v) = await SeedAsync(ctx);
+        ctx.ProductVariant.AddRange(
+            new ProductVariant { ProductId = v.ProductId, Color = "黑", Size = "27", Stock = 0 },
+            new ProductVariant { ProductId = v.ProductId, Color = "白", Size = "26", Stock = 3 },
+            new ProductVariant { Product = new Product { Code = "P2", Name = "外套", Category = ProductCategories.Apparel, Price = 2990m }, Color = "灰", Size = "M", Stock = 1 });
+        var order = Order("A1", alice, v, Base);
+        ctx.SalesOrder.Add(order);
+        await ctx.SaveChangesAsync();
+
+        var stock = await Create(conn).GetVariantStockAsync(alice, order.Items[0].Id);
+
+        Assert.Equal(
+            [new ShopVariantStock("黑", "26", 5), new ShopVariantStock("黑", "27", 0), new ShopVariantStock("白", "26", 3)],
+            stock);
     }
 
     [Fact]

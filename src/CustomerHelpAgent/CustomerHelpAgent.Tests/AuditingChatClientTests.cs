@@ -5,6 +5,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using CustomerHelpAgent.Business.Helpers;
+using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Others;
 using CustomerHelpAgent.Models.Systems;
@@ -167,6 +168,241 @@ public sealed class AuditingChatClientTests(ITestOutputHelper output)
         Assert.Contains("echo", env.CallLog.Entries[0].RequestBody);
     }
 
+    [Fact]
+    public async Task Streaming_AbandonedMidway_RecordsAbandonedUsage()
+    {
+        var scripted = new ScriptedStreamingChatClient(
+            new ChatResponseUpdate(ChatRole.Assistant, "a") { MessageId = "m1", ModelId = "gpt-x" },
+            new ChatResponseUpdate(ChatRole.Assistant, "b") { MessageId = "m1" },
+            new ChatResponseUpdate
+            {
+                Contents = [new UsageContent(new UsageDetails { InputTokenCount = 5, OutputTokenCount = 2 })],
+            },
+            new ChatResponseUpdate(ChatRole.Assistant, "never") { MessageId = "m1" });
+        var env = new TestEnvironment(scripted);
+
+        var texts = new List<string>();
+        await foreach (var update in env.Factory.Create(Operation, Guid.NewGuid()).GetStreamingResponseAsync("hi"))
+        {
+            texts.Add(update.Text);
+            if (update.Contents.OfType<UsageContent>().Any())
+            {
+                // 呼叫端不取消、直接離開迴圈（DisposeAsync）。
+                break;
+            }
+        }
+
+        Assert.Equal("ab", string.Concat(texts));
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.False(usage.Success);
+        Assert.Equal("Abandoned", usage.FailureReason);
+        Assert.Equal(5, usage.InputCount);
+        Assert.Equal(2, usage.OutputCount);
+        Assert.Equal("gpt-x", usage.Model);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.False(log.Success);
+        Assert.Equal("Abandoned", log.FailureReason);
+        Assert.Equal("ab", log.ResponseText);
+        Assert.Equal(usage.CallId, log.CallId);
+    }
+
+    [Fact]
+    public async Task Streaming_CallerCanceledMidway_RecordsCanceledWithoutUsage()
+    {
+        var scripted = new ScriptedStreamingChatClient(
+            new ChatResponseUpdate(ChatRole.Assistant, "a") { MessageId = "m1" },
+            new ChatResponseUpdate(ChatRole.Assistant, "b") { MessageId = "m1" });
+        var env = new TestEnvironment(scripted);
+        using var cts = new CancellationTokenSource();
+
+        await foreach (var _ in env.Factory.Create(Operation, Guid.NewGuid())
+            .GetStreamingResponseAsync("hi", cancellationToken: cts.Token))
+        {
+            await cts.CancelAsync();
+            break;
+        }
+
+        Assert.Empty(env.Usage.Entries);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.False(log.Success);
+        Assert.Equal("Canceled", log.FailureReason);
+    }
+
+    [Fact]
+    public async Task Streaming_ToolCallUpdates_AreRecordedInResponseBody()
+    {
+        var scripted = new ScriptedStreamingChatClient(
+            new ChatResponseUpdate(
+                ChatRole.Assistant,
+                [new FunctionCallContent("call-1", "lookup_order", new Dictionary<string, object?> { ["orderNo"] = "A001" })])
+            {
+                MessageId = "m1",
+                ModelId = "gpt-x",
+            },
+            new ChatResponseUpdate
+            {
+                FinishReason = ChatFinishReason.ToolCalls,
+                Contents = [new UsageContent(new UsageDetails { InputTokenCount = 20, OutputTokenCount = 4, TotalTokenCount = 24 })],
+            });
+        var env = new TestEnvironment(scripted);
+
+        await foreach (var _ in env.Factory.Create(Operation, Guid.NewGuid()).GetStreamingResponseAsync("hi"))
+        {
+        }
+
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.True(usage.Success);
+        Assert.Equal((20, 4, 24), (usage.InputCount, usage.OutputCount, usage.TotalCount));
+        Assert.NotNull(usage.RawUsageJson);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.True(log.Success);
+        Assert.Equal("tool_calls", log.FinishReason);
+        Assert.NotNull(log.ResponseBody);
+        Assert.Contains("call-1", log.ResponseBody);
+        Assert.Contains("lookup_order", log.ResponseBody);
+        Assert.Contains("A001", log.ResponseBody);
+    }
+
+    [Fact]
+    public async Task Streaming_ThrowsMidway_RecordsFailure()
+    {
+        var scripted = new ScriptedStreamingChatClient(
+            new ChatResponseUpdate(ChatRole.Assistant, "a") { MessageId = "m1" },
+            new ClientResultException("server error", new FakePipelineResponse(500)));
+        var env = new TestEnvironment(scripted);
+
+        await Assert.ThrowsAsync<ClientResultException>(async () =>
+        {
+            await foreach (var _ in env.Factory.Create(Operation, Guid.NewGuid()).GetStreamingResponseAsync("hi"))
+            {
+            }
+        });
+
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.False(usage.Success);
+        Assert.Equal("UpstreamError", usage.FailureReason);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.Equal(500, log.HttpStatus);
+        Assert.False(log.Success);
+        Assert.Equal("UpstreamError", log.FailureReason);
+        Assert.Equal(nameof(ClientResultException), log.ExceptionType);
+    }
+
+    [Fact]
+    public async Task GetResponse_Timeout_RecordsTimeout()
+    {
+        var scripted = new ScriptedChatClient(new TaskCanceledException("timed out"));
+        var env = new TestEnvironment(scripted);
+
+        await Assert.ThrowsAsync<TaskCanceledException>(
+            () => env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi"));
+
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.False(usage.Success);
+        Assert.Equal("Timeout", usage.FailureReason);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.False(log.Success);
+        Assert.Equal("Timeout", log.FailureReason);
+        Assert.Equal(nameof(TaskCanceledException), log.ExceptionType);
+    }
+
+    [Fact]
+    public async Task GetResponse_Unauthorized401_RecordsUnauthorized()
+    {
+        var scripted = new ScriptedChatClient(new ClientResultException("unauthorized", new FakePipelineResponse(401)));
+        var env = new TestEnvironment(scripted);
+
+        await Assert.ThrowsAsync<ClientResultException>(
+            () => env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi"));
+
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.False(usage.Success);
+        Assert.Equal("Unauthorized", usage.FailureReason);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.Equal(401, log.HttpStatus);
+        Assert.Equal("Unauthorized", log.FailureReason);
+    }
+
+    [Fact]
+    public async Task GetResponse_UnexpectedException_LogsCallWithoutUsage()
+    {
+        var scripted = new ScriptedChatClient(new InvalidOperationException("boom"));
+        var env = new TestEnvironment(scripted);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi"));
+
+        Assert.Empty(env.Usage.Entries);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.False(log.Success);
+        Assert.Equal("Unexpected", log.FailureReason);
+        Assert.Equal(nameof(InvalidOperationException), log.ExceptionType);
+    }
+
+    [Fact]
+    public async Task GetResponse_UnserializableArgument_StillSucceeds()
+    {
+        var scripted = new ScriptedChatClient(new ChatResponse(
+            new ChatMessage(ChatRole.Assistant, [new TextContent("ok"), new UnserializableContent()]))
+        {
+            Usage = new UsageDetails { InputTokenCount = 3, OutputTokenCount = 1 },
+        });
+        var env = new TestEnvironment(scripted);
+
+        var response = await env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, [new TextContent("hi"), new UnserializableContent()])]);
+
+        Assert.Equal("ok", response.Text);
+        var usage = Assert.Single(env.Usage.Entries);
+        Assert.True(usage.Success);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.True(log.Success);
+        Assert.Equal("ok", log.ResponseText);
+        Assert.Contains("snapshotError", log.RequestBody);
+        Assert.Contains(nameof(NotSupportedException), log.RequestBody);
+        Assert.NotNull(log.ResponseBody);
+        Assert.Contains("snapshotError", log.ResponseBody);
+    }
+
+    [Fact]
+    public async Task GetResponse_UsageRecorderThrows_StillReturnsResponse()
+    {
+        var scripted = new ScriptedChatClient(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
+        var env = new TestEnvironment(scripted, new ThrowingTokenUsageRecorder());
+
+        var response = await env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi");
+
+        Assert.Equal("ok", response.Text);
+        Assert.Single(env.CallLog.Entries);
+    }
+
+    [Fact]
+    public async Task GetResponse_UsageRecorderThrowsOnUpstreamFailure_OriginalExceptionPropagates()
+    {
+        var scripted = new ScriptedChatClient(new ClientResultException("rate limited", new FakePipelineResponse(429)));
+        var env = new TestEnvironment(scripted, new ThrowingTokenUsageRecorder());
+
+        var ex = await Assert.ThrowsAsync<ClientResultException>(
+            () => env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi"));
+
+        Assert.Equal(429, ex.Status);
+        var log = Assert.Single(env.CallLog.Entries);
+        Assert.Equal("RateLimited", log.FailureReason);
+    }
+
+    [Fact]
+    public async Task GetResponse_UsageRecorderThrowsOnTimeout_OriginalExceptionPropagates()
+    {
+        var scripted = new ScriptedChatClient(new TaskCanceledException("timed out"));
+        var env = new TestEnvironment(scripted, new ThrowingTokenUsageRecorder());
+
+        var ex = await Assert.ThrowsAsync<TaskCanceledException>(
+            () => env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync("hi"));
+
+        Assert.Equal("timed out", ex.Message);
+        Assert.Single(env.CallLog.Entries);
+    }
+
     /// <summary>
     /// 實機冒煙：只有設定了 CHA_LIVE_AI_* 環境變數才真的連線，否則寫出略過訊息後直接通過。
     /// </summary>
@@ -200,24 +436,26 @@ public sealed class AuditingChatClientTests(ITestOutputHelper output)
 
     private sealed class TestEnvironment
     {
-        public TestEnvironment(ScriptedChatClient scripted)
-            : this(new AiSettings
-            {
-                Provider = nameof(AiProvider.AzureOpenAI),
-                Endpoint = "https://unit-test.openai.azure.com",
-                ApiKey = "key",
-                Model = "my-deployment",
-            })
+        public TestEnvironment(IChatClient scripted, ITokenUsageRecorder? usageRecorder = null)
+            : this(
+                new AiSettings
+                {
+                    Provider = nameof(AiProvider.AzureOpenAI),
+                    Endpoint = "https://unit-test.openai.azure.com",
+                    ApiKey = "key",
+                    Model = "my-deployment",
+                },
+                usageRecorder)
         {
-            Factory.InnerClientFactory = _ => scripted;
+            Factory.InnerClientFactory = (_, _) => scripted;
         }
 
-        public TestEnvironment(AiSettings settings)
+        public TestEnvironment(AiSettings settings, ITokenUsageRecorder? usageRecorder = null)
         {
             Factory = new AgentChatClientFactory(
                 new StaticOptionsMonitor<AiSettings>(settings),
                 new StaticOptionsMonitor<SlowOperationSettings>(new SlowOperationSettings()),
-                Usage,
+                usageRecorder ?? Usage,
                 CallLog,
                 Quota,
                 Audit,
@@ -273,6 +511,55 @@ public sealed class AuditingChatClientTests(ITestOutputHelper output)
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>
+    /// 串流用：依序吐出預設的 <see cref="ChatResponseUpdate"/>（可含 <see cref="FunctionCallContent"/>／<see cref="UsageContent"/>），
+    /// 遇到 <see cref="Exception"/> 就在該處拋出。只支援串流。
+    /// </summary>
+    private sealed class ScriptedStreamingChatClient(params object[] items) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var item in items)
+            {
+                await Task.Yield();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (item is Exception ex)
+                {
+                    throw ex;
+                }
+
+                yield return (ChatResponseUpdate)item;
+            }
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    /// <summary>
+    /// 序列化時一定失敗的內容：未登錄在 <see cref="AIContent"/> 多型清單的子類，
+    /// <see cref="AIJsonUtilities.DefaultOptions"/> 會丟 <see cref="NotSupportedException"/>。
+    /// </summary>
+    private sealed class UnserializableContent : AIContent
+    {
+    }
+
+    /// <summary>違約的 Token 用量記錄器：一律丟例外。</summary>
+    private sealed class ThrowingTokenUsageRecorder : ITokenUsageRecorder
+    {
+        public Task RecordAsync(TokenUsageEntry entry) => throw new InvalidOperationException("recorder failure");
     }
 
     /// <summary>只為了讓 <see cref="ClientResultException.Status"/> 有值。</summary>

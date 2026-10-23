@@ -1,0 +1,65 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.backstage {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: 22px;
+    box-shadow: var(--shop-shadow);
+    color: var(--shop-text);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.backstage-head {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.backstage-title {
+    align-items: center;
+    display: flex;
+    font-size: 1.05rem;
+    font-weight: 700;
+    gap: 0.4rem;
+    margin: 0;
+}
+
+.backstage-hint {
+    color: var(--shop-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.backstage-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* 單一子元素＋column-reverse：內容增加時捲軸停在底部，不需要 JS 捲動。 */
+.backstage-scroll {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.backstage-stop {
+    background: var(--shop-accent-soft);
+    border-radius: 12px;
+    display: grid;
+    font-size: 0.875rem;
+    gap: 0.15rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.backstage-stop-label {
+    color: var(--shop-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+}

@@ -19,6 +19,12 @@ public class AfterSalesPolicyModel : ICloneable
     public bool RequiresUnworn { get; set; }
     public bool RequiresPhoto { get; set; }
 
+    /// <summary>
+    /// 新增版本時的基準：開窗預填來源的 <see cref="Version"/>。與目前生效版本不同代表別人已更新，服務拒絕新增；
+    /// null（全新的規則代碼，沒有現行版本可預填）時不檢查。
+    /// </summary>
+    public int? BaseVersion { get; set; }
+
     public AfterSalesPolicyModel Clone()
     {
         return (AfterSalesPolicyModel)((ICloneable)this).Clone();

@@ -21,6 +21,12 @@
         "name": "售後規則管理",
         "icon": "rule",
         "url": "/after-sales-policies"
+      },
+      {
+        "id": 93,
+        "name": "Agent 執行紀錄",
+        "icon": "timeline",
+        "url": "/agent-runs"
       }
     ]
   },

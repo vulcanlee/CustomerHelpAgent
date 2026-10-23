@@ -10,6 +10,9 @@ public sealed record ShopOrderItemView(
     int Quantity,
     decimal UnitPrice);
 
+/// <summary>同款商品某一規格的庫存（換尺碼／換顏色前查看是否有貨）。</summary>
+public sealed record ShopVariantStock(string Color, string Size, int Stock);
+
 /// <summary>顧客訂單摘要。</summary>
 public sealed record ShopOrderSummary(
     int OrderId,

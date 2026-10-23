@@ -108,6 +108,12 @@ public enum AiAnalysisFailureReason
     /// 已達 AI 用量上限（0.9.109 起，系統參數「AI 用量」）。在發出 HTTP 之前就擋下，不計費、也不記用量。
     /// </summary>
     QuotaExceeded,
+
+    /// <summary>
+    /// 串流回應被呼叫端中途放棄（沒有取消，直接停止列舉）。只有 Agent 的 <c>AuditingChatClient</c> 會用到：
+    /// 上游已經開始計費，所以以已收到的片段記一筆用量（與 <see cref="Canceled"/> 不同，取消不記用量）。
+    /// </summary>
+    Abandoned,
 }
 
 /// <summary>Chat Completions 的 <c>role</c> 值。</summary>

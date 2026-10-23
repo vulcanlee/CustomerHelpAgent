@@ -1,0 +1,150 @@
+@using CustomerHelpAgent.Business.Services.DataAccess
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (!loaded)
+{
+    <div class="assistant-loading"><Spin /></div>
+}
+else
+{
+    <section class="assistant" aria-label="線上客服">
+        <header class="assistant-head">
+            <div class="assistant-heading">
+                <h1 class="assistant-title">線上客服</h1>
+                <p class="assistant-hint">AI 客服會查您的訂單與售後規則；建立申請前一定會先請您確認。</p>
+            </div>
+            <div class="assistant-tools">
+                <button type="button" role="switch" class="assistant-switch @(showBackstage ? "is-on" : null)"
+                        aria-checked="@(showBackstage ? "true" : "false")" data-action="toggle-backstage" @onclick="ToggleBackstageAsync">
+                    <span class="assistant-switch-track" aria-hidden="true"><span class="assistant-switch-thumb"></span></span>
+                    <span>幕後面板</span>
+                </button>
+                <button type="button" class="assistant-tool-button" data-action="new-conversation" disabled="@busy" @onclick="OnNewConversationAsync">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="add_comment" />
+                    <span>新對話</span>
+                </button>
+            </div>
+        </header>
+
+        @if (aiError is not null)
+        {
+            <div class="assistant-notice" role="alert">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="info" />
+                <span>AI 服務尚未設定，請洽管理員。</span>
+            </div>
+        }
+
+        <div class="assistant-body @(showBackstage ? "with-backstage" : null)">
+            <div class="assistant-chat">
+                @* 單一子元素＋column-reverse：內容增加時捲軸停在底部，不需要 JS 捲動。 *@
+                <div class="chat-scroll">
+                    <div class="chat-log" role="log" aria-live="polite" aria-label="對話內容">
+                        @if (entries.Count == 0 && streaming is null)
+                        {
+                            <p class="chat-empty">您好，我是 AI 售後客服。可以告訴我想換尺碼、換顏色、退貨，或商品有品質問題，我會先查您的訂單與規則。</p>
+                        }
+
+                        @foreach (var entry in entries)
+                        {
+                            switch (entry.Kind)
+                            {
+                                case EntryKind.User:
+                                    <div class="chat-row is-user">
+                                        <div class="chat-bubble chat-bubble-user">@entry.Text</div>
+                                    </div>
+                                    break;
+                                case EntryKind.Agent:
+                                    @* 模型文字一律經 AiMarkdownRenderer.ToSafeHtml（速查表 §6.5），不可直接丟進 MarkupString。 *@
+                                    <div class="chat-row is-agent">
+                                        <div class="chat-bubble chat-bubble-agent">@((MarkupString)entry.Html)</div>
+                                    </div>
+                                    break;
+                                case EntryKind.System:
+                                    <p class="chat-system" role="note">
+                                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="info" />
+                                        <span>@entry.Text</span>
+                                    </p>
+                                    break;
+                                case EntryKind.PolicyCards:
+                                    <div class="chat-cards">
+                                        @foreach (var card in entry.PolicyCards)
+                                        {
+                                            <AgentPolicyCardView Card="card" />
+                                        }
+                                    </div>
+                                    break;
+                                case EntryKind.Confirmation when entry.Card is not null:
+                                    <AgentConfirmCardView Card="entry.Card" State="entry.CardState" RequestNo="@entry.RequestNo"
+                                                          Disabled="@(busy || aiError is not null)"
+                                                          OnConfirm="() => OnConfirmCardAsync(entry, true)"
+                                                          OnCancel="() => OnConfirmCardAsync(entry, false)" />
+                                    break;
+                            }
+                        }
+
+                        @if (streaming is not null)
+                        {
+                            @* 串流中的預覽一律純文字；完成後以最終回覆重繪。 *@
+                            <div class="chat-row is-agent">
+                                <div class="chat-bubble chat-bubble-streaming" aria-busy="true">@(streaming.Length == 0 ? "客服正在處理…" : streaming.ToString())</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (awaitingPhotos)
+                {
+                    <div class="chat-photos" data-role="photo-upload">
+                        <span class="chat-photos-label">上傳照片</span>
+                        <p class="chat-photos-hint">請拍清楚有問題的地方，最多 @AfterSalesRequestService.MaxFileCount 張，每張 10 MB 以內（jpg、png、webp）。</p>
+                        <InputFile OnChange="OnPhotosSelectedAsync" multiple accept="@ShopPhotoPicker.Accept" disabled="@busy" />
+                        @if (pendingPhotos.Count > 0)
+                        {
+                            <ul class="chat-photo-list">
+                                @foreach (var photo in pendingPhotos)
+                                {
+                                    <li class="chat-photo">
+                                        <span>@photo.Name（@ShopPhotoPicker.FormatSize(photo.Size)）</span>
+                                        <CrudActionButton Title="移除" Icon="close" Danger OnClick="@(() => RemovePhoto(photo.Id))" />
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        <div>
+                            <button type="button" class="chat-send" data-action="send-photos"
+                                    disabled="@(busy || aiError is not null || pendingPhotos.Count == 0)" @onclick="OnSendPhotosAsync">
+                                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="upload" />
+                                <span>送出照片</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <form class="chat-composer" data-role="composer" @onsubmit="OnSendAsync">
+                    <input type="text" class="chat-input" aria-label="輸入訊息" maxlength="@MaxMessageLength"
+                           placeholder="@ComposerPlaceholder" disabled="@(!CanType)"
+                           @bind="draft" @bind:event="oninput" />
+                    @* 送出鈕不依「是否有輸入」停用：預設按鈕停用時，瀏覽器不會以 Enter 送出表單（打完字立刻按 Enter 會被吃掉）；空白訊息由 OnSendAsync 忽略。 *@
+                    <button type="submit" class="chat-send" data-action="send" disabled="@(!CanType)">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="send" />
+                        <span>送出</span>
+                    </button>
+                </form>
+            </div>
+
+            @if (showBackstage)
+            {
+                <AgentBackstagePanel Events="traceEvents" />
+            }
+        </div>
+    </section>
+}

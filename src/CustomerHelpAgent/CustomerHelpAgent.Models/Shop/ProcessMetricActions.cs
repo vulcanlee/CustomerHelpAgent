@@ -16,6 +16,12 @@ public static class ProcessMetricActions
     public const string ViewShipment = "ViewShipment";
     public const string UrgeShipment = "UrgeShipment";
 
+    // 顧客（AI 售後客服 Agent）
+    public const string AgentSendMessage = "AgentSendMessage";
+    public const string AgentConfirm = "AgentConfirm";
+    public const string AgentReject = "AgentReject";
+    public const string AgentUploadPhoto = "AgentUploadPhoto";
+
     // 客服
     public const string OpenRequest = "OpenRequest";
     public const string ViewOrder = "ViewOrder";

@@ -1,0 +1,74 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）；來源色標在 AgentSourceTag。 */
+.backstage-timeline {
+    display: grid;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.backstage-empty {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+.backstage-row {
+    border-bottom: 1px dashed var(--shop-line);
+    display: grid;
+    gap: 0.3rem;
+    padding-bottom: 0.5rem;
+}
+
+.backstage-row.is-stop {
+    background: var(--shop-tint);
+    border-bottom: none;
+    border-radius: 10px;
+    padding: 0.4rem 0.5rem;
+}
+
+.backstage-line {
+    align-items: baseline;
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: auto 1fr auto;
+}
+
+.backstage-text {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.backstage-time {
+    color: var(--shop-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.backstage-raw-toggle {
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--shop-accent);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 0.8rem;
+    gap: 0.2rem;
+    justify-self: start;
+    padding: 0;
+}
+
+.backstage-raw {
+    background: var(--shop-code-bg);
+    border-radius: 10px;
+    color: var(--shop-code-text);
+    font-family: var(--shop-code-font);
+    font-size: 0.75rem;
+    margin: 0;
+    max-height: 18rem;
+    overflow: auto;
+    padding: 0.6rem 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

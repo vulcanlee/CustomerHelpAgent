@@ -1,5 +1,5 @@
+using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Models.Shop;
-using CustomerHelpAgent.Web.Components.Views.Shop;
 
 namespace CustomerHelpAgent.Tests.Components;
 
@@ -16,7 +16,7 @@ public sealed class ShopOrderDetailViewTests
     {
         var detail = Detail(Now.AddMinutes(-minutesSinceShipped), delivered ? Now.AddDays(-1) : null);
 
-        Assert.Equal(expected, ShopOrderDetailView.CanRequestUrge(detail, Now));
+        Assert.Equal(expected, Urge(detail));
     }
 
     [Fact]
@@ -24,14 +24,17 @@ public sealed class ShopOrderDetailViewTests
     {
         var detail = Detail(shippedAt: null, deliveredAt: null) with { Shipment = null };
 
-        Assert.False(ShopOrderDetailView.CanRequestUrge(detail, Now));
+        Assert.False(Urge(detail));
     }
 
     [Fact]
     public void CanRequestUrge_NotYetShipped_ShouldBeFalse()
     {
-        Assert.False(ShopOrderDetailView.CanRequestUrge(Detail(shippedAt: null, deliveredAt: null), Now));
+        Assert.False(Urge(Detail(shippedAt: null, deliveredAt: null)));
     }
+
+    private static bool Urge(ShopOrderDetail detail)
+        => AfterSalesEligibility.CanRequestUrge(detail.Summary.DeliveredAt, detail.Shipment?.ShippedAt, Now);
 
     private static ShopOrderDetail Detail(DateTime? shippedAt, DateTime? deliveredAt) => new(
         new ShopOrderSummary(1, "SO-TEST-0001", Now.AddDays(-12), deliveredAt, "配送中",

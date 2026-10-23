@@ -15,6 +15,7 @@ using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Agents;
+using CustomerHelpAgent.Web.Agents.AfterSales;
 using CustomerHelpAgent.Web.Ai;
 using CustomerHelpAgent.Web.Auth;
 using CustomerHelpAgent.Web.Backup;
@@ -80,6 +81,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAiExceptionAnalysisService, AiExceptionAnalysisService>();
         services.AddScoped<IAiHealthProbe, AiHealthProbe>();
         services.AddScoped<AgentChatClientFactory>();
+        // 售後 Agent 對話中上傳、尚未送出的照片（1.0.4 起，跨 circuit 共用記憶體）。
+        // AfterSalesAgentTools 不註冊：它帶著每輪的 AfterSalesToolContext，由 Runner 以已註冊的服務逐輪建立。
+        services.AddSingleton<AgentPhotoInbox>();
+        // 售後 Agent 的執行底座：每次呼叫建一個 Agent，會話由 AgentSessionStore 還原（1.0.4 起）。
+        services.AddScoped<AfterSalesAgentRunner>();
 
         // 全專案第一個 AddHttpClient。刻意用 **named client** 而非 typed client：
         // 1. AddHttpClient<IAiLogAnalysisService, AiLogAnalysisService>() 會把服務註冊成
@@ -177,6 +183,8 @@ public static class ServiceCollectionExtensions
         // 售後申請（1.0.3 起）：照片實體檔一律經 AfterSalesFileStore（含根目錄檢查）；埋點失敗不中斷流程。
         services.AddScoped<AfterSalesFileStore>();
         services.AddScoped<AfterSalesRequestService>();
+        services.AddScoped<AgentTraceService>();
+        services.AddScoped<AgentSessionStore>();
         services.AddScoped<ProcessMetricService>();
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
@@ -324,6 +332,7 @@ public static class ServiceCollectionExtensions
         services.AddValidatedOptions<ForwardedHeadersSettings, ForwardedHeadersSettingsValidator>(configuration, ForwardedHeadersSettings.SectionName);
         services.AddValidatedOptions<ScheduledJobSettings, ScheduledJobSettingsValidator>(configuration, ScheduledJobSettings.SectionName);
         services.AddValidatedOptions<DemoSettings, DemoSettingsValidator>(configuration, DemoSettings.SectionName);
+        services.AddValidatedOptions<AfterSalesAgentSettings, AfterSalesAgentSettingsValidator>(configuration, AfterSalesAgentSettings.SectionName);
         services.AddOptions<SecuritySettings>().Bind(configuration.GetSection(SecuritySettings.SectionName)).ValidateOnStart();
         services.AddOptions<SwaggerSettings>().Bind(configuration.GetSection(SwaggerSettings.SectionName)).ValidateOnStart();
 

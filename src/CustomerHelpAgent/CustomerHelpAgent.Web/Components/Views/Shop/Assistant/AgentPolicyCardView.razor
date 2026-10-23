@@ -1,0 +1,36 @@
+@using CustomerHelpAgent.Web.Agents.AfterSales
+
+@*
+    規則卡：條文原文來自工具結果（get_effective_policy），不採模型轉述；簽收天數與資格結果由程式計算。
+    全部以純文字輸出（Razor 會跳脫），不經 MarkupString。
+*@
+<article class="agent-policy-card" aria-label="適用規則：@Card.Title">
+    <header class="agent-policy-head">
+        <span class="agent-policy-icon" aria-hidden="true"><MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="gavel" /></span>
+        <h3 class="agent-policy-title">@Card.Title</h3>
+        <span class="agent-policy-version">第 @Card.Version 版</span>
+    </header>
+
+    <p class="agent-policy-content">@Card.Content</p>
+
+    <dl class="agent-policy-facts">
+        <div><dt>來源</dt><dd>@Card.Source</dd></div>
+        <div><dt>生效日</dt><dd>@Card.EffectiveFrom.ToString("yyyy/MM/dd")</dd></div>
+        <div><dt>簽收</dt><dd>@(Card.DaysSinceDelivery is { } days ? $"簽收第 {days} 天（程式計算）" : "尚未簽收")</dd></div>
+    </dl>
+
+    @if (Card.UnmetReasons.Count > 0)
+    {
+        <p class="agent-policy-note is-unmet">不符合：@string.Join("；", Card.UnmetReasons)</p>
+    }
+
+    @if (Card.MissingInfo.Count > 0)
+    {
+        <p class="agent-policy-note">尚缺資訊：@string.Join("、", Card.MissingInfo)</p>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public AgentPolicyCard Card { get; set; } = default!;
+}

@@ -1,0 +1,325 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.assistant-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.assistant {
+    display: grid;
+    gap: 1rem;
+}
+
+.assistant-head {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+}
+
+.assistant-heading {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.assistant-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.assistant-hint {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.assistant-tools {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.assistant-switch,
+.assistant-tool-button {
+    align-items: center;
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.4rem;
+    padding: 0.3rem 0.9rem;
+}
+
+.assistant-switch:hover,
+.assistant-switch:focus-visible,
+.assistant-tool-button:hover:not(:disabled),
+.assistant-tool-button:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}
+
+.assistant-tool-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.assistant-switch-track {
+    background: var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    display: inline-flex;
+    height: 1.1rem;
+    padding: 0.15rem;
+    transition: background 0.2s;
+    width: 2rem;
+}
+
+.assistant-switch-thumb {
+    background: var(--shop-surface);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px var(--shop-line);
+    height: 0.8rem;
+    transition: transform 0.2s;
+    width: 0.8rem;
+}
+
+.assistant-switch.is-on .assistant-switch-track {
+    background: var(--shop-accent);
+}
+
+.assistant-switch.is-on .assistant-switch-thumb {
+    transform: translateX(0.9rem);
+}
+
+.assistant-notice {
+    align-items: center;
+    background: var(--shop-warn-bg);
+    border: 1px solid var(--shop-warn-line);
+    border-radius: 14px;
+    color: var(--shop-text);
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+}
+
+/* 窄螢幕：幕後面板接在對話下方；寬螢幕：左對話、右面板並排。 */
+.assistant-body {
+    align-items: start;
+    display: grid;
+    gap: 1rem;
+}
+
+@media (min-width: 900px) {
+    .assistant-body.with-backstage {
+        grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+    }
+}
+
+.assistant-chat {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.chat-scroll {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: 65vh;
+    min-height: 16rem;
+    overflow-y: auto;
+}
+
+.chat-log {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.25rem;
+}
+
+.chat-empty {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.chat-row {
+    display: flex;
+}
+
+.chat-row.is-user {
+    justify-content: flex-end;
+}
+
+.chat-bubble {
+    border-radius: 18px;
+    line-height: 1.7;
+    max-width: 85%;
+    overflow-wrap: anywhere;
+    padding: 0.55rem 0.9rem;
+}
+
+.chat-bubble-user {
+    background: var(--shop-accent);
+    border-bottom-right-radius: 6px;
+    color: var(--shop-on-accent);
+    white-space: pre-wrap;
+}
+
+.chat-bubble-agent,
+.chat-bubble-streaming {
+    background: var(--shop-tint);
+    border: 1px solid var(--shop-line);
+    border-bottom-left-radius: 6px;
+    color: var(--shop-text);
+}
+
+.chat-bubble-streaming {
+    color: var(--shop-muted);
+    white-space: pre-wrap;
+}
+
+/* Markdown 渲染出的段落與清單：去掉預設外距，避免泡泡上下多一段空白。 */
+.chat-bubble-agent ::deep p,
+.chat-bubble-agent ::deep ul,
+.chat-bubble-agent ::deep ol {
+    margin: 0 0 0.4rem;
+}
+
+.chat-bubble-agent ::deep :last-child {
+    margin-bottom: 0;
+}
+
+.chat-bubble-agent ::deep a {
+    color: var(--shop-accent);
+}
+
+.chat-system {
+    align-items: flex-start;
+    background: var(--shop-source-program-bg);
+    border-radius: 12px;
+    color: var(--shop-source-program);
+    display: flex;
+    font-size: 0.875rem;
+    gap: 0.4rem;
+    justify-self: center;
+    margin: 0;
+    max-width: 92%;
+    padding: 0.45rem 0.85rem;
+}
+
+.chat-cards {
+    display: grid;
+    gap: 0.5rem;
+    max-width: 92%;
+}
+
+.chat-photos {
+    background: var(--shop-tint);
+    border: 1px dashed var(--shop-accent);
+    border-radius: 16px;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+}
+
+.chat-photos-label {
+    color: var(--shop-text);
+    font-weight: 700;
+}
+
+.chat-photos-hint {
+    color: var(--shop-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.chat-photo-list {
+    display: grid;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.chat-photo {
+    align-items: center;
+    background: var(--shop-surface);
+    border-radius: 14px;
+    color: var(--shop-text);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.3rem 0.5rem 0.3rem 1rem;
+}
+
+.chat-composer {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.chat-input {
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-text);
+    flex: 1 1 auto;
+    font: inherit;
+    min-width: 0;
+    padding: 0.5rem 1rem;
+}
+
+.chat-input:focus-visible {
+    border-color: var(--shop-accent);
+    box-shadow: 0 0 0 3px var(--shop-accent-soft);
+    outline: none;
+}
+
+.chat-input:disabled {
+    background: var(--shop-tint);
+    cursor: not-allowed;
+}
+
+.chat-send {
+    align-items: center;
+    background: var(--shop-accent);
+    border: 1px solid var(--shop-accent);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-on-accent);
+    cursor: pointer;
+    display: inline-flex;
+    flex-shrink: 0;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.4rem 1rem;
+}
+
+.chat-send:hover:not(:disabled),
+.chat-send:focus-visible {
+    box-shadow: 0 0 0 3px var(--shop-accent-soft);
+}
+
+.chat-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+@media (max-width: 640.98px) {
+    .assistant-chat {
+        padding: 0.75rem;
+    }
+
+    .chat-bubble {
+        max-width: 92%;
+    }
+}
