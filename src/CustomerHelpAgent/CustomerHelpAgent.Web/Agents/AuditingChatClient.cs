@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using CustomerHelpAgent.Business.Helpers;
@@ -172,9 +173,11 @@ internal sealed class AuditingChatClient : DelegatingChatClient
         }
 
         // ⚠️ ChatClientAgent 的 instructions 走 ChatOptions.Instructions 而不是 system 訊息，要一起記才看得到完整提示詞。
+        // ⚠️ 照片（DataContent）在快照裡換成佔位（見 MaskImages），只影響記錄，送給模型的內容不變。
         var requestBody = Snapshot(
             new { instructions = options?.Instructions, messages, tools = options?.Tools?.Select(t => t.Name) },
-            "RequestBody");
+            "RequestBody",
+            maskImages: messages.Any(m => m.Contents.Any(c => c is DataContent)));
 
         var capture = new AiCallCapture(
             operation,
@@ -293,11 +296,18 @@ internal sealed class AuditingChatClient : DelegatingChatClient
     /// 序列化記錄用的快照。失敗（例如工具帶回未登錄的 <see cref="AIContent"/> 子類）改存
     /// <c>{"snapshotError":"&lt;ExceptionType&gt;"}</c> 並記警告 —— 記錄失敗不可影響模型呼叫本身。
     /// </summary>
-    private string Snapshot<T>(T value, string part)
+    private string Snapshot<T>(T value, string part, bool maskImages = false)
     {
         try
         {
-            return JsonSerializer.Serialize(value, AIJsonUtilities.DefaultOptions);
+            if (!maskImages)
+            {
+                return JsonSerializer.Serialize(value, AIJsonUtilities.DefaultOptions);
+            }
+
+            var node = JsonSerializer.SerializeToNode(value, AIJsonUtilities.DefaultOptions);
+            MaskImages(node);
+            return node?.ToJsonString(AIJsonUtilities.DefaultOptions) ?? "null";
         }
         catch (Exception ex)
         {
@@ -307,6 +317,60 @@ internal sealed class AuditingChatClient : DelegatingChatClient
                 operation, part);
             return JsonSerializer.Serialize(new { snapshotError = ex.GetType().Name });
         }
+    }
+
+    /// <summary>
+    /// 把快照裡的 <see cref="DataContent"/>（序列化為 <c>"$type":"data"</c>＋base64 data URI，一張照片就是數 MB）換成
+    /// <c>{"type":"image","mediaType":"…","bytes":長度}</c>：AI 對話紀錄不存照片本身，只看得出送了幾張、什麼格式、多大。
+    /// </summary>
+    private static void MaskImages(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var key in obj.Select(x => x.Key).ToList())
+                {
+                    if (IsDataContent(obj[key]))
+                    {
+                        obj[key] = ImagePlaceholder((JsonObject)obj[key]!);
+                    }
+                    else
+                    {
+                        MaskImages(obj[key]);
+                    }
+                }
+
+                break;
+            case JsonArray array:
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (IsDataContent(array[i]))
+                    {
+                        array[i] = ImagePlaceholder((JsonObject)array[i]!);
+                    }
+                    else
+                    {
+                        MaskImages(array[i]);
+                    }
+                }
+
+                break;
+        }
+    }
+
+    private static bool IsDataContent(JsonNode? node)
+        => node is JsonObject obj && obj["$type"] is JsonValue type && type.TryGetValue(out string? value) && value == "data";
+
+    private static JsonObject ImagePlaceholder(JsonObject data)
+    {
+        var uri = data["uri"] is JsonValue u && u.TryGetValue(out string? text) ? text : string.Empty;
+        var comma = uri.IndexOf(',', StringComparison.Ordinal);
+        var mediaType = data["mediaType"] is JsonValue m && m.TryGetValue(out string? declared)
+            ? declared
+            : uri.StartsWith("data:", StringComparison.Ordinal) && comma > 0 ? uri[5..comma].Split(';')[0] : null;
+        var base64 = comma >= 0 ? uri[(comma + 1)..] : string.Empty;
+        var bytes = base64.Length / 4 * 3 - (base64.EndsWith("==", StringComparison.Ordinal) ? 2 : base64.EndsWith('=') ? 1 : 0);
+        return new JsonObject { ["type"] = "image", ["mediaType"] = mediaType, ["bytes"] = bytes };
     }
 
     private async Task RecordFailureAsync(

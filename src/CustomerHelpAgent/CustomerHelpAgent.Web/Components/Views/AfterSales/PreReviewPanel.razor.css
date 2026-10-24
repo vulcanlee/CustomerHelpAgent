@@ -1,0 +1,85 @@
+/* 面板內容是本元件自己的 markup，帶 scope 屬性；流程圖的樣式在 PreReviewFlowDiagram.razor.css，顏色走 theme.css 的 --prereview-*。 */
+.prereview-panel {
+    border-top: 1px solid var(--app-line);
+    padding: 0.75rem 0;
+}
+
+.prereview-heading {
+    color: var(--app-accent);
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+}
+
+.prereview-empty {
+    color: var(--app-muted);
+    margin: 0.5rem 0 0;
+}
+
+.prereview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+}
+
+.prereview-card {
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+}
+
+.prereview-card-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.prereview-card-headline {
+    overflow-wrap: anywhere;
+    color: var(--app-text);
+    font-weight: 700;
+}
+
+.prereview-card-title {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0.5rem 0 0.15rem;
+}
+
+.prereview-warning {
+    color: var(--prereview-warning);
+    font-weight: 700;
+    margin: 0.5rem 0 0;
+}
+
+.prereview-list {
+    color: var(--app-text);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.prereview-findings {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.75rem;
+}
+
+.prereview-finding summary {
+    color: var(--app-text);
+    cursor: pointer;
+}
+
+.prereview-finding p {
+    color: var(--app-text);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin: 0.35rem 0 0.15rem;
+}

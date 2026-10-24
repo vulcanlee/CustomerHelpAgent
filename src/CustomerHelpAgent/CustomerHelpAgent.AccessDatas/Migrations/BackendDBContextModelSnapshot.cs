@@ -57,6 +57,52 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("AfterSalesAttachment");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesFulfillment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AfterSalesRequestId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ReferenceNo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("RefundAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AfterSalesRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("ReferenceNo")
+                        .IsUnique();
+
+                    b.ToTable("AfterSalesFulfillment");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesPolicy", b =>
                 {
                     b.Property<int>("Id")
@@ -265,12 +311,18 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Stream")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("customer");
+
                     b.Property<string>("UsageJson")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgentRecordingId", "Sequence");
+                    b.HasIndex("AgentRecordingId", "Stream", "Sequence");
 
                     b.ToTable("AgentRecordedCall");
                 });
@@ -1078,6 +1130,104 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("Permission");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.PreReviewNodeState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Node")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PreReviewRunId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreReviewRunId", "Node")
+                        .IsUnique();
+
+                    b.ToTable("PreReviewNodeState");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.PreReviewRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AfterSalesRequestId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("CaseKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("HasWarning")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("HistoryJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PhotoJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Recommendation")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReplayRecordingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RuleJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SummaryJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WorkflowSessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkflowSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("AfterSalesRequestId", "Attempt")
+                        .IsUnique();
+
+                    b.ToTable("PreReviewRun");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProcessMetric", b =>
                 {
                     b.Property<int>("Id")
@@ -1808,6 +1958,40 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("UserTeam");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.WorkflowCheckpoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CheckpointId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ParentCheckpointId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "CheckpointId")
+                        .IsUnique();
+
+                    b.HasIndex("SessionId", "Id");
+
+                    b.ToTable("WorkflowCheckpoint");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesAttachment", b =>
                 {
                     b.HasOne("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", "AfterSalesRequest")
@@ -1817,6 +2001,24 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .IsRequired();
 
                     b.Navigation("AfterSalesRequest");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesFulfillment", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", "AfterSalesRequest")
+                        .WithMany()
+                        .HasForeignKey("AfterSalesRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AfterSalesRequest");
+
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", b =>
@@ -1949,6 +2151,28 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .IsRequired();
 
                     b.Navigation("MyUser");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.PreReviewNodeState", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.PreReviewRun", "PreReviewRun")
+                        .WithMany("Nodes")
+                        .HasForeignKey("PreReviewRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PreReviewRun");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.PreReviewRun", b =>
+                {
+                    b.HasOne("CustomerHelpAgent.AccessDatas.Models.AfterSalesRequest", "AfterSalesRequest")
+                        .WithMany()
+                        .HasForeignKey("AfterSalesRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AfterSalesRequest");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ProductVariant", b =>
@@ -2116,6 +2340,11 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.AgentRunTrace", b =>
                 {
                     b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.PreReviewRun", b =>
+                {
+                    b.Navigation("Nodes");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.Product", b =>

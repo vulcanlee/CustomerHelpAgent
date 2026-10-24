@@ -9,7 +9,7 @@ namespace CustomerHelpAgent.Web.Components.Layout;
 
 /// <summary>
 /// 顧客商店版面（售後展示 M1）。登入閘門與 <see cref="MainLayout"/> 相同：檢查完成前不渲染；
-/// 展示者若同時具後台首頁權限，另顯示「回到後台」。
+/// 展示者若同時具後台首頁權限，另顯示「回到後台」；頂端列放通知鈴鐺（M4，沿用後台的 <see cref="NotificationBell"/>，顏色取全站 --app-* 色票）。
 /// </summary>
 public partial class ShopLayout : LayoutComponentBase
 {

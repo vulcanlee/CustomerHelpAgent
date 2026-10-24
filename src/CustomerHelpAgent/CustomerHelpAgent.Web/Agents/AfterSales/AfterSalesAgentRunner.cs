@@ -1005,13 +1005,7 @@ public sealed class AfterSalesAgentRunner
         var eligibility = AfterSalesEligibility.Evaluate(policy, order.DeliveredAt, isWorn, photoCount > 0, now, shippedAt);
         if (!eligibility.IsEligible)
         {
-            var reasons = eligibility.UnmetReasons.ToList();
-            if (eligibility.MissingInfo.Count > 0)
-            {
-                reasons.Add("尚缺：" + string.Join("、", eligibility.MissingInfo));
-            }
-
-            return (null, "不符合申請條件（" + string.Join("；", reasons) + "）", false);
+            return (null, "不符合申請條件（" + AfterSalesEligibility.DescribeUnmet(eligibility) + "）", false);
         }
 
         var days = AfterSalesEligibility.DaysSinceDelivery(order.DeliveredAt, now);

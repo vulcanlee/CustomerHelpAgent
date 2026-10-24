@@ -45,6 +45,7 @@ else
                     <div><dt>商品</dt><dd>@request.ProductName（@request.Color／@request.Size）</dd></div>
                     <div><dt>申請類型</dt><dd>@TypeDetail(request)</dd></div>
                     <div class="shop-fact-wide"><dt>客服備註</dt><dd>@(string.IsNullOrWhiteSpace(request.StaffNote) ? "—" : request.StaffNote)</dd></div>
+                    <div class="shop-fact-wide"><dt>處理結果</dt><dd class="shop-request-result">@ResultText(request)</dd></div>
                 </dl>
 
                 @if (request.Status == AfterSalesStatus.NeedMoreInfo)

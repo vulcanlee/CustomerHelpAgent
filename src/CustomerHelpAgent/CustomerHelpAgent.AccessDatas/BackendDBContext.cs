@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.AccessDatas;
 
@@ -49,6 +50,7 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<ShipmentEvent> ShipmentEvent { get; set; }
     public virtual DbSet<AfterSalesPolicy> AfterSalesPolicy { get; set; }
     public virtual DbSet<AfterSalesRequest> AfterSalesRequest { get; set; }
+    public virtual DbSet<AfterSalesFulfillment> AfterSalesFulfillment { get; set; }
     public virtual DbSet<AfterSalesAttachment> AfterSalesAttachment { get; set; }
     public virtual DbSet<ProcessMetric> ProcessMetric { get; set; }
     public virtual DbSet<AgentSessionRecord> AgentSessionRecord { get; set; }
@@ -59,6 +61,9 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<AgentRecording> AgentRecording { get; set; }
     public virtual DbSet<AgentRecordedTurn> AgentRecordedTurn { get; set; }
     public virtual DbSet<AgentRecordedCall> AgentRecordedCall { get; set; }
+    public virtual DbSet<PreReviewRun> PreReviewRun { get; set; }
+    public virtual DbSet<PreReviewNodeState> PreReviewNodeState { get; set; }
+    public virtual DbSet<WorkflowCheckpoint> WorkflowCheckpoint { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -339,6 +344,16 @@ public partial class BackendDBContext : DbContext
             entity.HasOne(x => x.AppliedPolicy).WithMany().HasForeignKey(x => x.AppliedPolicyId);
         });
 
+        modelBuilder.Entity<AfterSalesFulfillment>(entity =>
+        {
+            // 一筆申請最多一張處理單：併發核准時由唯一索引做最後防線。
+            entity.HasIndex(x => x.AfterSalesRequestId).IsUnique();
+            entity.HasIndex(x => x.ReferenceNo).IsUnique();
+            entity.HasOne(x => x.AfterSalesRequest).WithMany().HasForeignKey(x => x.AfterSalesRequestId);
+            entity.HasOne(x => x.ProductVariant).WithMany().HasForeignKey(x => x.ProductVariantId);
+            entity.Property(x => x.RefundAmount).HasPrecision(18, 2);
+        });
+
         modelBuilder.Entity<AfterSalesAttachment>(entity =>
         {
             entity.HasOne(x => x.AfterSalesRequest).WithMany(x => x.Attachments).HasForeignKey(x => x.AfterSalesRequestId);
@@ -375,6 +390,28 @@ public partial class BackendDBContext : DbContext
         });
         #endregion
 
+        #region AI 初審 Workflow（M4）
+        // 初審一輪屬於申請（外鍵）；checkpoint 以 SessionId 對應 WorkflowSessionId，刻意不設外鍵。
+        modelBuilder.Entity<PreReviewRun>(entity =>
+        {
+            entity.HasIndex(x => new { x.AfterSalesRequestId, x.Attempt }).IsUnique();
+            entity.HasIndex(x => x.WorkflowSessionId).IsUnique();
+            entity.HasOne(x => x.AfterSalesRequest).WithMany().HasForeignKey(x => x.AfterSalesRequestId);
+        });
+
+        modelBuilder.Entity<PreReviewNodeState>(entity =>
+        {
+            entity.HasIndex(x => new { x.PreReviewRunId, x.Node }).IsUnique();
+            entity.HasOne(x => x.PreReviewRun).WithMany(x => x.Nodes).HasForeignKey(x => x.PreReviewRunId);
+        });
+
+        modelBuilder.Entity<WorkflowCheckpoint>(entity =>
+        {
+            entity.HasIndex(x => new { x.SessionId, x.Id });
+            entity.HasIndex(x => new { x.SessionId, x.CheckpointId }).IsUnique();
+        });
+        #endregion
+
         #region 售後展示控制與錄製（1.0.5 起）
         // 固定單列（Id = 1），由 DemoControlService 讀寫；Id 不自動產生。
         modelBuilder.Entity<DemoControlState>(entity =>
@@ -399,7 +436,9 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<AgentRecordedCall>(entity =>
         {
             entity.HasOne(x => x.AgentRecording).WithMany(x => x.Calls).HasForeignKey(x => x.AgentRecordingId);
-            entity.HasIndex(x => new { x.AgentRecordingId, x.Sequence });
+            // M4 以前的資料列都是顧客端 Agent 的呼叫。
+            entity.Property(x => x.Stream).HasDefaultValue(AgentRecordingStreams.Customer);
+            entity.HasIndex(x => new { x.AgentRecordingId, x.Stream, x.Sequence });
         });
         #endregion
 

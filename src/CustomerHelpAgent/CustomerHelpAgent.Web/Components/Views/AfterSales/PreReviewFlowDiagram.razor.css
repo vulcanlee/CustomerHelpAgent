@@ -1,0 +1,107 @@
+/* 流程圖：階段由左到右（窄螢幕改為由上到下），並行的三路在同一階段內直排。顏色一律走 theme.css 的 --prereview-*。 */
+.prereview-flow {
+    align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.prereview-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    justify-content: center;
+    position: relative;
+}
+
+.prereview-stage:not(:last-child)::after {
+    color: var(--prereview-arrow);
+    content: "→";
+    position: absolute;
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.prereview-node {
+    background: var(--prereview-waiting-bg);
+    border: 1px solid var(--prereview-waiting-line);
+    border-radius: var(--app-radius-control);
+    color: var(--prereview-waiting);
+    display: grid;
+    gap: 2px;
+    min-width: 84px;
+    padding: 6px 10px;
+}
+
+.prereview-node-running {
+    background: var(--prereview-running-bg);
+    border-color: var(--prereview-running-line);
+    color: var(--prereview-running);
+}
+
+.prereview-node-done {
+    background: var(--prereview-done-bg);
+    border-color: var(--prereview-done-line);
+    color: var(--prereview-done);
+}
+
+.prereview-node-failed {
+    background: var(--prereview-failed-bg);
+    border-color: var(--prereview-failed-line);
+    color: var(--prereview-failed);
+}
+
+.prereview-node-skipped {
+    border-style: dashed;
+}
+
+.prereview-node-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.prereview-node-status {
+    font-size: 0.75rem;
+}
+
+.prereview-badge {
+    border-radius: var(--app-radius-pill);
+    font-size: 0.7rem;
+    justify-self: start;
+    line-height: 1.5;
+    padding: 0 8px;
+}
+
+.prereview-badge-ai {
+    background: var(--prereview-badge-ai-bg);
+    color: var(--prereview-badge-ai);
+}
+
+.prereview-badge-program {
+    background: var(--prereview-badge-program-bg);
+    color: var(--prereview-badge-program);
+}
+
+.prereview-badge-human {
+    background: var(--prereview-badge-human-bg);
+    color: var(--prereview-badge-human);
+}
+
+@media (max-width: 640.98px) {
+    .prereview-flow {
+        flex-direction: column;
+    }
+
+    .prereview-stage:not(:last-child)::after {
+        content: "↓";
+        left: 50%;
+        right: auto;
+        top: auto;
+        bottom: -14px;
+        transform: translateX(-50%);
+    }
+}

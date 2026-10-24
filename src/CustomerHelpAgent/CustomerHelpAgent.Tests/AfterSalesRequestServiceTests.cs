@@ -120,6 +120,14 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
             NullLogger<AfterSalesRequestService>.Instance);
     }
 
+    /// <summary>客服（<see cref="StaffUserId"/>）決定：M4 起唯一的寫入點 <see cref="AfterSalesDecisionService.ApplyAsync"/>（審核頁經協調器呼叫它）。</summary>
+    private Task<DecisionResult> DecideAsync(int requestId, StaffDecisionKind kind, string? note)
+    {
+        var currentUser = new CurrentUserService { CurrentUser = new CurrentUser { Id = StaffUserId, Account = "agent1" } };
+        return TestDecisionService.Create(new TestDbContextFactory(connection), audit, currentUser, new ManualTimeProvider(UtcNow))
+            .ApplyAsync(requestId, kind, note, StaffUserId);
+    }
+
     private SubmitAfterSalesInput SizeExchange(int itemId, string? targetSize = "27") => new()
     {
         CaseKey = Guid.NewGuid(),
@@ -243,7 +251,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var id = submitted.RequestId!.Value;
 
-        var moreInfo = await service.RequestMoreInfoAsync(id, "請提供鞋底照片");
+        var moreInfo = await DecideAsync(id, StaffDecisionKind.NeedMoreInfo, "請提供鞋底照片");
         Assert.True(moreInfo.Success, moreInfo.Message);
         Assert.Equal(AfterSalesStatus.NeedMoreInfo, (await service.GetReviewDetailAsync(id))!.Status);
 
@@ -274,9 +282,9 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var service = CreateService();
         var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var id = submitted.RequestId!.Value;
-        await service.RequestMoreInfoAsync(id, "請補照片");
+        await DecideAsync(id, StaffDecisionKind.NeedMoreInfo, "請補照片");
 
-        var result = await service.DecideAsync(id, approve: true, note: null);
+        var result = await DecideAsync(id, StaffDecisionKind.Approve, null);
 
         Assert.False(result.Success);
         Assert.Equal("這筆申請的狀態已經變更，請重新整理後再操作。", result.Message);
@@ -293,7 +301,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var id = submitted.RequestId!.Value;
 
-        var result = await service.DecideAsync(id, approve: false, note: "已穿著");
+        var result = await DecideAsync(id, StaffDecisionKind.Reject, "已穿著");
 
         Assert.True(result.Success, result.Message);
         await using var ctx = NewContext();
@@ -303,7 +311,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Assert.Equal(LocalNow, row.DecidedAt);
         Assert.Equal(StaffUserId, row.DecidedByUserId);
         Assert.Contains(audit.Entries, e => e.Action == AuditActions.Shop.RequestDecide && e.ActorUserId == StaffUserId);
-        Assert.False((await service.DecideAsync(id, approve: true, note: null)).Success);
+        Assert.False((await DecideAsync(id, StaffDecisionKind.Approve, null)).Success);
     }
 
     [Fact]
@@ -321,7 +329,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
             IsWorn = false,
             Description = "不喜歡",
         }, []);
-        await service.RequestMoreInfoAsync(second.RequestId!.Value, "補件");
+        await DecideAsync(second.RequestId!.Value, StaffDecisionKind.NeedMoreInfo, "補件");
 
         var submitted = await service.GetReviewQueueAsync(new DataRequest { CurrentPage = 1, PageSize = 1, Take = 1 }, AfterSalesStatus.Submitted);
         var all = await service.GetReviewQueueAsync(new DataRequest { CurrentPage = 1, PageSize = 10 }, null);
@@ -384,7 +392,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Assert.True(first.Success, first.Message);
 
         var whileSubmitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), [Photo()]);
-        await service.RequestMoreInfoAsync(first.RequestId!.Value, "請補照片");
+        await DecideAsync(first.RequestId!.Value, StaffDecisionKind.NeedMoreInfo, "請補照片");
         var whileNeedMoreInfo = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
 
         var expected = new SubmitResult(false, $"這個商品已有處理中的同類申請（{first.RequestNo}），請到「我的申請」查看。", null, null);
@@ -406,7 +414,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         Assert.Null(await service.GetOpenRequestNoAsync(bob, aliceItemId, AfterSalesType.SizeExchange));
         Assert.Null(await service.GetOpenRequestNoAsync(alice, aliceItemId, AfterSalesType.ReturnRefund));
 
-        Assert.True((await service.DecideAsync(first.RequestId!.Value, approve: true, note: null)).Success);
+        Assert.True((await DecideAsync(first.RequestId!.Value, StaffDecisionKind.Approve, null)).Success);
         Assert.Null(await service.GetOpenRequestNoAsync(alice, aliceItemId, AfterSalesType.SizeExchange));
     }
 
@@ -415,7 +423,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
     {
         var service = CreateService();
         var first = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
-        Assert.True((await service.DecideAsync(first.RequestId!.Value, approve: true, note: null)).Success);
+        Assert.True((await DecideAsync(first.RequestId!.Value, StaffDecisionKind.Approve, null)).Success);
 
         var again = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
 
@@ -478,7 +486,7 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var service = CreateService();
         var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var id = submitted.RequestId!.Value;
-        await service.RequestMoreInfoAsync(id, "請補照片");
+        await DecideAsync(id, StaffDecisionKind.NeedMoreInfo, "請補照片");
         var oversize = new AfterSalesUploadFile
         {
             FileName = "big.png",
@@ -499,10 +507,10 @@ public sealed class AfterSalesRequestServiceTests : IAsyncLifetime
         var service = CreateService();
         var submitted = await service.SubmitAsync(alice, SizeExchange(aliceItemId), []);
         var id = submitted.RequestId!.Value;
-        await service.RequestMoreInfoAsync(id, "請補鞋底照片");
+        await DecideAsync(id, StaffDecisionKind.NeedMoreInfo, "請補鞋底照片");
         await service.ResubmitAsync(alice, id, null, "已補", [Photo()]);
 
-        var result = await service.DecideAsync(id, approve: true, note: "  ");
+        var result = await DecideAsync(id, StaffDecisionKind.Approve, "  ");
 
         Assert.True(result.Success, result.Message);
         await using var ctx = NewContext();

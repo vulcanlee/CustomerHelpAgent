@@ -60,17 +60,27 @@ public sealed class AgentChatClientFactory
     /// <summary>設定的模型（<c>AiSettings:Model</c>，Azure 為部署名稱）；錄製在回應沒有帶模型名稱時用它。</summary>
     public string ConfiguredModel => aiOptions.CurrentValue.Model;
 
+    /// <param name="model">
+    /// 改用另一個模型（Azure 為部署名稱，例如 AI 初審照片節點的 <c>AfterSalesAgentSettings.VisionModelOverride</c>，由呼叫端解析好再傳入）；
+    /// null＝沿用 <c>AiSettings:Model</c>。端點、金鑰、逾時都相同，Token 用量與 AI 對話紀錄記的是實際使用的模型。
+    /// </param>
     public IChatClient Create(
         string operation,
         Guid conversationId,
         AgentApiStyle apiStyle = AgentApiStyle.ChatCompletions,
-        string? reasoningEffort = null)
+        string? reasoningEffort = null,
+        string? model = null)
     {
         var settings = aiOptions.CurrentValue;
         var error = AiChatEndpoint.Validate(settings);
         if (error is not null)
         {
             throw new InvalidOperationException(error);
+        }
+
+        if (model is not null)
+        {
+            settings = settings.WithModel(model);
         }
 
         var inner = InnerClientFactory(settings, apiStyle);

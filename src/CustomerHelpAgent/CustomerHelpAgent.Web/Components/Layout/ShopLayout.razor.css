@@ -1,4 +1,4 @@
-/* 顧客商店版面。顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+/* 顧客商店版面。顏色一律取 theme.css 的別名（速查表 §6.9）：本檔用 --shop-*，頂端列內的通知鈴鐺（NotificationBell）用全站 --app-*。 */
 .shop-page {
     background: var(--shop-page);
     display: flex;

@@ -498,6 +498,60 @@ public sealed class AgentRecordingTests : IAsyncLifetime
         Assert.All(stored, text => Assert.All(personal, value => Assert.DoesNotContain(value, text, StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// AI 初審（M4）：模型節點記在顧客會話（SessionKey＝申請的 CaseKey）的同一份錄製裡，各節點各自一條 stream、各自從 1 編號；
+    /// 顧客端的呼叫維持 customer stream，取用時互不混入（既有的回放只讀 customer）。
+    /// </summary>
+    [Fact]
+    public async Task Recording_PreReviewCalls_StoredPerStream()
+    {
+        var service = CreateRecordingService();
+        var demo = LiveDemo();
+        var key = await RunFlagshipAsync(CreateRunner(demo, recordingService: service));
+        int requestId;
+        await using (var db = factory.CreateDbContext())
+        {
+            requestId = await db.AfterSalesRequest.Where(x => x.CaseKey == key).Select(x => x.Id).SingleAsync();
+        }
+
+        await PreReviewNodeKit.AddPhotoAsync(factory, fileRoot, requestId, "shoe.jpg", UtcNow.LocalDateTime);
+        var kit = PreReviewNodeKit.Create(factory, fileRoot, model, demo, new ReplayCursorStore(), new ManualTimeProvider(UtcNow));
+        var reviewCase = await kit.CaseAsync(requestId);
+        PreReviewNodeKit.ScriptThreeNodes(model);
+        var customerRequests = model.CallCount;
+
+        await kit.RunThreeNodesAsync(reviewCase);
+
+        var id = await RecordingIdAsync(key);
+        var customerCalls = await service.GetCallsAsync(id);
+        Assert.Equal(Enumerable.Range(1, 6), customerCalls.Select(x => x.Sequence));
+        Assert.Equal(model.Requests.Take(customerRequests).Select(ModelRequestDigest.Compute), customerCalls.Select(x => x.RequestDigest));
+        string[] streams = [AgentRecordingStreams.PreReviewPhoto, AgentRecordingStreams.PreReviewHistory, AgentRecordingStreams.PreReviewSummary];
+        for (var i = 0; i < streams.Length; i++)
+        {
+            var call = Assert.Single(await service.GetCallsAsync(id, streams[i]));
+            Assert.Equal(1, call.Sequence);
+            Assert.Equal(ModelRequestDigest.Compute(model.Requests[customerRequests + i]), call.RequestDigest);
+            Assert.Contains("\"text\"", call.ResponseJson);
+            // 錄製只存模型的回應與請求摘要，不存照片位元組。
+            Assert.DoesNotContain("base64", call.ResponseJson);
+            Assert.DoesNotContain("data:", call.ResponseJson);
+        }
+
+        // 請求摘要刻意不涵蓋照片（ModelRequestDigest 只取使用者文字與工具結果）：照片請求的摘要與拿掉照片後相同。
+        var photoRequest = model.Requests[customerRequests];
+        Assert.NotEmpty(photoRequest.SelectMany(m => m.Contents).OfType<DataContent>());
+        var withoutImages = photoRequest.Select(m => new ChatMessage(m.Role, m.Contents.Where(c => c is not DataContent).ToList())).ToList();
+        Assert.Equal(ModelRequestDigest.Compute(withoutImages), ModelRequestDigest.Compute(photoRequest));
+
+        await using (var db = factory.CreateDbContext())
+        {
+            Assert.Equal(
+                [AgentRecordingStreams.Customer],
+                await db.AgentRecordedCall.Where(x => x.Sequence > 1).Select(x => x.Stream).Distinct().ToListAsync());
+        }
+    }
+
     [Fact]
     public async Task RecordingClient_MergeFailureAfterStream_DoesNotFailTheCall()
     {

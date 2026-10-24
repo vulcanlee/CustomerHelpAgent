@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerHelpAgent.Web.Configuration.Validation;
 
-/// <summary><c>AfterSalesAgentSettings</c>（1.0.4 起）：步數、連續失敗次數、工具逾時、API 形式、推理強度與溫度都要在合理範圍內，寫錯就拒絕啟動。</summary>
+/// <summary><c>AfterSalesAgentSettings</c>（1.0.4 起）：步數、連續失敗次數、工具逾時、API 形式、推理強度、溫度與看圖模型名稱都要在合理範圍內，寫錯就拒絕啟動。</summary>
 public sealed class AfterSalesAgentSettingsValidator : IValidateOptions<AfterSalesAgentSettings>
 {
     private const string Section = AfterSalesAgentSettings.SectionName;
@@ -31,6 +31,12 @@ public sealed class AfterSalesAgentSettingsValidator : IValidateOptions<AfterSal
         if (options.Temperature is < 0 or > 2)
         {
             errors.Add($"{Section}:{nameof(options.Temperature)}", $"有填時必須介於 0 到 2 之間（留空表示不送），目前是 {options.Temperature}。");
+        }
+
+        // 部署名稱前後有空白多半是手誤（送出去會 404）；空字串＝沿用 AiSettings:Model。
+        if (!string.IsNullOrEmpty(options.VisionModel) && options.VisionModel != options.VisionModel.Trim())
+        {
+            errors.Add($"{Section}:{nameof(options.VisionModel)}", $"部署名稱前後不可有空白（留空字串表示沿用 AiSettings:Model），目前是「{options.VisionModel}」。");
         }
 
         return errors.ToResult();

@@ -218,6 +218,64 @@ public sealed class DemoResetServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reset_RemovesFulfilmentsAndAfterSalesNotifications()
+    {
+        await SubmitWithPhotoAsync();
+        int requestId;
+        await using (var db = factory.CreateDbContext())
+        {
+            requestId = await db.AfterSalesRequest.Select(x => x.Id).SingleAsync();
+        }
+
+        var staff = new CurrentUserService { CurrentUser = new CurrentUser { Id = 1, Account = "support" } };
+        var decision = TestDecisionService.Create(factory, audit, staff, new ManualTimeProvider(SeedUtc));
+        var approved = await decision.ApplyAsync(requestId, StaffDecisionKind.Approve, null, 1);
+        Assert.True(approved.Success, approved.Message);
+        await using (var db = factory.CreateDbContext())
+        {
+            db.Notification.AddRange(
+                new Notification { RecipientUserId = customer1, Category = NotificationCategories.AfterSalesUpdated, Title = "t", SourceKey = "aftersales:AS1:Approved", CreatedAtUtc = SeedUtc.UtcDateTime },
+                new Notification { RecipientUserId = customer1, Category = NotificationCategories.Test, Title = "keep", CreatedAtUtc = SeedUtc.UtcDateTime });
+            db.NotificationDispatch.Add(new NotificationDispatch { SourceKey = "aftersales:AS1:Approved", RecipientUserId = customer1, SentAtUtc = SeedUtc.UtcDateTime });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateResetService().ResetAsync();
+
+        Assert.True(result.Success, result.Message);
+        await using var after = factory.CreateDbContext();
+        Assert.Empty(after.AfterSalesFulfillment);
+        Assert.Equal(["keep"], await after.Notification.Select(x => x.Title).ToListAsync());
+        Assert.Empty(after.NotificationDispatch);
+    }
+
+    [Fact]
+    public async Task Reset_RemovesRunsAndCheckpoints()
+    {
+        await SubmitWithPhotoAsync();
+        int requestId;
+        await using (var db = factory.CreateDbContext())
+        {
+            requestId = await db.AfterSalesRequest.Select(x => x.Id).SingleAsync();
+        }
+
+        var runService = new PreReviewRunService(factory, new ManualTimeProvider(SeedUtc), NullLogger<PreReviewRunService>.Instance);
+        var run = (await runService.CreateAsync(requestId))!;
+        await runService.SetNodeAsync(run.Id, PreReviewNode.Intake, NodeStatus.Done);
+        await new WorkflowCheckpointService(factory, new ManualTimeProvider(SeedUtc), NullLogger<WorkflowCheckpointService>.Instance)
+            .AddAsync(run.WorkflowSessionId, "cp1", null, "{}");
+
+        var result = await CreateResetService().ResetAsync();
+
+        Assert.True(result.Success, result.Message);
+        await using var after = factory.CreateDbContext();
+        Assert.Empty(after.PreReviewNodeState);
+        Assert.Empty(after.PreReviewRun);
+        Assert.Empty(after.WorkflowCheckpoint);
+        Assert.Empty(after.AfterSalesRequest);
+    }
+
+    [Fact]
     public async Task Reset_RestoresPolicyVersionsToV1()
     {
         var policyService = CreatePolicyService(new ManualTimeProvider(SeedUtc.AddDays(1)));

@@ -16,6 +16,8 @@ using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Agents.AfterSales;
+using CustomerHelpAgent.Web.Agents.PreReview;
+using CustomerHelpAgent.Web.Agents.StaffAssistant;
 using CustomerHelpAgent.Web.Ai;
 using CustomerHelpAgent.Web.Auth;
 using CustomerHelpAgent.Web.Backup;
@@ -91,6 +93,24 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDemoResetParticipant>(sp => sp.GetRequiredService<ReplayCursorStore>());
         // 售後 Agent 的執行底座：每次呼叫建一個 Agent，會話由 AgentSessionStore 還原（1.0.4 起）。
         services.AddScoped<AfterSalesAgentRunner>();
+        // AI 初審 Workflow（M4）：進度訊號跨 circuit 共用（singleton）；Workflow 每次執行都由 factory 重建，runner 在 worker 自己的 scope 解析。
+        services.AddSingleton<PreReviewSignal>();
+        services.AddScoped<PreReviewWorkflowFactory>();
+        services.AddScoped<PreReviewWorkflowRunner>();
+        // 背景執行（M4）：送件掛勾（只處理 Agent 管道）把一輪初審放進佇列，由 PreReviewWorker 在自己的 scope 執行（系統呼叫）；
+        // 啟動時續跑未完成的初審（worker 註冊在 ExceptionLogWriter 之後，見下方）。審核頁的決策一律經 AfterSalesReviewCoordinator（認領 → 送進 Workflow，或直接決定）。
+        services.AddSingleton<PreReviewQueue>();
+        services.AddScoped<IAfterSalesSubmittedHook, PreReviewSubmittedHook>();
+        services.AddScoped<AfterSalesReviewCoordinator>();
+        // 三個模型節點（即時／回放的模型鏈由 PreReviewChatClientProvider 決定）。
+        services.AddScoped<PreReviewChatClientProvider>();
+        services.AddScoped<IPhotoReviewer, ModelPhotoReviewer>();
+        services.AddScoped<IHistoryReviewer, ModelHistoryReviewer>();
+        services.AddScoped<IPreReviewSummarizer, ModelPreReviewSummarizer>();
+        // 客服 AI 助手（M4）：交接摘要純程式；Runner 跑在客服的 circuit（用量記在客服），會話只在審核窗的記憶體裡。
+        // StaffAssistantTools 不註冊：它帶著綁定案件的 StaffAssistantToolContext，由 Runner 每輪建立。
+        services.AddScoped<HandoverSummaryBuilder>();
+        services.AddScoped<StaffAssistantRunner>();
 
         // 全專案第一個 AddHttpClient。刻意用 **named client** 而非 typed client：
         // 1. AddHttpClient<IAiLogAnalysisService, AiLogAnalysisService>() 會把服務註冊成
@@ -193,11 +213,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ShopOrderService>();
         // 售後申請（1.0.3 起）：照片實體檔一律經 AfterSalesFileStore（含根目錄檢查）；埋點失敗不中斷流程。
         services.AddScoped<AfterSalesFileStore>();
+        // 售後決策執行（1.0.6 起）：核准／駁回／補件的唯一寫入點；核准在同一交易內開處理單並扣庫存，commit 後通知顧客。
+        services.AddScoped<AfterSalesDecisionService>();
         services.AddScoped<AfterSalesRequestService>();
         services.AddScoped<AgentTraceService>();
         services.AddScoped<AgentSessionStore>();
         // 售後 Agent 會話錄製（1.0.5 起）：示範模式＋即時模式時由 Runner／RecordingChatClient 寫入；重置示範資料不刪。
         services.AddScoped<AgentRecordingService>();
+        // AI 初審 Workflow 持久化（M4）：每一輪初審的進度與結論，以及 MAF checkpoint（由 SqliteWorkflowCheckpointStore 轉接）。
+        services.AddScoped<PreReviewRunService>();
+        services.AddScoped<WorkflowCheckpointService>();
         services.AddScoped<ProcessMetricService>();
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
@@ -227,6 +252,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ExceptionStackFileStore>();
         services.AddScoped<ExceptionLogService>();
         services.AddHostedService<ExceptionLogWriter>();
+        // AI 初審背景執行（M4）：必須在 ExceptionLogWriter 之後註冊 —— 主機以相反順序停止，初審在關機時記的錯誤還有寫入器接手。
+        services.AddHostedService<PreReviewWorker>();
 
         // 程序層級的未處理例外（射後不理的 Task、背景執行緒）。由 Program.cs 在 Build 後呼叫 Register。
         services.AddSingleton<ProcessExceptionHooks>();

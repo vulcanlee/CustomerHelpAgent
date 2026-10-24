@@ -17,7 +17,7 @@ namespace CustomerHelpAgent.Web.Components.Views.Shop;
 /// 「待補件」的申請可以「補充資料」：表單對話窗（是否穿過、補充說明、照片）→ <see cref="AfterSalesRequestService.ResubmitAsync"/>。
 /// 補件的埋點沿用該申請的 CaseKey，讓顧客與客服的步驟串在同一個案件上。
 /// </summary>
-public partial class ShopAfterSalesListView
+public partial class ShopAfterSalesListView : IDisposable
 {
     [Inject]
     public AuthenticationStateProvider authStateProvider { get; set; } = default!;
@@ -33,6 +33,12 @@ public partial class ShopAfterSalesListView
 
     [Inject]
     public AfterSalesRequestService AfterSalesRequestService { get; set; } = default!;
+
+    [Inject]
+    public AfterSalesDecisionService AfterSalesDecisionService { get; set; } = default!;
+
+    [Inject]
+    public INotificationSignal NotificationSignal { get; set; } = default!;
 
     [Inject]
     public ProcessMetricService ProcessMetricService { get; set; } = default!;
@@ -63,6 +69,12 @@ public partial class ShopAfterSalesListView
     /// <summary>null 表示仍在載入。</summary>
     private IReadOnlyList<AfterSalesRequestView>? requests;
 
+    /// <summary>核准後的處理單（申請 Id → 處理單），與 <see cref="requests"/> 一起載入。</summary>
+    private IReadOnlyDictionary<int, AfterSalesFulfillmentView> fulfillments = new Dictionary<int, AfterSalesFulfillmentView>();
+
+    private IDisposable? subscription;
+    private bool disposed;
+
     private bool modalVisible;
     private AfterSalesRequestView? resubmitTarget;
     private ResubmitFormModel resubmitForm = new();
@@ -92,9 +104,43 @@ public partial class ShopAfterSalesListView
             return;
         }
 
-        requests = await AfterSalesRequestService.GetMyRequestsAsync(CustomerId);
+        // 先訂閱再載入：載入途中被關閉時 Dispose 也收得到這個訂閱；關閉後的訊號一律略過。
+        subscription = NotificationSignal.Subscribe(CustomerId, () => InvokeAsync(async () =>
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            await LoadAsync();
+            StateHasChanged();
+        }));
+        await LoadAsync();
         await ProcessMetricService.RecordAsync(caseKey, AfterSalesChannel.Traditional, ProcessActor.Customer, ProcessMetricActions.ViewRequests, CustomerId);
     }
+
+    /// <summary>重新載入申請與處理單（批次查詢，不逐筆）。</summary>
+    private async Task LoadAsync()
+    {
+        var list = await AfterSalesRequestService.GetMyRequestsAsync(CustomerId);
+        fulfillments = await AfterSalesDecisionService.GetFulfillmentsAsync(
+            list.Where(x => x.Status == AfterSalesStatus.Approved).Select(x => x.Id).ToList());
+        requests = list;
+    }
+
+    /// <summary>核准顯示處理單號；駁回／待補件顯示客服說明；其餘為審核中。</summary>
+    private string ResultText(AfterSalesRequestView request) => request.Status switch
+    {
+        AfterSalesStatus.Approved when fulfillments.TryGetValue(request.Id, out var fulfillment) => fulfillment.Kind switch
+        {
+            FulfillmentKind.ExchangeOrder => $"換貨單 {fulfillment.ReferenceNo} 已建立",
+            FulfillmentKind.RefundRecord => $"退款紀錄 {fulfillment.ReferenceNo} 已建立",
+            _ => $"處理單 {fulfillment.ReferenceNo} 已建立",
+        },
+        AfterSalesStatus.Approved => "已核准",
+        AfterSalesStatus.Rejected or AfterSalesStatus.NeedMoreInfo => string.IsNullOrWhiteSpace(request.StaffNote) ? "—" : request.StaffNote,
+        _ => "客服審核中",
+    };
 
     private static StatusTone ToneOf(AfterSalesStatus status) => status switch
     {
@@ -188,7 +234,7 @@ public partial class ShopAfterSalesListView
 
         dirtyTracker.Clear();
         resubmitPhotos.Clear();
-        requests = await AfterSalesRequestService.GetMyRequestsAsync(CustomerId);
+        await LoadAsync();
         return true;
     }
 
@@ -207,5 +253,11 @@ public partial class ShopAfterSalesListView
             resubmitPhotos.Clear();
             Logger.LogDebug("Resubmit modal cancelled.");
         }
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+        subscription?.Dispose();
     }
 }

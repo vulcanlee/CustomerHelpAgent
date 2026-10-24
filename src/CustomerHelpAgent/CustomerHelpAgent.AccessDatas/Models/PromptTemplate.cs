@@ -43,5 +43,26 @@ public static class PromptTemplateKeys
     /// <summary>顧客端「線上客服」售後 Agent 的系統指示（1.0.4 起）。</summary>
     public const string AfterSalesAgent = "AfterSalesAgent";
 
-    public static readonly IReadOnlyList<string> All = [LogAnalysis, ExceptionAnalysis, AfterSalesAgent];
+    /// <summary>客服後台 AI 初審：照片初審節點（M4，結構化輸出）。</summary>
+    public const string AfterSalesPreReviewPhoto = "AfterSalesPreReviewPhoto";
+
+    /// <summary>客服後台 AI 初審：歷史紀錄初審節點（M4，結構化輸出）。</summary>
+    public const string AfterSalesPreReviewHistory = "AfterSalesPreReviewHistory";
+
+    /// <summary>客服後台 AI 初審：摘要節點（M4，結構化輸出）。</summary>
+    public const string AfterSalesPreReviewSummary = "AfterSalesPreReviewSummary";
+
+    /// <summary>客服後台的 AI 助手（M4）。</summary>
+    public const string AfterSalesStaffAssistant = "AfterSalesStaffAssistant";
+
+    public static readonly IReadOnlyList<string> All =
+    [
+        LogAnalysis,
+        ExceptionAnalysis,
+        AfterSalesAgent,
+        AfterSalesPreReviewPhoto,
+        AfterSalesPreReviewHistory,
+        AfterSalesPreReviewSummary,
+        AfterSalesStaffAssistant,
+    ];
 }

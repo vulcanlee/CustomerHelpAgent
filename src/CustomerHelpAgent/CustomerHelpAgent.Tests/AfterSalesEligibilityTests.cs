@@ -16,6 +16,18 @@ public sealed class AfterSalesEligibilityTests
     };
 
     [Fact]
+    public void DescribeUnmet_JoinsReasonsThenMissingInfo()
+    {
+        Assert.Equal(
+            "已超過 7 天申請期限（簽收後第 10 天）；商品已穿過，不符合未穿著條件；尚缺：是否穿過、照片",
+            AfterSalesEligibility.DescribeUnmet(new EligibilityResult(
+                false, ["已超過 7 天申請期限（簽收後第 10 天）", "商品已穿過，不符合未穿著條件"], ["是否穿過", "照片"])));
+        Assert.Equal("訂單尚未出貨", AfterSalesEligibility.DescribeUnmet(new EligibilityResult(false, ["訂單尚未出貨"], [])));
+        Assert.Equal("尚缺：照片", AfterSalesEligibility.DescribeUnmet(new EligibilityResult(false, [], ["照片"])));
+        Assert.Equal(string.Empty, AfterSalesEligibility.DescribeUnmet(new EligibilityResult(true, [], [])));
+    }
+
+    [Fact]
     public void Evaluate_Day3Unworn_SizeExchange_ShouldBeEligible()
     {
         var result = AfterSalesEligibility.Evaluate(Policy(), Now.AddDays(-3), false, false, Now);

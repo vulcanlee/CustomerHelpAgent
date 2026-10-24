@@ -19,6 +19,18 @@ public static class AfterSalesEligibility
     public static bool CanRequestUrge(DateTime? deliveredAt, DateTime? shippedAt, DateTime now)
         => deliveredAt is null && shippedAt is { } s && now - s > UrgeAfter;
 
+    /// <summary>不符合的原因一行文字（不符條件在前，缺少的資訊以「尚缺：」接在後面，以「；」分隔）。</summary>
+    public static string DescribeUnmet(EligibilityResult result)
+    {
+        var reasons = result.UnmetReasons.ToList();
+        if (result.MissingInfo.Count > 0)
+        {
+            reasons.Add("尚缺：" + string.Join("、", result.MissingInfo));
+        }
+
+        return string.Join("；", reasons);
+    }
+
     public static EligibilityResult Evaluate(
         AfterSalesPolicyModel policy, DateTime? deliveredAt, bool? isWorn, bool hasPhoto, DateTime now,
         DateTime? shippedAt = null)

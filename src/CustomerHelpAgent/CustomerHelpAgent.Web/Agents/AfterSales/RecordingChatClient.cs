@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using CustomerHelpAgent.Business.Services.DataAccess;
+using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.Web.Agents.AfterSales;
 
@@ -23,16 +24,24 @@ internal sealed class RecordingChatClient : DelegatingChatClient
     private readonly string? configuredModel;
     private readonly AgentRecordingService recordingService;
     private readonly ILogger logger;
+    private readonly string stream;
 
     /// <param name="configuredModel">設定的模型（<c>AiSettings:Model</c>）；回應沒有帶模型名稱時用它。</param>
+    /// <param name="stream">錄製的來源（<see cref="AgentRecordingStreams"/>）：顧客端 Agent 為預設的 <c>customer</c>，AI 初審各節點各自一條。</param>
     public RecordingChatClient(
-        IChatClient innerClient, Guid sessionKey, string? configuredModel, AgentRecordingService recordingService, ILogger logger)
+        IChatClient innerClient,
+        Guid sessionKey,
+        string? configuredModel,
+        AgentRecordingService recordingService,
+        ILogger logger,
+        string stream = AgentRecordingStreams.Customer)
         : base(innerClient)
     {
         this.sessionKey = sessionKey;
         this.configuredModel = configuredModel;
         this.recordingService = recordingService;
         this.logger = logger;
+        this.stream = stream;
     }
 
     public override async Task<ChatResponse> GetResponseAsync(
@@ -92,7 +101,7 @@ internal sealed class RecordingChatClient : DelegatingChatClient
             var usageJson = response.Usage is null ? null : JsonSerializer.Serialize(response.Usage, AIJsonUtilities.DefaultOptions);
             var modelName = string.IsNullOrWhiteSpace(response.ModelId) ? configuredModel : response.ModelId;
             // AppendCallAsync 本身不拋例外；合併或序列化失敗（例如未登錄的 AIContent 子類）在這裡攔下。
-            await recordingService.AppendCallAsync(sessionKey, digest, responseJson, usageJson, modelName);
+            await recordingService.AppendCallAsync(sessionKey, digest, responseJson, usageJson, modelName, stream);
         }
         catch (Exception ex)
         {

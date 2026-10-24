@@ -1,0 +1,234 @@
+/* 分頁內容是本元件自己的 markup，帶 scope 屬性（不沿用審核頁的 scoped class）；顏色只用 theme.css 的 --app-* 與 --staff-assistant-* 別名。 */
+.staff-assistant {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.staff-assistant-handover {
+    background: var(--staff-assistant-handover-bg);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-control);
+    padding: 0.75rem 1rem;
+}
+
+.staff-assistant-heading {
+    color: var(--app-accent);
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+}
+
+.staff-assistant-muted {
+    color: var(--app-muted);
+    margin: 0;
+}
+
+.staff-assistant-facts {
+    display: grid;
+    gap: 0.5rem 1.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+}
+
+.staff-assistant-facts > div {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.staff-assistant-fact-wide {
+    grid-column: 1 / -1;
+}
+
+.staff-assistant-facts dt {
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.staff-assistant-facts dd {
+    color: var(--app-text);
+    margin: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.staff-assistant-list {
+    margin: 0.15rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.staff-assistant-chat {
+    border-top: 1px solid var(--app-line);
+    padding-top: 0.75rem;
+}
+
+.staff-assistant-notice {
+    align-items: center;
+    background: var(--staff-assistant-notice-bg);
+    border: 1px solid var(--staff-assistant-notice-line);
+    border-radius: var(--app-radius-control);
+    color: var(--staff-assistant-notice);
+    display: flex;
+    gap: 0.4rem;
+    margin: 0 0 0.5rem;
+    padding: 0.45rem 0.75rem;
+}
+
+.staff-assistant-scroll {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: 45vh;
+    min-height: 10rem;
+    overflow-y: auto;
+}
+
+.staff-assistant-log {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.25rem;
+}
+
+.staff-assistant-row {
+    display: flex;
+}
+
+.staff-assistant-row.is-staff {
+    justify-content: flex-end;
+}
+
+.staff-assistant-answer {
+    display: grid;
+    gap: 0.3rem;
+    max-width: 85%;
+}
+
+.staff-assistant-bubble {
+    border-radius: 16px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    padding: 0.5rem 0.85rem;
+}
+
+.staff-assistant-question {
+    background: var(--app-accent);
+    border-bottom-right-radius: 6px;
+    color: var(--app-on-accent);
+    max-width: 85%;
+    white-space: pre-wrap;
+}
+
+.staff-assistant-reply,
+.staff-assistant-streaming {
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-bottom-left-radius: 6px;
+    color: var(--app-text);
+}
+
+.staff-assistant-streaming {
+    color: var(--app-muted);
+    white-space: pre-wrap;
+}
+
+/* Markdown 渲染出的段落與清單：去掉預設外距，避免泡泡上下多一段空白。 */
+.staff-assistant-reply ::deep p,
+.staff-assistant-reply ::deep ul,
+.staff-assistant-reply ::deep ol {
+    margin: 0 0 0.4rem;
+}
+
+.staff-assistant-reply ::deep :last-child {
+    margin-bottom: 0;
+}
+
+.staff-assistant-reply ::deep a {
+    color: var(--app-accent);
+}
+
+.staff-assistant-system {
+    color: var(--app-muted);
+    margin: 0;
+}
+
+/* 回覆上方的工具標籤（「查了：規則 v1」）。 */
+.staff-assistant-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.staff-assistant-tag {
+    background: var(--staff-assistant-tag-bg);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--staff-assistant-tag);
+    font-size: 0.8rem;
+    padding: 0.05rem 0.6rem;
+}
+
+.staff-assistant-composer {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.staff-assistant-input {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-text);
+    flex: 1 1 auto;
+    font: inherit;
+    min-width: 0;
+    padding: 0.45rem 1rem;
+}
+
+.staff-assistant-input:focus-visible {
+    border-color: var(--app-accent);
+    box-shadow: 0 0 0 3px var(--app-accent-soft);
+    outline: none;
+}
+
+.staff-assistant-input:disabled {
+    background: var(--app-tint);
+    cursor: not-allowed;
+}
+
+.staff-assistant-send {
+    align-items: center;
+    background: var(--app-accent);
+    border: 1px solid var(--app-accent);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-on-accent);
+    cursor: pointer;
+    display: inline-flex;
+    flex-shrink: 0;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 1rem;
+}
+
+.staff-assistant-send:hover:not(:disabled),
+.staff-assistant-send:focus-visible {
+    box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+.staff-assistant-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+@media (max-width: 640.98px) {
+    .staff-assistant-facts {
+        grid-template-columns: 1fr;
+    }
+
+    .staff-assistant-answer,
+    .staff-assistant-question {
+        max-width: 92%;
+    }
+}

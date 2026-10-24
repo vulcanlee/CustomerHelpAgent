@@ -83,6 +83,14 @@ public class AiSettings
     /// </summary>
     public double? Temperature { get; set; }
 
+    /// <summary>同一組設定、換成另一個模型（Azure 為部署名稱）的複本；不改動原本的設定物件。</summary>
+    public AiSettings WithModel(string model)
+    {
+        var copy = (AiSettings)MemberwiseClone();
+        copy.Model = model;
+        return copy;
+    }
+
     /// <summary>把 <see cref="Provider"/> 字串解析成列舉。空字串視為 Azure OpenAI。</summary>
     /// <exception cref="InvalidOperationException">值不是支援的供應商名稱。</exception>
     public AiProvider GetProvider()

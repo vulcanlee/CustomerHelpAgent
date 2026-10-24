@@ -1,0 +1,105 @@
+@using CustomerHelpAgent.Share.Agents
+@using CustomerHelpAgent.Share.Shop
+
+@* 審核窗內的「AI 初審」面板（只給 Agent 管道）：流程圖＋AI 建議卡＋三個初審結論（可展開）＋重新初審。訂閱初審訊號即時更新。 *@
+<section class="prereview-panel" aria-label="AI 初審">
+    <h3 class="prereview-heading">AI 初審</h3>
+    <PreReviewFlowDiagram Run="run" />
+
+    @if (run is null)
+    {
+        <p class="prereview-empty">AI 初審尚未開始。</p>
+    }
+    else
+    {
+        @if (summary is not null)
+        {
+            <div class="prereview-card" aria-label="AI 建議">
+                <div class="prereview-card-head">
+                    <StatusPill Text="@PreReviewLabels.RecommendationText(summary.Recommendation)" Tone="@PreReviewTones.OfRecommendation(summary.Recommendation)" />
+                    <span class="prereview-card-headline">@summary.Headline</span>
+                </div>
+                @if (string.IsNullOrWhiteSpace(summary.Warning) == false)
+                {
+                    <p class="prereview-warning" role="alert">@summary.Warning</p>
+                }
+                @if (summary.Reasons.Count > 0)
+                {
+                    <h4 class="prereview-card-title">理由</h4>
+                    <ul class="prereview-list">
+                        @foreach (var reason in summary.Reasons)
+                        {
+                            <li>@reason</li>
+                        }
+                    </ul>
+                }
+                @if (summary.StaffChecklist.Count > 0)
+                {
+                    <h4 class="prereview-card-title">客服檢查清單</h4>
+                    <ul class="prereview-list">
+                        @foreach (var item in summary.StaffChecklist)
+                        {
+                            <li>@item</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+        else if (run.Status == PreReviewStatus.Failed)
+        {
+            <p class="prereview-warning" role="alert">AI 初審失敗，請自行核對後決定。@run.ErrorMessage</p>
+        }
+
+        <div class="prereview-findings">
+            <details class="prereview-finding" data-finding="photo">
+                <summary>照片初審：@HeadlineOf(photoFinding)</summary>
+                @if (photo is not null)
+                {
+                    <p>判斷：@PhotoVerdictText(photo.Verdict)（信心：@photo.Confidence）</p>
+                    <ul class="prereview-list">
+                        @foreach (var item in photo.Observations)
+                        {
+                            <li>@item</li>
+                        }
+                    </ul>
+                }
+            </details>
+            <details class="prereview-finding" data-finding="rule">
+                <summary>規則核對：@HeadlineOf(ruleFinding)</summary>
+                @if (rule is not null)
+                {
+                    <p>@(rule.PolicyTitle is null ? "沒有適用的規則" : $"{rule.PolicyTitle}（v{rule.PolicyVersion}）")，@(rule.IsEligible ? "符合資格" : "不符資格")</p>
+                    <ul class="prereview-list">
+                        @foreach (var item in rule.UnmetReasons.Concat(rule.MissingInfo))
+                        {
+                            <li>@item</li>
+                        }
+                    </ul>
+                }
+            </details>
+            <details class="prereview-finding" data-finding="history">
+                <summary>歷史紀錄：@HeadlineOf(historyFinding)</summary>
+                @if (history is not null)
+                {
+                    <p>此顧客過去申請 @history.PriorRequestCount 筆</p>
+                    <ul class="prereview-list">
+                        @foreach (var item in history.Notes.Concat(history.CustomerStatements))
+                        {
+                            <li>@item</li>
+                        }
+                    </ul>
+                }
+            </details>
+        </div>
+    }
+
+    @* 沒有任何一輪（送件掛勾失敗、還沒補建）也可以重新初審；決定正在執行時不行。 *@
+    @if (Retryable && run?.Status != PreReviewStatus.Executing)
+    {
+        <RequirePermission Page="@MagicObjectHelper.角色_售後審核" Action="@PermissionActions.Edit">
+            <div class="prereview-actions">
+                <Button Disabled="@busy" OnClick="@(async () => await OnRetryAsync())">重新初審</Button>
+            </div>
+        </RequirePermission>
+    }
+</section>

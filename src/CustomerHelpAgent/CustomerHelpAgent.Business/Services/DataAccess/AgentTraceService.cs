@@ -138,6 +138,20 @@ public class AgentTraceService
     }
 
     /// <summary>
+    /// 這個會話（＝售後申請的 CaseKey）最近一次回放所用的錄製 Id；會話沒有回放過（即時執行）回 null。
+    /// AI 初審（M4）據此判斷要不要以同一份錄製重播模型節點，而不呼叫真實模型。
+    /// </summary>
+    public async Task<int?> GetReplayRecordingIdAsync(Guid sessionKey)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.AgentRunTrace.AsNoTracking()
+            .Where(x => x.SessionKey == sessionKey && x.ReplayRecordingId != null)
+            .OrderByDescending(x => x.StartedAt).ThenByDescending(x => x.Id)
+            .Select(x => x.ReplayRecordingId)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
     /// 一個會話所有執行的步驟（依 run 的 <c>StartedAt</c>、Id，再依步驟 <c>Sequence</c>、Id），供重新整理頁面時還原對話與幕後面板。
     /// 只取這位顧客的執行：別人的會話視同沒有紀錄。
     /// </summary>

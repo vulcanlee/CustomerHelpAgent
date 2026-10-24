@@ -1,5 +1,7 @@
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using CustomerHelpAgent.AccessDatas.Models;
+using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Share.Shop;
 using CustomerHelpAgent.Web.Components.Views.Shop;
 
@@ -146,6 +148,77 @@ public sealed class ShopAfterSalesListViewTests : ShopViewTestBase
         var resubmit = Assert.Single(cut.FindAll("[data-action=resubmit]"));
         Assert.Contains("補充資料", resubmit.TextContent, StringComparison.Ordinal);
         Assert.Equal("AS202610230002", resubmit.GetAttribute("data-request-no"));
+    }
+
+    [Fact]
+    public void MyRequests_Approved_ShowsFulfilmentNo()
+    {
+        int exchangeId;
+        int refundId;
+        using (var context = Factory.CreateDbContext())
+        {
+            var now = DateTime.Now;
+            var exchange = Request("AS202610230001", Black40ItemId, AfterSalesType.SizeExchange, AfterSalesStatus.Approved, null, now.AddHours(-3));
+            var refund = Request("AS202610230002", White41ItemId, AfterSalesType.ReturnRefund, AfterSalesStatus.Approved, null, now.AddHours(-2));
+            var rejected = Request("AS202610230003", White41ItemId, AfterSalesType.ReturnRefund, AfterSalesStatus.Rejected, "已逾鑑賞期", now.AddHours(-1));
+            var submitted = Request("AS202610230004", Black40ItemId, AfterSalesType.ReturnRefund, AfterSalesStatus.Submitted, null, now);
+            context.AfterSalesRequest.AddRange(exchange, refund, rejected, submitted);
+            context.SaveChanges();
+            exchangeId = exchange.Id;
+            refundId = refund.Id;
+            context.AfterSalesFulfillment.AddRange(
+                new AfterSalesFulfillment { AfterSalesRequestId = exchangeId, Kind = FulfillmentKind.ExchangeOrder, ReferenceNo = "EX202610230001", Quantity = 1, Note = string.Empty, CreatedAt = now },
+                new AfterSalesFulfillment { AfterSalesRequestId = refundId, Kind = FulfillmentKind.RefundRecord, ReferenceNo = "RF202610230001", Quantity = 1, RefundAmount = 2980m, Note = string.Empty, CreatedAt = now });
+            context.SaveChanges();
+        }
+
+        var cut = Render<ShopAfterSalesListView>();
+
+        cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".shop-request").Count));
+        var results = cut.FindAll(".shop-request-result").Select(x => x.TextContent).ToList();
+        Assert.Contains(results, x => x.Contains("換貨單 EX202610230001 已建立", StringComparison.Ordinal));
+        Assert.Contains(results, x => x.Contains("退款紀錄 RF202610230001 已建立", StringComparison.Ordinal));
+        Assert.Contains(results, x => x.Contains("已逾鑑賞期", StringComparison.Ordinal));
+        Assert.Contains(results, x => x.Contains("客服審核中", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MyRequests_Signal_ReloadsList()
+    {
+        int id;
+        using (var context = Factory.CreateDbContext())
+        {
+            var request = Request("AS202610230001", Black40ItemId, AfterSalesType.ReturnRefund, AfterSalesStatus.Submitted, null, DateTime.Now);
+            context.AfterSalesRequest.Add(request);
+            context.SaveChanges();
+            id = request.Id;
+        }
+
+        var cut = Render<ShopAfterSalesListView>();
+        cut.WaitForAssertion(() => Assert.Contains("客服審核中", cut.Markup, StringComparison.Ordinal));
+
+        using (var context = Factory.CreateDbContext())
+        {
+            context.AfterSalesRequest.Single(x => x.Id == id).Status = AfterSalesStatus.Rejected;
+            context.AfterSalesRequest.Single(x => x.Id == id).StaffNote = "不符退貨條件";
+            context.SaveChanges();
+        }
+
+        Services.GetRequiredService<INotificationSignal>().Publish([CustomerId]);
+
+        cut.WaitForAssertion(() => Assert.Contains("不符退貨條件", cut.Find(".shop-request-result").TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MyRequests_Dispose_RemovesSignalSubscription()
+    {
+        var signal = (NotificationSignal)Services.GetRequiredService<INotificationSignal>();
+        var cut = Render<ShopAfterSalesListView>();
+        cut.WaitForAssertion(() => Assert.Equal(1, signal.SubscriberCount));
+
+        cut.Instance.Dispose();
+
+        Assert.Equal(0, signal.SubscriberCount);
     }
 
     [Fact]

@@ -92,6 +92,10 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
             PromptTemplateKeys.LogAnalysis => "日誌分析",
             PromptTemplateKeys.ExceptionAnalysis => "例外分析",
             PromptTemplateKeys.AfterSalesAgent => "AI 售後客服 Agent",
+            PromptTemplateKeys.AfterSalesPreReviewPhoto => "AI 初審：照片",
+            PromptTemplateKeys.AfterSalesPreReviewHistory => "AI 初審：歷史紀錄",
+            PromptTemplateKeys.AfterSalesPreReviewSummary => "AI 初審：摘要",
+            PromptTemplateKeys.AfterSalesStaffAssistant => "客服 AI 助手",
             _ => key,
         };
 

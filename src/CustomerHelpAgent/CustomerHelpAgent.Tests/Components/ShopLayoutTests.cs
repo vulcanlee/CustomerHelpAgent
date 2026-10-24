@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using CustomerHelpAgent.AccessDatas.Models;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Auth;
@@ -125,6 +126,26 @@ public sealed class ShopLayoutDemoBannerTests : ShopViewTestBase
         var ticket = Uri.UnescapeDataString(uri.Query["?ticket=".Length..]);
         Assert.True(tickets.TryRedeem(ticket, out var redeemed));
         Assert.Equal(new DemoSwitchTicket(CustomerId, DemoSwitchPurpose.SwitchBack, null), redeemed);
+    }
+
+    [Fact]
+    public void ShopLayout_ShowsBellWithUnreadCount()
+    {
+        UsePrincipal(presenterId: null);
+        using (var context = Factory.CreateDbContext())
+        {
+            context.Notification.AddRange(
+                new Notification { RecipientUserId = CustomerId, Category = NotificationCategories.AfterSalesUpdated, Title = "申請已核准", Link = "/shop/after-sales", CreatedAtUtc = DateTime.UtcNow },
+                new Notification { RecipientUserId = CustomerId, Category = NotificationCategories.AfterSalesUpdated, Title = "已讀的", CreatedAtUtc = DateTime.UtcNow, ReadAtUtc = DateTime.UtcNow });
+            context.SaveChanges();
+        }
+
+        var cut = Render<ShopLayout>();
+
+        cut.WaitForAssertion(() => Assert.Equal("1", cut.Find(".shop-topbar .notification-bell-badge").TextContent));
+        cut.Find(".notification-bell-trigger").Click();
+        cut.Find(".notification-bell-item-unread").Click();
+        Assert.EndsWith("/shop/after-sales", Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
     }
 
     [Fact]

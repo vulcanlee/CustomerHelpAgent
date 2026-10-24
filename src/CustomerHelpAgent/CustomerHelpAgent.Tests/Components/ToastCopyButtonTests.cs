@@ -107,7 +107,7 @@ public sealed class ToastCopyButtonTests : ComponentTestBase
             .Add(p => p.OccurredAt, new DateTime(2026, 10, 19, 14, 3, 22))
             .Add(p => p.Detail, detail));
 
-    private sealed class TestWebHostEnvironment : IWebHostEnvironment
+    internal sealed class TestWebHostEnvironment : IWebHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Production;
         public string ApplicationName { get; set; } = "CustomerHelpAgent.Web";

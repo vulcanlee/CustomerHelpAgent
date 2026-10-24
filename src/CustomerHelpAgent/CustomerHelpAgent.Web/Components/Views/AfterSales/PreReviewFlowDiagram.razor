@@ -1,0 +1,22 @@
+@using CustomerHelpAgent.AccessDatas.Models
+@using CustomerHelpAgent.Share.Agents
+
+@* 初審流程圖：8 個節點，進件 → 照片初審｜規則核對｜歷史紀錄（三路並行）→ 摘要 → 人工決策 → 執行 → 通知。純 HTML/CSS，狀態色來自 theme.css 的 --prereview-*。 *@
+<ol class="prereview-flow" aria-label="AI 初審流程圖">
+    @foreach (var stage in Stages)
+    {
+        <li class="prereview-stage@(stage.Length > 1 ? " prereview-stage-fan" : string.Empty)">
+            @foreach (var node in stage)
+            {
+                var status = StatusOf(node);
+                <div class="prereview-node prereview-node-@status.ToString().ToLowerInvariant()"
+                     data-node="@node" data-status="@status"
+                     title="@NoteOf(node)">
+                    <span class="prereview-badge prereview-badge-@ActorClass(node)">@PreReviewLabels.NodeActor(node)</span>
+                    <span class="prereview-node-name">@PreReviewLabels.NodeText(node)</span>
+                    <span class="prereview-node-status">@PreReviewLabels.NodeStatusText(status)</span>
+                </div>
+            }
+        </li>
+    }
+</ol>

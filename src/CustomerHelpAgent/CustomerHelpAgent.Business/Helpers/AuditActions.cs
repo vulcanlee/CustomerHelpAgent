@@ -313,6 +313,13 @@ public static class AuditActions
         public const string AttachmentDownload = "Shop.Attachment.Download";
     }
 
+    /// <summary>售後決策執行（1.0.6 起）：核准時建立處理單（決定本身記在 <see cref="Shop"/> 的 RequestDecide／RequestMoreInfo）。</summary>
+    public static class AfterSales
+    {
+        /// <summary>核准時建立處理單並扣庫存／加物流事件（Detail 含 kind、referenceNo）。</summary>
+        public const string Fulfilled = "AfterSales.Fulfilled";
+    }
+
     /// <summary>
     /// 售後展示控制（1.0.5 起，只在 <c>DemoSettings:Enabled</c> 時發生）：一鍵重置示範資料、故障模擬與即時／回放切換、
     /// 以示範帳號身分檢視與切回、設定金劇本。<c>DemoControlService</c> 是 Singleton 拿不到登入者，

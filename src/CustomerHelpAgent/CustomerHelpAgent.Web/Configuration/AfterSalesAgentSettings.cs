@@ -38,6 +38,18 @@ public class AfterSalesAgentSettings
     /// </summary>
     public double? Temperature { get; set; }
 
+    /// <summary>
+    /// AI 初審照片節點（M4）用的模型，必須能看圖（Azure 為部署名稱）。空字串（預設）＝沿用 <c>AiSettings:Model</c>。
+    /// 端點與金鑰沿用 <c>AiSettings</c>，所以只能填同一個資源下的部署；其他初審節點一律用 <c>AiSettings:Model</c>。
+    /// </summary>
+    public string VisionModel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 照片節點要改用的模型（唯一的解析點）：<see cref="VisionModel"/> 有填回它，空字串回 null（＝沿用 <c>AiSettings:Model</c>）。
+    /// 前後空白已由 <c>AfterSalesAgentSettingsValidator</c> 在啟動時擋下，這裡不再修剪。
+    /// </summary>
+    public string? VisionModelOverride => string.IsNullOrEmpty(VisionModel) ? null : VisionModel;
+
     /// <summary>把 <see cref="ApiStyle"/> 解析成列舉（值已由 <c>AfterSalesAgentSettingsValidator</c> 在啟動時檢查）。</summary>
     public AgentApiStyle GetApiStyle() => Enum.Parse<AgentApiStyle>(ApiStyle, ignoreCase: true);
 }

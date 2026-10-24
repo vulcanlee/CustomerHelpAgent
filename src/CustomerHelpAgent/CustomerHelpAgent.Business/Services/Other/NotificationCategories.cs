@@ -20,4 +20,7 @@ public static class NotificationCategories
 
     /// <summary>管理員在「系統健康監控」按「發送測試通知」→ 全體管理員（不寄信；0.9.122 起）。</summary>
     public const string Test = "Test";
+
+    /// <summary>售後申請被客服核准、駁回或要求補件 → 申請的顧客（不寄信；1.0.6 起）。</summary>
+    public const string AfterSalesUpdated = "AfterSalesUpdated";
 }

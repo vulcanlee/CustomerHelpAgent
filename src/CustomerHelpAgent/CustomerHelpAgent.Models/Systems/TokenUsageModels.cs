@@ -100,6 +100,15 @@ public static class TokenUsageOperations
     /// 以會話識別碼串起來。
     /// </summary>
     public const string AfterSalesAgent = "AI 售後客服 Agent";
+
+    /// <summary>
+    /// 客服後台的 AI 初審 Workflow（M4）：照片、歷史紀錄、摘要三個模型節點各記一筆，在背景執行（記為系統呼叫），
+    /// 以申請的 CaseKey 作對話識別碼，與顧客端 Agent 的同一個案件串起來。
+    /// </summary>
+    public const string AfterSalesPreReview = "AI 售後初審 Workflow";
+
+    /// <summary>客服後台的 AI 助手（M4）。</summary>
+    public const string AfterSalesStaffAssistant = "客服 AI 助手";
 }
 
 /// <summary>

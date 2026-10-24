@@ -317,7 +317,8 @@ public sealed class AfterSalesAgentGuard
         return outcome.WithheldFields.Count == 0 ? text : $"{text}，未送出：{string.Join("、", outcome.WithheldFields)}";
     }
 
-    private static string StatusText(ToolOutcomeStatus status) => status switch
+    /// <summary>工具結果狀態的白話（幕後面板；客服 AI 助手的工具標籤共用）。</summary>
+    internal static string StatusText(ToolOutcomeStatus status) => status switch
     {
         ToolOutcomeStatus.NotFound => "查無資料",
         ToolOutcomeStatus.Timeout => "逾時",

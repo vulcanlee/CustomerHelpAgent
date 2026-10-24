@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Text.Json;
 using System.Runtime.CompilerServices;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -337,6 +338,39 @@ public sealed class AuditingChatClientTests(ITestOutputHelper output)
         Assert.False(log.Success);
         Assert.Equal("Unexpected", log.FailureReason);
         Assert.Equal(nameof(InvalidOperationException), log.ExceptionType);
+    }
+
+    /// <summary>
+    /// 照片（AI 初審照片節點）：AI 對話紀錄的請求快照不存照片本身（base64 data URI 一張就數 MB），改存佔位
+    /// （類型、格式、位元組數）；送給模型的內容不變。
+    /// </summary>
+    [Fact]
+    public async Task RequestSnapshot_Images_StoredAsPlaceholderWithoutBytes()
+    {
+        var model = new ScriptedAgentModel();
+        model.Reply("ok");
+        var env = new TestEnvironment(model);
+        var photo = new byte[30_001];
+        Random.Shared.NextBytes(photo);
+        var image = new DataContent(photo, "image/jpeg");
+
+        var response = await env.Factory.Create(Operation, Guid.NewGuid()).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, [new TextContent("請看照片"), image])]);
+
+        Assert.Equal("ok", response.Text);
+        var sent = Assert.Single(model.Requests).SelectMany(m => m.Contents).OfType<DataContent>().Single();
+        Assert.Equal(photo, sent.Data.ToArray());
+
+        var body = Assert.Single(env.CallLog.Entries).RequestBody;
+        Assert.DoesNotContain("base64", body);
+        Assert.DoesNotContain("data:", body);
+        Assert.DoesNotContain(Convert.ToBase64String(photo)[..40], body);
+        Assert.Contains("請看照片", body);
+        using var json = JsonDocument.Parse(body);
+        var placeholder = json.RootElement.GetProperty("messages")[0].GetProperty("contents").EnumerateArray()
+            .Single(x => x.TryGetProperty("type", out var type) && type.GetString() == "image");
+        Assert.Equal("image/jpeg", placeholder.GetProperty("mediaType").GetString());
+        Assert.Equal(photo.Length, placeholder.GetProperty("bytes").GetInt32());
     }
 
     [Fact]

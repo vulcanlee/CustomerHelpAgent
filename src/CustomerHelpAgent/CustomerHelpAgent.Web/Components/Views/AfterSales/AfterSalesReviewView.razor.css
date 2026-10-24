@@ -115,6 +115,16 @@
     white-space: nowrap;
 }
 
+/* 決策按鈕旁的提示：AI 初審未完成（琥珀）、上次執行失敗（錯誤色）。 */
+.after-sales-review-hint {
+    color: var(--app-warn);
+    margin: 0.5rem 0 0;
+}
+
+.after-sales-review-hint-error {
+    color: var(--prereview-warning);
+}
+
 @media (max-width: 640.98px) {
     .after-sales-review-facts {
         grid-template-columns: 1fr;

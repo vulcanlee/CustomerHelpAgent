@@ -168,6 +168,24 @@ public sealed class OptionsValidationTests
             }),
             key);
 
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("gpt-vision-deployment", true)]
+    [InlineData(" gpt-vision-deployment", false)]
+    [InlineData("gpt-vision-deployment ", false)]
+    public void AfterSalesAgentSettings_VisionModel_RejectsSurroundingWhitespace(string visionModel, bool valid)
+    {
+        var result = new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings { VisionModel = visionModel });
+        if (valid)
+        {
+            AssertValid(result);
+        }
+        else
+        {
+            AssertInvalid(result, "AfterSalesAgentSettings:VisionModel");
+        }
+    }
+
     [Fact]
     public void AfterSalesAgentSettings_OutOfRangeInConfiguration_ShouldFailOnStart()
         => Assert.Throws<OptionsValidationException>(

@@ -57,6 +57,9 @@ public abstract class ShopViewTestBase : ComponentTestBase
         Services.AddSingleton(CreateAuthenticationStateHelper(currentUser));
         Services.AddSingleton(shopOrderService);
         Services.AddSingleton(new ProcessMetricService(Factory, time, NullLogger<ProcessMetricService>.Instance));
+        Services.AddSingleton<INotificationSignal, NotificationSignal>();
+        Services.AddSingleton(sp => new NotificationQueryService(Factory, sp.GetRequiredService<INotificationSignal>(), time, NullLogger<NotificationQueryService>.Instance));
+        Services.AddSingleton(TestDecisionService.Create(Factory, audit, currentUser, time));
         Services.AddSingleton(new AfterSalesRequestService(
             Factory,
             new AfterSalesPolicyService(Factory, audit, currentUser, TestDemoControl.Off(Factory), time, NullLogger<AfterSalesPolicyService>.Instance),

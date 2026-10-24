@@ -157,6 +157,39 @@
 
     /* 時間軸的程式提醒列（AgentStepKind.Warning，1.0.5 起）標紅：沿用全站錯誤色。 */
     --shop-step-warning: var(--app-error);
+
+    /* ── AI 初審（審核頁的流程圖與 AI 建議卡，M4）──
+       別名層：一律指向既有 --app-*，不放字面值。等待＝灰、進行中＝重點色、完成＝綠、失敗＝錯誤色；
+       徽章 AI＝重點色、程式＝原文區塊深梅黑、人＝綠；警示文字標紅沿用全站錯誤色。 */
+    --prereview-waiting: var(--app-off);
+    --prereview-waiting-bg: var(--app-off-bg);
+    --prereview-waiting-line: var(--app-off-line);
+    --prereview-running: var(--app-accent);
+    --prereview-running-bg: var(--app-tint);
+    --prereview-running-line: var(--app-accent);
+    --prereview-done: var(--app-ok);
+    --prereview-done-bg: var(--app-ok-bg);
+    --prereview-done-line: var(--app-ok-line);
+    --prereview-failed: var(--app-error);
+    --prereview-failed-bg: var(--app-tint);
+    --prereview-failed-line: var(--app-error);
+    --prereview-arrow: var(--app-muted);
+    --prereview-badge-ai: var(--app-on-accent);
+    --prereview-badge-ai-bg: var(--app-accent);
+    --prereview-badge-program: var(--app-code-text);
+    --prereview-badge-program-bg: var(--app-code-bg);
+    --prereview-badge-human: var(--app-ok);
+    --prereview-badge-human-bg: var(--app-ok-bg);
+    --prereview-warning: var(--app-error);
+
+    /* ── 客服 AI 助手（審核窗的「AI 助手」分頁，M4）──
+       別名層：交接摘要底色＝淡重點色、停用提示＝琥珀底框（文字用內文色，琥珀字在淺底上對比不足）、工具標籤＝原文區塊深梅黑。 */
+    --staff-assistant-handover-bg: var(--app-tint);
+    --staff-assistant-notice: var(--app-text);
+    --staff-assistant-notice-bg: var(--app-warn-bg);
+    --staff-assistant-notice-line: var(--app-warn-line);
+    --staff-assistant-tag: var(--app-code-text);
+    --staff-assistant-tag-bg: var(--app-code-bg);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -90,8 +90,16 @@ public class AgentRecordingService
 
     /// <summary>
     /// 記一次成功的模型呼叫，並更新模型名稱（第一次有值時）與費用合計。這段會話沒有錄製（建立失敗）就略過。不拋例外。
+    /// <paramref name="stream"/>：呼叫來源（<see cref="AgentRecordingStreams"/>），Sequence 在同一條 stream 內各自編號 ——
+    /// AI 初審的照片與歷史節點併行寫入同一段錄製，各寫各的 stream 才不會互搶「max + 1」。
     /// </summary>
-    public async Task AppendCallAsync(Guid sessionKey, string requestDigest, string responseJson, string? usageJson, string? modelName)
+    public async Task AppendCallAsync(
+        Guid sessionKey,
+        string requestDigest,
+        string responseJson,
+        string? usageJson,
+        string? modelName,
+        string stream = AgentRecordingStreams.Customer)
     {
         try
         {
@@ -104,11 +112,12 @@ public class AgentRecordingService
             }
 
             var last = await context.AgentRecordedCall
-                .Where(x => x.AgentRecordingId == recording.Id)
+                .Where(x => x.AgentRecordingId == recording.Id && x.Stream == stream)
                 .MaxAsync(x => (int?)x.Sequence) ?? 0;
             context.AgentRecordedCall.Add(new AgentRecordedCall
             {
                 AgentRecordingId = recording.Id,
+                Stream = stream,
                 Sequence = last + 1,
                 RequestDigest = requestDigest,
                 ResponseJson = responseJson,
@@ -125,7 +134,7 @@ public class AgentRecordingService
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to record an agent model call. SessionKey={SessionKey}", sessionKey);
+            logger.LogWarning(ex, "Failed to record an agent model call. SessionKey={SessionKey}, Stream={Stream}", sessionKey, stream);
         }
     }
 
@@ -167,12 +176,12 @@ public class AgentRecordingService
         return new AgentRecordingDetail(summary, turns);
     }
 
-    /// <summary>錄製的模型呼叫（依順序）；找不到錄製回空清單。</summary>
-    public async Task<IReadOnlyList<AgentRecordedCallView>> GetCallsAsync(int id)
+    /// <summary>錄製中某一條 stream（預設顧客端 Agent）的模型呼叫（依順序）；找不到錄製回空清單。</summary>
+    public async Task<IReadOnlyList<AgentRecordedCallView>> GetCallsAsync(int id, string stream = AgentRecordingStreams.Customer)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         return await context.AgentRecordedCall.AsNoTracking()
-            .Where(x => x.AgentRecordingId == id)
+            .Where(x => x.AgentRecordingId == id && x.Stream == stream)
             .OrderBy(x => x.Sequence).ThenBy(x => x.Id)
             .Select(x => new AgentRecordedCallView(x.Sequence, x.RequestDigest, x.ResponseJson, x.UsageJson, x.CreatedAt))
             .ToListAsync();

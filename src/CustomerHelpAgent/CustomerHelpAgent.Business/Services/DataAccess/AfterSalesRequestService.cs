@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using CustomerHelpAgent.AccessDatas;
 using CustomerHelpAgent.AccessDatas.Models;
-using CustomerHelpAgent.Business.Factories;
 using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Shop;
@@ -14,9 +13,10 @@ using CustomerHelpAgent.Share.Shop;
 namespace CustomerHelpAgent.Business.Services.DataAccess;
 
 /// <summary>
-/// 售後申請服務：顧客送件／補件、客服審核佇列、要求補件、核准／駁回、附件存取檢查。
-/// ⚠️ 顧客端方法一律以 <c>customerUserId</c> 做擁有權檢查（M2 Agent 也會呼叫 <see cref="SubmitAsync"/>）；
-/// 客服的狀態變更以 <c>ExecuteUpdateAsync</c> 加上狀態條件，避免兩位客服同時處理同一筆。
+/// 售後申請服務：顧客送件／補件、客服審核佇列與明細、附件存取檢查。
+/// ⚠️ 顧客端方法一律以 <c>customerUserId</c> 做擁有權檢查（M2 Agent 也會呼叫 <see cref="SubmitAsync"/>）。
+/// 客服決定（核准／駁回／要求補件）不在這裡：M4 起審核頁唯一入口是 <c>AfterSalesReviewCoordinator</c>，
+/// 真正寫入的只有 <see cref="AfterSalesDecisionService.ApplyAsync"/>（狀態守門的條件更新）。
 /// </summary>
 public class AfterSalesRequestService
 {
@@ -39,7 +39,9 @@ public class AfterSalesRequestService
     private readonly CurrentUserService currentUserService;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<AfterSalesRequestService> logger;
+    private readonly IAfterSalesSubmittedHook submittedHook;
 
+    /// <param name="submittedHook">送件／補件 commit 後的掛勾（M4：Agent 管道觸發 AI 初審）；沒有註冊時不做事。</param>
     public AfterSalesRequestService(
         IDbContextFactory<BackendDBContext> contextFactory,
         AfterSalesPolicyService policyService,
@@ -48,7 +50,8 @@ public class AfterSalesRequestService
         IAuditLogService auditLogService,
         CurrentUserService currentUserService,
         TimeProvider timeProvider,
-        ILogger<AfterSalesRequestService> logger)
+        ILogger<AfterSalesRequestService> logger,
+        IAfterSalesSubmittedHook? submittedHook = null)
     {
         this.contextFactory = contextFactory;
         this.policyService = policyService;
@@ -58,6 +61,7 @@ public class AfterSalesRequestService
         this.currentUserService = currentUserService;
         this.timeProvider = timeProvider;
         this.logger = logger;
+        this.submittedHook = submittedHook ?? NoOpAfterSalesSubmittedHook.Instance;
     }
 
     /// <summary>
@@ -72,10 +76,13 @@ public class AfterSalesRequestService
             Id = x.Id,
             RequestNo = x.RequestNo,
             CaseKey = x.CaseKey,
+            CustomerUserId = x.CustomerUserId,
+            OrderItemId = x.SalesOrderItemId,
+            SalesOrderId = x.SalesOrderItem!.SalesOrderId,
             Type = x.Type,
             Status = x.Status,
             Channel = x.Channel,
-            OrderNo = x.SalesOrderItem!.SalesOrder!.OrderNo,
+            OrderNo = x.SalesOrderItem.SalesOrder!.OrderNo,
             ProductName = x.SalesOrderItem.ProductVariant!.Product!.Name,
             ProductCategory = x.SalesOrderItem.ProductVariant.Product.Category,
             Color = x.SalesOrderItem.ProductVariant.Color,
@@ -343,6 +350,7 @@ public class AfterSalesRequestService
             targetType: nameof(AfterSalesRequest),
             targetId: row.Id.ToString(CultureInfo.InvariantCulture),
             detail: $"requestNo={row.RequestNo}, type={row.Type}, channel={row.Channel}");
+        await NotifySubmittedAsync(row.Id, row.Channel);
         return new SubmitResult(true, "已送出售後申請。", row.Id, row.RequestNo);
     }
 
@@ -363,7 +371,7 @@ public class AfterSalesRequestService
         var current = await context.AfterSalesRequest
             .AsNoTracking()
             .Where(x => x.Id == requestId && x.CustomerUserId == customerUserId)
-            .Select(x => new { x.RequestNo, x.Status })
+            .Select(x => new { x.RequestNo, x.Status, x.Channel })
             .FirstOrDefaultAsync();
         if (current is null)
         {
@@ -453,7 +461,23 @@ public class AfterSalesRequestService
             targetType: nameof(AfterSalesRequest),
             targetId: requestId.ToString(CultureInfo.InvariantCulture),
             detail: $"requestNo={current.RequestNo}, attachments={attachments.Count}");
+        await NotifySubmittedAsync(requestId, current.Channel);
         return new SubmitResult(true, "已送出補件。", requestId, current.RequestNo);
+    }
+
+    /// <summary>
+    /// 送件／補件 commit 之後呼叫掛勾（AI 初審入列）。⚠️ 申請已經成立：掛勾的任何例外只記 Warning，絕不讓送出失敗。
+    /// </summary>
+    private async Task NotifySubmittedAsync(int requestId, AfterSalesChannel channel)
+    {
+        try
+        {
+            await submittedHook.OnSubmittedAsync(requestId, channel);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "After-sales submitted hook failed; the submission itself succeeded. RequestId={RequestId}, Channel={Channel}", requestId, channel);
+        }
     }
 
     public async Task<DataRequestResult<AfterSalesRequestView>> GetReviewQueueAsync(DataRequest request, AfterSalesStatus? status)
@@ -488,77 +512,41 @@ public class AfterSalesRequestService
             .FirstOrDefaultAsync();
     }
 
-    public async Task<VerifyRecordResult> RequestMoreInfoAsync(int requestId, string note)
+    /// <summary>
+    /// 這筆申請的個資原文（顧客姓名、帳號、Email，訂單的收件人、地址、手機），只給 AI 初審在送出前<b>遮蔽</b>用：
+    /// 顧客自己打的字可能提到它們。<c>Names</c> 是姓名（顧客、收件人），<c>Others</c> 是帳號、Email、地址、手機。
+    /// ⚠️ 絕不可把回傳值送給模型或寫進日誌。找不到申請回兩個空清單。
+    /// </summary>
+    public async Task<(IReadOnlyList<string> Names, IReadOnlyList<string> Others)> GetPersonalValuesForRedactionAsync(int requestId)
     {
-        var text = note?.Trim() ?? string.Empty;
-        if (text.Length == 0)
-        {
-            return VerifyRecordResultFactory.Build(false, "請填寫需要顧客補充的內容。");
-        }
-
-        var now = Now();
-        try
-        {
-            await using var context = await contextFactory.CreateDbContextAsync();
-            var affected = await context.AfterSalesRequest
-                .Where(x => x.Id == requestId && x.Status == AfterSalesStatus.Submitted)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.Status, AfterSalesStatus.NeedMoreInfo)
-                    .SetProperty(x => x.StaffNote, text)
-                    .SetProperty(x => x.UpdatedAt, now));
-            if (affected == 0)
+        await using var context = await contextFactory.CreateDbContextAsync();
+        // 顧客不經導覽屬性：MyUser 有軟刪除過濾器，已刪除顧客的申請也要遮得到。
+        var users = context.MyUser.IgnoreQueryFilters([ISoftDeletable.FilterName]);
+        var row = await context.AfterSalesRequest
+            .AsNoTracking()
+            .Where(x => x.Id == requestId)
+            .Select(x => new
             {
-                logger.LogInformation("Request more info skipped because the status changed. RequestId={RequestId}", requestId);
-                return VerifyRecordResultFactory.Build(false, StatusChangedMessage);
-            }
-        }
-        catch (Exception ex)
+                Customer = users.Where(u => u.Id == x.CustomerUserId).Select(u => new { u.Name, u.Account, u.Email }).FirstOrDefault(),
+                x.SalesOrderItem!.SalesOrder!.RecipientName,
+                x.SalesOrderItem.SalesOrder.ShippingAddress,
+                x.SalesOrderItem.SalesOrder.RecipientPhone,
+            })
+            .FirstOrDefaultAsync();
+        if (row is null)
         {
-            logger.LogError(ex, "Failed to request more info. RequestId={RequestId}", requestId);
-            return VerifyRecordResultFactory.Build(false, "要求補件失敗。", ex);
+            return ([], []);
         }
 
-        logger.LogInformation("After-sales request needs more info. RequestId={RequestId}", requestId);
-        await WriteStaffAuditAsync(AuditActions.Shop.RequestMoreInfo, requestId, "status=NeedMoreInfo");
-        return VerifyRecordResultFactory.Build(true);
-    }
+        return (
+            Clean(row.Customer?.Name, row.RecipientName),
+            Clean(row.Customer?.Account, row.Customer?.Email, row.ShippingAddress, row.RecipientPhone));
 
-    public async Task<VerifyRecordResult> DecideAsync(int requestId, bool approve, string? note)
-    {
-        var now = Now();
-        var staffId = currentUserService.CurrentUser.Id;
-        int? staffUserId = staffId > 0 ? staffId : null;
-        var newStatus = approve ? AfterSalesStatus.Approved : AfterSalesStatus.Rejected;
-        var text = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
-        try
-        {
-            await using var context = await contextFactory.CreateDbContextAsync();
-            var affected = await context.AfterSalesRequest
-                .Where(x => x.Id == requestId && x.Status == AfterSalesStatus.Submitted)
-                .ExecuteUpdateAsync(s =>
-                {
-                    s.SetProperty(x => x.Status, newStatus);
-                    s.SetProperty(x => x.UpdatedAt, now);
-                    s.SetProperty(x => x.DecidedAt, now);
-                    s.SetProperty(x => x.DecidedByUserId, staffUserId);
-                    // 一律覆寫：沒填備註時要清掉要求補件時留下的備註，不能讓顧客在結案後還看到「請補照片」。
-                    s.SetProperty(x => x.StaffNote, text);
-                });
-            if (affected == 0)
-            {
-                logger.LogInformation("Decision skipped because the status changed. RequestId={RequestId}", requestId);
-                return VerifyRecordResultFactory.Build(false, StatusChangedMessage);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to decide after-sales request. RequestId={RequestId}", requestId);
-            return VerifyRecordResultFactory.Build(false, "審核失敗。", ex);
-        }
-
-        logger.LogInformation("After-sales request decided. RequestId={RequestId}, RequestStatus={RequestStatus}", requestId, newStatus);
-        await WriteStaffAuditAsync(AuditActions.Shop.RequestDecide, requestId, $"status={newStatus}");
-        return VerifyRecordResultFactory.Build(true);
+        static List<string> Clean(params string?[] values) => values
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>附件存取：申請人本人或審核者才能取得；否則（或實體檔不存在、路徑不合法）回 null。</summary>
@@ -596,19 +584,5 @@ public class AfterSalesRequestService
     {
         var user = currentUserService.CurrentUser;
         return user.Id == customerUserId ? user.Account : null;
-    }
-
-    private Task WriteStaffAuditAsync(string action, int requestId, string detail)
-    {
-        var user = currentUserService.CurrentUser;
-        int? userId = user.Id > 0 ? user.Id : null;
-        return auditLogService.WriteAsync(
-            action,
-            success: true,
-            actorUserId: userId,
-            actorAccount: userId is null ? null : user.Account,
-            targetType: nameof(AfterSalesRequest),
-            targetId: requestId.ToString(CultureInfo.InvariantCulture),
-            detail: detail);
     }
 }

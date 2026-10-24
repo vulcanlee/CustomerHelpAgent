@@ -34,6 +34,12 @@ public sealed record AfterSalesRequestView
     public int Id { get; init; }
     public string RequestNo { get; init; } = string.Empty;
     public Guid CaseKey { get; init; }
+
+    /// <summary>申請人、訂單商品與訂單的 Id：給程式查庫存與出貨時間用（AI 初審的規則核對），不送給模型。</summary>
+    public int CustomerUserId { get; init; }
+    public int OrderItemId { get; init; }
+    public int SalesOrderId { get; init; }
+
     public AfterSalesType Type { get; init; }
     public AfterSalesStatus Status { get; init; }
     public AfterSalesChannel Channel { get; init; }

@@ -1,0 +1,148 @@
+@* 審核窗的「AI 助手」分頁（只給 Agent 管道）：程式整理的轉人工交接摘要＋只讀的客服 AI 助手對話（只存在記憶體，關窗即清除）。 *@
+<section class="staff-assistant" aria-label="客服 AI 助手">
+    <section class="staff-assistant-handover" aria-label="轉人工交接">
+        <h3 class="staff-assistant-heading">轉人工交接：顧客端 Agent 已查過</h3>
+        @if (handover is null)
+        {
+            <p class="staff-assistant-muted">@(handoverFailed ? "交接摘要暫時無法載入，請稍後重新開啟。" : "載入中…")</p>
+        }
+        else if (!handover.HasTrail)
+        {
+            <p class="staff-assistant-muted">顧客端 Agent 沒有留下這個案件的紀錄。</p>
+        }
+        else
+        {
+            <dl class="staff-assistant-facts">
+                <div><dt>訂單</dt><dd>@OrdersText</dd></div>
+                <div><dt>規則與版本</dt><dd>@JoinOr(handover.Policies, "沒有查詢規則")</dd></div>
+                <div><dt>庫存</dt><dd>@JoinOr(handover.StockChecks, "沒有查詢庫存")</dd></div>
+                <div><dt>照片</dt><dd>@(handover.PhotosUploaded > 0 ? $"顧客上傳了 {handover.PhotosUploaded} 張照片" : "沒有上傳照片")</dd></div>
+                <div class="staff-assistant-fact-wide">
+                    <dt>確認卡</dt>
+                    <dd>
+                        @if (handover.Confirmation is { } card)
+                        {
+                            <span>@card.Title：@card.ProductLine，@card.Spec；@card.PolicyLine（@card.Outcome）</span>
+                            @if (card.Facts.Count > 0)
+                            {
+                                <ul class="staff-assistant-list">
+                                    @foreach (var fact in card.Facts)
+                                    {
+                                        <li>@fact</li>
+                                    }
+                                </ul>
+                            }
+                        }
+                        else
+                        {
+                            <span>沒有顯示確認卡</span>
+                        }
+                    </dd>
+                </div>
+                <div class="staff-assistant-fact-wide">
+                    <dt>顧客說過的話</dt>
+                    <dd>
+                        @if (handover.CustomerStatements.Count == 0)
+                        {
+                            <span>—</span>
+                        }
+                        else
+                        {
+                            <ul class="staff-assistant-list">
+                                @foreach (var statement in handover.CustomerStatements)
+                                {
+                                    <li>@statement</li>
+                                }
+                            </ul>
+                        }
+                    </dd>
+                </div>
+            </dl>
+        }
+    </section>
+
+    <section class="staff-assistant-chat" aria-label="客服 AI 助手對話">
+        <h3 class="staff-assistant-heading">客服 AI 助手</h3>
+        @if (disabledReason is not null)
+        {
+            <p class="staff-assistant-notice" role="alert">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="info" />
+                <span>@disabledReason</span>
+            </p>
+        }
+
+        @* 單一子元素＋column-reverse：內容增加時捲軸停在底部，不需要 JS 捲動。 *@
+        <div class="staff-assistant-scroll">
+            <div class="staff-assistant-log" role="log" aria-live="polite" aria-label="對話內容">
+                @if (entries.Count == 0 && streaming is null)
+                {
+                    <p class="staff-assistant-muted">可以問這筆申請的規則、庫存、此顧客過去的申請、顧客端對話或 AI 初審結論。助手只能查詢，不能替你核准或駁回。</p>
+                }
+
+                @foreach (var entry in entries)
+                {
+                    if (entry.IsQuestion)
+                    {
+                        <div class="staff-assistant-row is-staff">
+                            <div class="staff-assistant-bubble staff-assistant-question">@entry.Text</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="staff-assistant-row">
+                            <div class="staff-assistant-answer">
+                                @if (entry.Tags.Count > 0)
+                                {
+                                    <ul class="staff-assistant-tags" aria-label="這一輪查了什麼">
+                                        @foreach (var tag in entry.Tags)
+                                        {
+                                            <li class="staff-assistant-tag">@tag</li>
+                                        }
+                                    </ul>
+                                }
+                                @if (entry.IsProgramMessage)
+                                {
+                                    <p class="staff-assistant-system" role="note">@entry.Text</p>
+                                }
+                                else
+                                {
+                                    @* 模型文字一律經 AiMarkdownRenderer.ToSafeHtml（速查表 §6.5），不可直接丟進 MarkupString。 *@
+                                    <div class="staff-assistant-bubble staff-assistant-reply">@((MarkupString)entry.Html)</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+
+                @if (streaming is not null)
+                {
+                    @* 串流中的預覽一律純文字；完成後以最終回覆重繪。 *@
+                    <div class="staff-assistant-row">
+                        <div class="staff-assistant-answer">
+                            @if (streamingTags.Count > 0)
+                            {
+                                <ul class="staff-assistant-tags" aria-label="這一輪查了什麼">
+                                    @foreach (var tag in streamingTags)
+                                    {
+                                        <li class="staff-assistant-tag">@tag</li>
+                                    }
+                                </ul>
+                            }
+                            <div class="staff-assistant-bubble staff-assistant-streaming" aria-busy="true">@(streaming.Length == 0 ? "助手查詢中…" : streaming.ToString())</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <form class="staff-assistant-composer" @onsubmit="OnSendAsync">
+            <input type="text" class="staff-assistant-input" aria-label="向客服 AI 助手提問" maxlength="@MaxQuestionLength"
+                   placeholder="@Placeholder" disabled="@(!CanAsk)" @bind="draft" @bind:event="oninput" />
+            @* 送出鈕不依「是否有輸入」停用：預設按鈕停用時瀏覽器不會以 Enter 送出表單；空白提問由 OnSendAsync 忽略。 *@
+            <button type="submit" class="staff-assistant-send" disabled="@(!CanAsk)">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="send" />
+                <span>送出</span>
+            </button>
+        </form>
+    </section>
+</section>

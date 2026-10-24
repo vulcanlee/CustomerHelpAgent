@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using CustomerHelpAgent.AccessDatas;
+using CustomerHelpAgent.AccessDatas.Models;
 using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Systems;
@@ -17,7 +18,7 @@ public sealed record DemoResetResult(bool Success, string Message, int DeletedRe
 ///
 /// <list type="bullet">
 /// <item>只在 <c>DemoSettings:Enabled</c> 時可用，否則回失敗、不動資料。</item>
-/// <item>刪除與重新寫入在同一個交易內，依外鍵順序 <c>ExecuteDelete</c>：附件 → 申請 → 確認卡 → 會話 → 物流事件 → 物流
+/// <item>刪除與重新寫入在同一個交易內，依外鍵順序 <c>ExecuteDelete</c>：附件 → 處理單 → 示範顧客的售後通知 → 申請 → 確認卡 → 會話 → 物流事件 → 物流
 /// → 訂單明細 → 訂單 → 規格 → 商品 → 售後規則。任何一步失敗整批回滾。</item>
 /// <item>commit 之後才刪附件實體檔（<see cref="AfterSalesFileStore.Delete"/> 不拋例外，刪不掉只記警告），
 /// 再通知 <see cref="IDemoResetParticipant"/>（例如清空對話中暫存的照片），最後寫稽核 <see cref="AuditActions.Demo.Reset"/>。</item>
@@ -77,6 +78,20 @@ public sealed class DemoResetService
             : null;
     }
 
+    private static async Task DeleteAfterSalesNotificationsAsync(BackendDBContext context)
+    {
+        var customerIds = await context.MyUser.IgnoreQueryFilters([ISoftDeletable.FilterName])
+            .Where(x => x.Account == DemoSeedData.Customer1 || x.Account == DemoSeedData.Customer2)
+            .Select(x => x.Id)
+            .ToListAsync();
+        await context.Notification
+            .Where(x => x.Category == NotificationCategories.AfterSalesUpdated && customerIds.Contains(x.RecipientUserId))
+            .ExecuteDeleteAsync();
+        await context.NotificationDispatch
+            .Where(x => x.SourceKey.StartsWith("aftersales:") && customerIds.Contains(x.RecipientUserId))
+            .ExecuteDeleteAsync();
+    }
+
     public async Task<DemoResetResult> ResetAsync()
     {
         if (!demoSettings.Enabled)
@@ -104,6 +119,14 @@ public sealed class DemoResetService
                 .ToListAsync();
 
             await context.AfterSalesAttachment.ExecuteDeleteAsync();
+            // 處理單（M4）有外鍵指向申請與規格，必須在申請與規格之前刪；
+            // 示範顧客收到的售後通知與其去重紀錄一併清掉，重置後同編號的新申請才收得到通知。
+            await context.AfterSalesFulfillment.ExecuteDeleteAsync();
+            // AI 初審（M4）：節點狀態 → 初審 → checkpoint（checkpoint 無外鍵，但屬示範資料）；初審有外鍵指向申請，必須在申請之前刪。
+            await context.PreReviewNodeState.ExecuteDeleteAsync();
+            await context.PreReviewRun.ExecuteDeleteAsync();
+            await context.WorkflowCheckpoint.ExecuteDeleteAsync();
+            await DeleteAfterSalesNotificationsAsync(context);
             deletedRequests = await context.AfterSalesRequest.ExecuteDeleteAsync();
             await context.AgentConfirmation.ExecuteDeleteAsync();
             deletedSessions = await context.AgentSessionRecord.ExecuteDeleteAsync();

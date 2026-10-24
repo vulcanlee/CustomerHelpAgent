@@ -63,7 +63,8 @@ public sealed class AfterSalesAgentTools
     private const string OrderItemIdDescription = "訂單商品編號（query_my_orders 回傳的 order_item_id）";
 
     private static readonly string[] OrderWithheld = ["收件人", "地址", "手機", "價格"];
-    private static readonly string[] StockWithheld = ["庫存數量"];
+    /// <summary>庫存的工具結果刻意不送數量（客服 AI 助手的 <c>check_stock</c> 共用）。</summary>
+    internal static readonly string[] StockWithheld = ["庫存數量"];
     private static readonly string[] ShipmentWithheld = ["收件人", "地址"];
 
     private static readonly Dictionary<string, AfterSalesType> IssueTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -195,7 +196,7 @@ public sealed class AfterSalesAgentTools
             var (order, _) = target.Value;
             var shippedAt = type == AfterSalesType.ShipmentUrge ? await GetShippedAtAsync(customerUserId, order.OrderId, ct) : null;
             var now = Now();
-            var (policy, failure) = await LookupPolicyAsync(type, target.Value.Item.ProductCategory, now, ct);
+            var (policy, failure) = await LookupPolicyAsync(policyService, type, target.Value.Item.ProductCategory, now, ct);
             if (policy is null)
             {
                 return failure!;
@@ -203,17 +204,7 @@ public sealed class AfterSalesAgentTools
 
             var eligibility = AfterSalesEligibility.Evaluate(
                 policy, order.DeliveredAt, isWorn, hasPhoto: photoInbox.Count(context.SessionKey) > 0, now, shippedAt);
-            return ToolOutcome.Ok(new AgentPolicyCard(
-                policy.Id,
-                policy.Code,
-                policy.Title,
-                policy.Content,
-                policy.Source,
-                policy.Version,
-                policy.EffectiveFrom,
-                AfterSalesEligibility.DaysSinceDelivery(order.DeliveredAt, now),
-                eligibility.UnmetReasons,
-                eligibility.MissingInfo));
+            return ToolOutcome.Ok(ToPolicyCard(policy, order.DeliveredAt, eligibility, now));
         }, cancellationToken);
 
     public Task<ToolOutcome> CheckVariantStockAsync(
@@ -227,7 +218,7 @@ public sealed class AfterSalesAgentTools
                 return ItemNotFound();
             }
 
-            return ToolOutcome.Ok(variants.Select(x => new AgentStockOption(x.Color, x.Size, x.Stock > 0)).ToList(), StockWithheld);
+            return ToolOutcome.Ok(ToStockOptions(variants), StockWithheld);
         }, cancellationToken);
 
     public Task<ToolOutcome> TrackShipmentAsync(
@@ -307,7 +298,7 @@ public sealed class AfterSalesAgentTools
             var (order, item) = target.Value;
             var shippedAt = type == AfterSalesType.ShipmentUrge ? await GetShippedAtAsync(customerUserId, order.OrderId, ct) : null;
             var now = Now();
-            var (policy, failure) = await LookupPolicyAsync(type, item.ProductCategory, now, ct);
+            var (policy, failure) = await LookupPolicyAsync(policyService, type, item.ProductCategory, now, ct);
             if (policy is null)
             {
                 return failure!;
@@ -318,13 +309,7 @@ public sealed class AfterSalesAgentTools
             var eligibility = AfterSalesEligibility.Evaluate(policy, order.DeliveredAt, isWorn, photoCount > 0, now, shippedAt);
             if (!eligibility.IsEligible)
             {
-                var reasons = eligibility.UnmetReasons.ToList();
-                if (eligibility.MissingInfo.Count > 0)
-                {
-                    reasons.Add("尚缺：" + string.Join("、", eligibility.MissingInfo));
-                }
-
-                var reasonText = string.Join("；", reasons);
+                var reasonText = AfterSalesEligibility.DescribeUnmet(eligibility);
                 await EmitProgramCheckAsync($"程式重新核對「{policy.Title}」規則資格不符（{reasonText}），不建立申請。");
                 logger.LogInformation(
                     "Agent after-sales request blocked by eligibility re-check. OrderItemId={OrderItemId}, RequestType={RequestType}",
@@ -390,7 +375,8 @@ public sealed class AfterSalesAgentTools
             return ToolOutcome.Ok(new { result.RequestNo, result.RequestId });
         }, cancellationToken);
 
-    private static AIFunction Create(Delegate method, string name, string description)
+    /// <summary>工具函式：結果一律序列化成 <see cref="ToolOutcome"/> 信封（客服 AI 助手的工具共用）。</summary>
+    internal static AIFunction Create(Delegate method, string name, string description)
         => AIFunctionFactory.Create(method, new AIFunctionFactoryOptions
         {
             Name = name,
@@ -451,40 +437,73 @@ public sealed class AfterSalesAgentTools
         return task;
     }
 
-    /// <summary>
-    /// 所有工具的共同外框：逾時（<see cref="AfterSalesToolContext.ToolTimeout"/>）→ 身分與權限 → 工具本體。
-    /// 呼叫端取消（<paramref name="cancellationToken"/>）照常拋出 <see cref="OperationCanceledException"/>；其他例外 → <see cref="ToolOutcomeStatus.Unavailable"/>。
-    /// </summary>
-    private async Task<ToolOutcome> RunAsync(
+    /// <summary>所有工具的共同外框（<see cref="RunFramedAsync"/>），身分來自 <see cref="ResolveCustomerAsync"/>。</summary>
+    private Task<ToolOutcome> RunAsync(
         string toolName, Func<int, CancellationToken, Task<ToolOutcome>> body, CancellationToken cancellationToken)
+        => RunFramedAsync(
+            toolName, context.ToolTimeout, () => ResolveCustomerAsync(toolName), BeforeServiceCallForTesting, AgentToolOwner.CustomerAgent, body, logger, cancellationToken);
+
+    /// <summary>
+    /// 工具的共同外框（顧客端 Agent 與客服 AI 助手共用）：逾時（<paramref name="toolTimeout"/>）→ 身分與權限（<paramref name="resolveUser"/>，
+    /// 回 null → <see cref="ToolOutcomeStatus.Forbidden"/>）→ 工具本體（拿到已核對的使用者 Id 與逾時權杖）。
+    /// 呼叫端取消（<paramref name="cancellationToken"/>）照常拋出 <see cref="OperationCanceledException"/>；其他例外 → <see cref="ToolOutcomeStatus.Unavailable"/>。
+    /// <paramref name="owner"/> 只決定日誌訊息寫的是哪一種工具（顧客端 Agent／客服 AI 助手）。
+    /// </summary>
+    internal static async Task<ToolOutcome> RunFramedAsync(
+        string toolName,
+        TimeSpan toolTimeout,
+        Func<Task<int?>> resolveUser,
+        Func<CancellationToken, Task>? beforeServiceCall,
+        AgentToolOwner owner,
+        Func<int, CancellationToken, Task<ToolOutcome>> body,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(context.ToolTimeout);
+        timeout.CancelAfter(toolTimeout);
         try
         {
-            var customerUserId = await ObserveFault(ResolveCustomerAsync(toolName)).WaitAsync(timeout.Token);
-            if (customerUserId is null)
+            var userId = await ObserveFault(resolveUser()).WaitAsync(timeout.Token);
+            if (userId is null)
             {
                 return ToolOutcome.Fail(ToolOutcomeStatus.Forbidden, "登入狀態已失效或沒有使用權限。");
             }
 
-            if (BeforeServiceCallForTesting is { } beforeServiceCall)
+            if (beforeServiceCall is not null)
             {
                 await ObserveFault(beforeServiceCall(timeout.Token)).WaitAsync(timeout.Token);
             }
 
-            return await body(customerUserId.Value, timeout.Token);
+            return await body(userId.Value, timeout.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(
-                "After-sales agent tool timed out. ToolName={ToolName}, TimeoutMilliseconds={TimeoutMilliseconds}",
-                toolName, context.ToolTimeout.TotalMilliseconds);
+            if (owner == AgentToolOwner.StaffAssistant)
+            {
+                logger.LogWarning(
+                    "Staff assistant tool timed out. ToolName={ToolName}, TimeoutMilliseconds={TimeoutMilliseconds}",
+                    toolName, toolTimeout.TotalMilliseconds);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "After-sales agent tool timed out. ToolName={ToolName}, TimeoutMilliseconds={TimeoutMilliseconds}",
+                    toolName, toolTimeout.TotalMilliseconds);
+            }
+
             return ToolOutcome.Fail(ToolOutcomeStatus.Timeout, "系統暫時沒有回應，目前無法確認（不代表查無資料）。", retryable: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "After-sales agent tool failed. ToolName={ToolName}", toolName);
+            if (owner == AgentToolOwner.StaffAssistant)
+            {
+                logger.LogError(ex, "Staff assistant tool failed. ToolName={ToolName}", toolName);
+            }
+            else
+            {
+                logger.LogError(ex, "After-sales agent tool failed. ToolName={ToolName}", toolName);
+            }
+
             return ToolOutcome.Fail(ToolOutcomeStatus.Unavailable, "系統暫時無法使用，目前無法核實。");
         }
     }
@@ -540,9 +559,9 @@ public sealed class AfterSalesAgentTools
     private async Task<DateTime?> GetShippedAtAsync(int customerUserId, int orderId, CancellationToken ct)
         => (await ObserveFault(shopOrderService.GetMyOrderDetailAsync(customerUserId, orderId)).WaitAsync(ct))?.Shipment?.ShippedAt;
 
-    /// <summary>唯一生效的規則；查無或衝突時回對應的失敗信封。</summary>
-    private async Task<(AfterSalesPolicyModel? Policy, ToolOutcome? Failure)> LookupPolicyAsync(
-        AfterSalesType type, string productCategory, DateTime now, CancellationToken ct)
+    /// <summary>唯一生效的規則；查無或衝突時回對應的失敗信封（客服 AI 助手的 <c>get_effective_policy</c> 共用）。</summary>
+    internal static async Task<(AfterSalesPolicyModel? Policy, ToolOutcome? Failure)> LookupPolicyAsync(
+        AfterSalesPolicyService policyService, AfterSalesType type, string productCategory, DateTime now, CancellationToken ct)
     {
         var lookup = await ObserveFault(policyService.GetEffectiveAsync(type, productCategory, now)).WaitAsync(ct);
         return lookup.Status switch
@@ -597,6 +616,24 @@ public sealed class AfterSalesAgentTools
         }
     }
 
+    /// <summary>規則卡：條文原文＋程式計算的簽收天數與資格結果（客服 AI 助手的 <c>get_effective_policy</c> 共用）。</summary>
+    internal static AgentPolicyCard ToPolicyCard(AfterSalesPolicyModel policy, DateTime? deliveredAt, EligibilityResult eligibility, DateTime now)
+        => new(
+            policy.Id,
+            policy.Code,
+            policy.Title,
+            policy.Content,
+            policy.Source,
+            policy.Version,
+            policy.EffectiveFrom,
+            AfterSalesEligibility.DaysSinceDelivery(deliveredAt, now),
+            eligibility.UnmetReasons,
+            eligibility.MissingInfo);
+
+    /// <summary>同款各規格是否有貨（不給數量；客服 AI 助手的 <c>check_stock</c> 共用）。</summary>
+    internal static List<AgentStockOption> ToStockOptions(IEnumerable<ShopVariantStock> variants)
+        => variants.Select(x => new AgentStockOption(x.Color, x.Size, x.Stock > 0)).ToList();
+
     private Task EmitProgramCheckAsync(string plainText)
         => context.Emit(new AgentTraceEvent(AgentStepKind.ProgramCheck, AgentDataSource.Program, plainText, null, Now()));
 
@@ -608,4 +645,11 @@ public sealed class AfterSalesAgentTools
             file.Content.Dispose();
         }
     }
+}
+
+/// <summary>工具外框（<see cref="AfterSalesAgentTools.RunFramedAsync"/>）的使用者：只影響日誌訊息。</summary>
+internal enum AgentToolOwner
+{
+    CustomerAgent,
+    StaffAssistant,
 }

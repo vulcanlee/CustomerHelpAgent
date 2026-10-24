@@ -16,6 +16,7 @@ using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Agents.AfterSales;
+using CustomerHelpAgent.Web.Agents.PreReview;
 using CustomerHelpAgent.Web.Configuration;
 
 namespace CustomerHelpAgent.Tests;
@@ -302,6 +303,94 @@ public sealed class AgentReplayTests : IAsyncLifetime
         // 沒有呼叫模型、也沒有建立模型 client（不需金鑰）。
         Assert.Equal(6, model.CallCount);
         Assert.Equal(0, replay.InnerClientCreations);
+    }
+
+    /// <summary>
+    /// AI 初審（M4）：即時錄下劇本 A 與三個初審節點 → 隔天重置 → 回放劇本 A 建立新申請 → 這筆申請的初審也走同一份錄製：
+    /// 各節點依自己的 stream 重播，結論與錄製時相同，完全沒有建立模型 client（沒有金鑰也可以）、沒有用量，並記下回放來源。
+    /// </summary>
+    [Fact]
+    public async Task Replay_PreReview_UsesRecordedStreamsWithoutModel()
+    {
+        var (recordingId, _) = await RecordFlagshipAsync();
+        var liveKit = PreReviewNodeKit.Create(
+            factory, fileRoot, model, TestDemoControl.Create(factory, enabled: true), cursors, new ManualTimeProvider(UtcNow));
+        var liveRequestId = await RequestIdOfRecordingAsync(recordingId);
+        await PreReviewNodeKit.AddPhotoAsync(factory, fileRoot, liveRequestId, "shoe.jpg", UtcNow.LocalDateTime);
+        PreReviewNodeKit.ScriptThreeNodes(model);
+        var expected = await liveKit.RunThreeNodesAsync(await liveKit.CaseAsync(liveRequestId));
+        var liveCalls = model.CallCount;
+
+        var later = new ManualTimeProvider(Later);
+        await ResetAsync(later);
+        var demo = await ReplayDemoAsync(recordingId);
+        var replay = CreateHarness(demo, later, modelAvailable: false);
+        var key = await replay.Runner.StartOrResumeAsync();
+        await SendAsync(replay.Runner, key, FirstLine);
+        var card = Assert.IsType<ConfirmationCard>((await SendAsync(replay.Runner, key, SecondLine)).Confirmation);
+        Assert.NotNull((await ConfirmAsync(replay.Runner, key, card.ConfirmationId, approve: true)).CreatedRequestNo);
+        int requestId;
+        await using (var db = factory.CreateDbContext())
+        {
+            requestId = await db.AfterSalesRequest.Where(x => x.CaseKey == key).Select(x => x.Id).SingleAsync();
+        }
+
+        await PreReviewNodeKit.AddPhotoAsync(factory, fileRoot, requestId, "shoe.jpg", later.GetLocalNow().DateTime);
+        var replayKit = PreReviewNodeKit.Create(factory, fileRoot, model: null, demo, cursors, later);
+        var reviewCase = await replayKit.CaseAsync(requestId);
+
+        var actual = await replayKit.RunThreeNodesAsync(reviewCase);
+
+        Assert.Equal(FindingStatus.Ok, actual.Photo.Status);
+        Assert.Equal(expected.Photo, actual.Photo);
+        Assert.Equal(FindingStatus.Ok, actual.History.Status);
+        Assert.Equal(expected.History, actual.History);
+        Assert.Equal(expected.Summary.Recommendation, actual.Summary.Recommendation);
+        Assert.Equal(expected.Summary.Headline, actual.Summary.Headline);
+        Assert.Equal(expected.Summary.Reasons, actual.Summary.Reasons);
+        Assert.Equal(liveCalls, model.CallCount);
+        Assert.Empty(replayKit.CreatedModels);
+        Assert.Empty(replayKit.Usage.Entries);
+        Assert.Equal(recordingId, (await replayKit.Runs.GetAsync(reviewCase.RunId))!.ReplayRecordingId);
+
+        // 錄製只有一次初審：再跑一輪就沒有可重播的回應，節點拋出（executor 會改為 Failed 結論），仍不會呼叫模型。
+        var again = await replayKit.CaseAsync(requestId);
+        await Assert.ThrowsAsync<ReplayExhaustedException>(() => replayKit.Photo.ReviewAsync(again, CancellationToken.None));
+        Assert.Empty(replayKit.CreatedModels);
+    }
+
+    /// <summary>
+    /// 展示控制台是回放模式，但這個案件不是回放建立的（例如即時建立的案件在回放模式下按「重新初審」、重啟續跑、啟動補建）：
+    /// 沒有可重播的錄製 → 節點拋例外（executor 改為 Failed 結論），絕不建立模型 client、不呼叫真實模型。
+    /// </summary>
+    [Fact]
+    public async Task Replay_PreReviewCaseWithoutRecording_FailsWithoutModel()
+    {
+        var (recordingId, _) = await RecordFlagshipAsync();
+        var liveRequestId = await RequestIdOfRecordingAsync(recordingId);
+        await PreReviewNodeKit.AddPhotoAsync(factory, fileRoot, liveRequestId, "shoe.jpg", UtcNow.LocalDateTime);
+        var demo = await ReplayDemoAsync(recordingId);
+        // 模型可用（給了腳本化 client）：若程式退回即時呼叫，這裡就會被呼叫到。
+        var kit = PreReviewNodeKit.Create(factory, fileRoot, model, demo, cursors, new ManualTimeProvider(UtcNow));
+        PreReviewNodeKit.ScriptThreeNodes(model);
+        var callsBefore = model.CallCount;
+        var reviewCase = await kit.CaseAsync(liveRequestId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => kit.Photo.ReviewAsync(reviewCase, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => kit.History.ReviewAsync(reviewCase, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => kit.Summary.SummarizeAsync(reviewCase, [], CancellationToken.None));
+
+        Assert.Empty(kit.CreatedModels);
+        Assert.Equal(callsBefore, model.CallCount);
+        Assert.Empty(kit.Usage.Entries);
+        Assert.Null((await kit.Runs.GetAsync(reviewCase.RunId))!.ReplayRecordingId);
+    }
+
+    private async Task<int> RequestIdOfRecordingAsync(int recordingId)
+    {
+        await using var db = factory.CreateDbContext();
+        var sessionKey = await db.AgentRecording.Where(x => x.Id == recordingId).Select(x => x.SessionKey).SingleAsync();
+        return await db.AfterSalesRequest.Where(x => x.CaseKey == sessionKey).Select(x => x.Id).SingleAsync();
     }
 
     [Fact]
