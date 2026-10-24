@@ -226,6 +226,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PreReviewRunService>();
         services.AddScoped<WorkflowCheckpointService>();
         services.AddScoped<ProcessMetricService>();
+        // 劇本執行（M6）：準備劇本時建立，效益對照頁依此分組；重置不刪。
+        services.AddScoped<DemoScenarioRunService>();
+        // 效益對照頁假設值（M6）：固定單列，重置不刪。
+        services.AddScoped<DemoAssumptionService>();
+        // 效益對照指標（M6）：只讀重置後仍保留的紀錄，唯讀。
+        services.AddScoped<BenefitMetricsService>();
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
         services.AddScoped<TeamRepository>();

@@ -13,10 +13,12 @@ using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
+using CustomerHelpAgent.Models.Shop;
 using CustomerHelpAgent.Models.Systems;
 using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Helpers;
+using CustomerHelpAgent.Share.Shop;
 using CustomerHelpAgent.Web.Agents;
 using CustomerHelpAgent.Web.Components.Views.Admins;
 using CustomerHelpAgent.Web.Configuration;
@@ -51,9 +53,11 @@ public sealed class DemoConsoleViewTests : ShopViewTestBase
         Services.AddSingleton<IAuditLogService>(audit);
         Services.AddSingleton(tickets);
         Services.AddSingleton(recordings);
+        Services.AddSingleton(new DemoScenarioRunService(Factory, TimeProvider.System, NullLogger<DemoScenarioRunService>.Instance));
         Services.AddSingleton(sp => demoControl);
         Services.AddSingleton(sp => new DemoResetService(
             Factory,
+            sp.GetRequiredService<DemoControlService>(),
             new AfterSalesFileStore(Options.Create(settings), NullLogger<AfterSalesFileStore>.Instance),
             Options.Create(new DemoSettings { Enabled = demoControl.IsEnabled, DemoUserPassword = "demo1234" }),
             TimeProvider.System,
@@ -216,8 +220,100 @@ public sealed class DemoConsoleViewTests : ShopViewTestBase
         var h = DemoScenarios.All.Single(x => x.Code == "H");
         Assert.Equal(b.CustomerLines, h.CustomerLines);
         Assert.Equal(b.Account, h.Account);
-        Assert.All(DemoScenarios.All.Where(x => x.Code != "H"), x => Assert.Equal(AgentMode.Single, x.Mode));
+        Assert.All(DemoScenarios.All.Where(x => x.Code is not ("H" or "A-M")), x => Assert.Equal(AgentMode.Single, x.Mode));
         Assert.Equal(DemoScenarios.All.Count, DemoScenarios.All.Select(x => x.Code).Distinct().Count());
+    }
+
+    /// <summary>M6：準備劇本會建立劇本執行並設為目前執行（在重置之後），之後的埋點蓋上這個編號。</summary>
+    [Fact]
+    public async Task PrepareScenario_CreatesRun_AndStampsMetrics()
+    {
+        var cut = RenderConsole();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.demo-console-prepare")));
+
+        cut.Find(".demo-console-scenario[data-code='A'] button.demo-console-prepare").Click();
+        ConfirmDestructive(cut, expectedText: "所有業務資料");
+        cut.WaitForAssertion(() => Assert.Equal("/Auths/DemoSwitch", new Uri(Navigation.Uri).AbsolutePath), TimeSpan.FromSeconds(10));
+
+        await using var db = Factory.CreateDbContext();
+        var run = await db.DemoScenarioRun.SingleAsync();
+        Assert.Equal("A", run.ScenarioCode);
+        Assert.Equal("換尺碼", run.Family);
+        Assert.Equal(ScenarioFlow.SingleAgent, run.Flow);
+        Assert.Equal(DemoSeedData.Customer1, run.Account);
+        Assert.False(run.IsReplay);
+        Assert.Equal(run.Id, demoControl.ActiveRunId);
+
+        var metrics = new ProcessMetricService(Factory, demoControl, TimeProvider.System, NullLogger<ProcessMetricService>.Instance);
+        await metrics.RecordAsync(Guid.NewGuid(), AfterSalesChannel.Agent, ProcessActor.Customer, ProcessMetricActions.Submit, CustomerId);
+        await using var check = Factory.CreateDbContext();
+        Assert.Equal(run.Id, (await check.ProcessMetric.OrderByDescending(x => x.Id).FirstAsync()).DemoRunId);
+    }
+
+    [Fact]
+    public async Task PrepareTraditionalScenario_NavigatesToForm()
+    {
+        var cut = RenderConsole();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.demo-console-prepare")));
+
+        cut.Find(".demo-console-scenario[data-code='A-T'] button.demo-console-prepare").Click();
+        ConfirmDestructive(cut, expectedText: "售後申請表單");
+        cut.WaitForAssertion(() => Assert.Equal("/Auths/DemoSwitch", new Uri(Navigation.Uri).AbsolutePath), TimeSpan.FromSeconds(10));
+
+        Assert.True(tickets.TryRedeem(TicketOf(Navigation.Uri), out var ticket));
+        Assert.Equal(new DemoSwitchTicket(adminId, DemoSwitchPurpose.SwitchIdentity, DemoSeedData.Customer1, "/shop/after-sales/new"), ticket);
+        await using var db = Factory.CreateDbContext();
+        Assert.Equal(ScenarioFlow.Traditional, (await db.DemoScenarioRun.SingleAsync()).Flow);
+    }
+
+    /// <summary>
+    /// 傳統表單劇本準備後直接打開售後申請表單：第一句台詞要從表單開始，不可叫展示者先繞去「我的訂單」
+    /// （多出來的瀏覽步驟會讓傳統的步數與時間因展示者而異）。
+    /// </summary>
+    [Fact]
+    public void TraditionalScenarios_FirstLineStartsOnForm()
+    {
+        var traditional = DemoScenarios.All.Where(x => x.Flow == ScenarioFlow.Traditional).ToList();
+
+        Assert.Equal(["A-T", "B-T"], traditional.Select(x => x.Code));
+        Assert.All(traditional, x =>
+        {
+            Assert.StartsWith("在售後申請表單", x.CustomerLines[0], StringComparison.Ordinal);
+            Assert.DoesNotContain("我的訂單", x.CustomerLines[0], StringComparison.Ordinal);
+        });
+        Assert.Equal(DemoConsoleView.ShopAfterSalesFormUrl, DemoConsoleView.CustomerUrlFor(traditional[0]));
+    }
+
+    /// <summary>傳統表單劇本不用 AI：確認窗不講「呼叫 AI 模型」，也不提醒 AI 尚未設定。</summary>
+    [Fact]
+    public void PrepareConfirmText_Traditional_HasNoAiWording()
+    {
+        var scenario = DemoScenarios.All.Single(x => x.Code == "B-T");
+
+        var text = DemoConsoleView.BuildPrepareConfirmText(scenario, replayRequested: true, golden: null, aiError: "未設定");
+
+        Assert.Contains("傳統表單流程，不使用 AI", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI 模型", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("錄製", text.Split('\n').Single(x => x.StartsWith("3.", StringComparison.Ordinal)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReplayMode_RunMarkedIsReplay()
+    {
+        var golden = await CreateRecordingAsync("劇本 A 的金劇本");
+        Assert.True(await recordings.SetGoldenAsync(golden, "A"));
+        await demoControl.SetModeAsync(DemoMode.Replay, golden);
+
+        var cut = RenderConsole();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.demo-console-prepare")));
+        cut.Find(".demo-console-scenario[data-code='A'] button.demo-console-prepare").Click();
+        ConfirmDestructive(cut, expectedText: "劇本 A 的金劇本");
+        cut.WaitForAssertion(() => Assert.Equal("/Auths/DemoSwitch", new Uri(Navigation.Uri).AbsolutePath), TimeSpan.FromSeconds(10));
+
+        await using var db = Factory.CreateDbContext();
+        var run = await db.DemoScenarioRun.SingleAsync();
+        Assert.True(run.IsReplay);
+        Assert.Equal(run.Id, demoControl.ActiveRunId);
     }
 
     [Fact]

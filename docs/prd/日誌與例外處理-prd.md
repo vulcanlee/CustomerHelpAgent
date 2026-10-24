@@ -1,8 +1,8 @@
 ﻿# 日誌與例外處理 PRD
 
-- 文件版本：1.10
+- 文件版本：1.11
 - 文件狀態：已實作
-- 現行系統版本：1.0.7
+- 現行系統版本：1.0.8
 - 首次實作版本：0.9.11（例外自動記錄管線上線）
 - 最後核對日期：2026/10/24
 
@@ -235,7 +235,7 @@
 | 全域請求日誌 | 方法、路徑、狀態碼、耗時 | `ApplicationBuilderExtensions.UseHttpRequestLogging` |
 | 例外自動收錄 | 任何 `LogError/LogCritical(ex, …)` 自動進例外紀錄表；相同簽章合併計次；堆疊另存檔案；上限 5000 列 | `ExceptionLogProvider`、`ExceptionLogWriter`、`ExceptionLogService` |
 | 例外情境 | 來源、頁面、帳號由 `ExceptionContextAccessor` 提供（HTTP、circuit 互動、啟動、背景作業） | `ApplicationCircuitHandler`、`UseHttpRequestLogging` |
-| 稽核 | 動作代碼 0.9.78 起收斂到 `AuditActions`（當時約 31 種，現行共 147 個常數）：登入、使用者／角色異動、密碼重設、檔案下載、日誌與 AI 相關操作、清除動作、清單點狀態標籤的啟用／停用（0.9.120）、測試通知（0.9.122）；0.9.117 起每筆自動記來源 IP（`AuditLogService` 經 `IClientIpProvider` 取得，呼叫端不傳；排程作業為空）；0.9.131 起加上開頁（`Page.View`）、查詢（`*.Search`）、查看單筆（`*.View`）與修改前後差異（寫在詳細內容檔）。每筆同步記一行 Debug `Audit recorded.`（只有短摘要與檔名，不含內容檔） | `AuditLogService` |
+| 稽核 | 動作代碼 0.9.78 起收斂到 `AuditActions`（當時約 31 種，現行共 152 個常數，1.0.8 重算）：登入、使用者／角色異動、密碼重設、檔案下載、日誌與 AI 相關操作、清除動作、清單點狀態標籤的啟用／停用（0.9.120）、測試通知（0.9.122）；0.9.117 起每筆自動記來源 IP（`AuditLogService` 經 `IClientIpProvider` 取得，呼叫端不傳；排程作業為空）；0.9.131 起加上開頁（`Page.View`）、查詢（`*.Search`）、查看單筆（`*.View`）與修改前後差異（寫在詳細內容檔）。每筆同步記一行 Debug `Audit recorded.`（只有短摘要與檔名，不含內容檔） | `AuditLogService` |
 | API 錯誤回應 | `ApiResult` 500 附 `TraceId`，正式環境不帶例外細節 | `ApiExceptionFilterAttribute`、`ExceptionDetailPolicy` |
 | 啟動保護 | 整段 try/catch，失敗記 Critical 並 `LogManager.Shutdown()` | `Program.cs` |
 | Blazor 錯誤邊界 | `LoggingErrorBoundary` | `Routes.razor` |

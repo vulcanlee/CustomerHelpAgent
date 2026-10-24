@@ -34,6 +34,8 @@ public sealed class DataAccessServiceLifetimeTests
         typeof(PreReviewRunService),
         typeof(WorkflowCheckpointService),
         typeof(ProcessMetricService),
+        typeof(DemoAssumptionService),
+        typeof(BenefitMetricsService),
         typeof(TeamService),
         typeof(RoleViewService),
         typeof(ProjectService),

@@ -59,6 +59,8 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<AgentConfirmation> AgentConfirmation { get; set; }
     public virtual DbSet<CustomerMemory> CustomerMemory { get; set; }
     public virtual DbSet<DemoControlState> DemoControlState { get; set; }
+    public virtual DbSet<DemoScenarioRun> DemoScenarioRun { get; set; }
+    public virtual DbSet<DemoAssumption> DemoAssumption { get; set; }
     public virtual DbSet<AgentRecording> AgentRecording { get; set; }
     public virtual DbSet<AgentRecordedTurn> AgentRecordedTurn { get; set; }
     public virtual DbSet<AgentRecordedCall> AgentRecordedCall { get; set; }
@@ -363,6 +365,7 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<ProcessMetric>(entity =>
         {
             entity.HasIndex(x => x.CaseKey);
+            entity.HasIndex(x => x.DemoRunId);
         });
         #endregion
 
@@ -425,6 +428,18 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<DemoControlState>(entity =>
         {
             entity.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        // 效益對照頁假設值（M6）：固定單列（Id = 1），Id 不自動產生。
+        modelBuilder.Entity<DemoAssumption>(entity =>
+        {
+            entity.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        // 劇本執行（M6）：依開始時間查詢；流程埋點只存編號、不設外鍵。
+        modelBuilder.Entity<DemoScenarioRun>(entity =>
+        {
+            entity.HasIndex(x => x.StartedAt);
         });
 
         // 錄製：SessionKey、CustomerUserId 刻意不設外鍵（重置刪掉會話後錄製仍在）；動作與呼叫屬於錄製（刪錄製一併刪）。

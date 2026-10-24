@@ -39,6 +39,9 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
         /// <summary>顧客劇本切換後直接到線上客服。</summary>
         internal const string ShopAssistantUrl = "/shop/assistant";
 
+        /// <summary>傳統表單劇本（M6）切換後到顧客的售後申請表單。</summary>
+        internal const string ShopAfterSalesFormUrl = "/shop/after-sales/new";
+
         /// <summary>回放下拉選單最多列出的錄製筆數（新到舊）。</summary>
         private const int RecordingOptionLimit = 100;
 
@@ -75,6 +78,9 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
 
         [Inject]
         public AgentRecordingService AgentRecordingService { get; set; } = default!;
+
+        [Inject]
+        public DemoScenarioRunService DemoScenarioRunService { get; set; } = default!;
 
         [Inject]
         public DemoSwitchTicketService TicketService { get; set; } = default!;
@@ -225,14 +231,22 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
                     await ApplyModeAsync(DemoMode.Live, null);
                 }
 
+                // 建立這次的劇本執行並設為目前執行（M6）：必須在重置之後，重置會把目前執行清空。回放模式的執行會被效益統計排除。
+                var run = await DemoScenarioRunService.CreateAsync(scenario, DemoControlService.Mode == DemoMode.Replay);
+                await DemoControlService.SetActiveRunAsync(run.Id);
+
                 var isCustomer = DemoSeedData.Accounts.Any(x => x.Account == scenario.Account && x.RoleName == MagicObjectHelper.顧客角色);
-                var ticket = TicketService.Issue(CurrentUserService.CurrentUser.Id, scenario.Account, isCustomer ? AssistantUrlFor(scenario) : null);
+                var ticket = TicketService.Issue(CurrentUserService.CurrentUser.Id, scenario.Account, isCustomer ? CustomerUrlFor(scenario) : null);
                 Logger.LogInformation(
-                    "Demo scenario prepared. ScenarioCode={ScenarioCode}, TargetAccount={TargetAccount}, Mode={Mode}, AgentMode={AgentMode}, ActiveRecordingId={ActiveRecordingId}",
-                    scenario.Code, scenario.Account, DemoControlService.Mode, scenario.Mode, DemoControlService.ActiveRecordingId);
+                    "Demo scenario prepared. ScenarioCode={ScenarioCode}, TargetAccount={TargetAccount}, Mode={Mode}, AgentMode={AgentMode}, ActiveRecordingId={ActiveRecordingId}, RunId={RunId}",
+                    scenario.Code, scenario.Account, DemoControlService.Mode, scenario.Mode, DemoControlService.ActiveRecordingId, run.Id);
                 NavigationManager.NavigateTo(DemoSwitch.UrlFor(ticket), forceLoad: true);
             }, "準備劇本");
         }
+
+        /// <summary>劇本切換身分後的落點：傳統表單劇本（M6）到售後申請表單，其餘到線上客服（<see cref="AssistantUrlFor"/>）。</summary>
+        internal static string CustomerUrlFor(DemoScenario scenario)
+            => scenario.Flow == ScenarioFlow.Traditional ? ShopAfterSalesFormUrl : AssistantUrlFor(scenario);
 
         /// <summary>
         /// 劇本切換身分後要去的線上客服網址：多 Agent 劇本帶 <c>?mode=handoff</c>（線上客服頁據此以多 Agent 模式開新對話），
@@ -253,7 +267,12 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
                 .Append(scenario.Faults.Count == 0 ? "全部關閉" : $"只開「{string.Join("、", scenario.Faults.Select(DemoFaultLabels.Name))}」，其他關閉")
                 .Append('\n');
             sb.Append("3. 模式：");
-            if (golden is not null)
+            var traditional = scenario.Flow == ScenarioFlow.Traditional;
+            if (traditional)
+            {
+                sb.Append("傳統表單流程，不使用 AI");
+            }
+            else if (golden is not null)
             {
                 sb.Append($"回放金劇本「{golden.Title}」（#{golden.Id}）");
             }
@@ -267,13 +286,21 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
             }
 
             sb.Append('\n');
-            if (golden is null && aiError is not null)
+            if (!traditional && golden is null && aiError is not null)
             {
                 sb.Append("　注意：AI 模型尚未設定，即時模式無法對話。\n");
             }
 
-            sb.Append($"4. 切換成示範帳號 {scenario.Account}，開啟線上客服")
-                .Append(scenario.Mode == AgentMode.Single ? "。\n" : $"（{AgentModeLabels.Text(scenario.Mode)} 模式）。\n");
+            if (scenario.Flow == ScenarioFlow.Traditional)
+            {
+                sb.Append($"4. 切換成示範帳號 {scenario.Account}，開啟售後申請表單（傳統流程，不使用 AI）。\n");
+            }
+            else
+            {
+                sb.Append($"4. 切換成示範帳號 {scenario.Account}，開啟線上客服")
+                    .Append(scenario.Mode == AgentMode.Single ? "。\n" : $"（{AgentModeLabels.Text(scenario.Mode)} 模式）。\n");
+            }
+
             sb.Append("\n正在進行中的顧客對話會中斷；紀錄與錄製會保留。此動作無法復原。");
             return sb.ToString();
         }

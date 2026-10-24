@@ -1,8 +1,8 @@
 ﻿# 售後 Agent 示範系統：MAF 功能運用說明
 
-- 文件版本：1.0
-- 文件狀態：已實作（涵蓋 M0–M5）
-- 現行系統版本：1.0.7
+- 文件版本：1.1
+- 文件狀態：已實作（涵蓋 M0–M6；M6 沒有新增 MAF 功能，見 §2.13）
+- 現行系統版本：1.0.8
 - 首次實作版本：1.0.7
 - 最後核對日期：2026/10/24
 - 讀者：對外（客戶、業務、主管）與內部（開發團隊）都適用。每一項先寫一句白話，可以直接拿去跟客戶說明；後面才是技術名稱與程式位置。
@@ -35,7 +35,7 @@
 | 固定流程、三路並行、停下來等人決定、重啟後續跑 | Workflows：Executor、fan-out／fan-in、`RequestPort`、checkpoint（MAF） | 客服審核頁的 AI 初審流程圖 |
 | 好幾位 AI 專員分工，一位接一位交接 | Handoff 編排＋`AsAIAgent`（MAF） | 線上客服的「多 Agent」模式 |
 | 記住顧客的偏好，下次先拿來確認 | `AIContextProvider`（MAF） | 記憶注入、「我的 AI 記憶」`/shop/memory` |
-| 每次呼叫模型都記帳、可錄製、可回放 | `IChatClient` 管線（MEAI 介面，類別本系統自訂） | Token 用量、AI 對話紀錄、展示控制台的回放 |
+| 每次呼叫模型都記帳、可錄製、可回放 | `IChatClient` 管線（MEAI 介面，類別本系統自訂） | Token 用量、AI 對話紀錄、展示控制台的回放；M6 效益對照頁的每案 AI 成本也從這些紀錄算出 |
 
 ---
 
@@ -188,6 +188,19 @@
 | Workflows（Executor、fan-out／fan-in、共用狀態、`RequestPort`、checkpoint、`JsonCheckpointStore` 基底）、Handoff 編排、`AsAIAgent`、`WorkflowSessionCheckpointRecovery` | ✔ | | |
 | `IChatClient`、`AIFunctionFactory`、`ApprovalRequiredAIFunction`／`ToolApprovalRequestContent`、`DataContent`、`UseFunctionInvocation` | | ✔ | |
 | `ToolOutcome`、`AfterSalesAgentGuard` 的規則、`SqliteWorkflowCheckpointStore`、`CustomerMemoryContextProvider` 的內容、Auditing／Tracing／Recording／Replay 四個 client、每輪總量上限、確認卡組成與重核 | | | ✔ |
+| 效益對照（M6）：`BenefitMetricsService`、`BenefitEstimator`、劇本執行標記 | | | ✔ |
+
+### 2.13 M6 效益對照頁：沒有新增 MAF 功能（純資料彙總）
+
+- **白話**：效益對照頁只是把系統已經留下的紀錄加總、平均、並排，再套上假設值算推估；它不呼叫模型，也不需要 Agent 能力，所以沒有用到任何新的 MAF 功能。
+- **為什麼做得到**：M0 起每一次模型呼叫都經過 `IChatClient` 管線裡的 `AuditingChatClient`（§2.11），不論是單一 Agent、多 Agent 的四位參與者，還是 M4 初審 Workflow 的 AI 節點，都會留下：
+  - 一筆 **Token 用量**（`TokenUsageLog`：作業名稱、Token 數、`CostTwd` 新台幣費用，以 `CallId` 識別）；
+  - 一筆 **AI 對話紀錄**（`AiCallLog`：同一個 `CallId`，加上 `ConversationId`＝售後會話或申請的 CaseKey）。
+
+  效益頁以 `CallId` 把兩者接起來，就知道每一筆費用屬於哪一個案件、哪一次劇本執行；再加上流程埋點（`ProcessMetric`）與 Agent 執行軌跡（`AgentRunTrace`：停止原因、是否回放），就能算出步數、時間、每案 AI 成本與「停下詢問」次數。
+- **關鍵設計**：因為記帳點放在框架的函式呼叫迴圈**內側**（每一回模型呼叫各記一筆），多 Agent 交接、初審三路並行這些由 MAF 自動多出來的呼叫一筆都不會漏，效益頁的 AI 成本才能和「Token 用量」頁逐筆對得上。回放走 `ReplayChatClient`、不經 `AuditingChatClient`，不產生用量紀錄，所以效益頁另以執行軌跡的回放標記把回放執行整筆排除，避免 AI 看起來不花錢。
+- **用在哪裡**：`Business/Services/DataAccess/BenefitMetricsService.cs`（彙總，唯讀）、`Business/Helpers/BenefitEstimator.cs`（推估，純函式）、`Web/Components/Views/AfterSales/BenefitComparisonView.razor`（頁面）。細節見 [售後 Agent 示範系統 §9](售後Agent示範系統.md)。
+- **若沒有**這層一致的 `IChatClient` 管線：每種 Agent 結構的費用要各自記、各自對應案件，對照頁很難保證與用量頁一致。
 
 ---
 

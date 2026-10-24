@@ -22,7 +22,7 @@ public sealed record DemoResetResult(bool Success, string Message, int DeletedRe
 /// → 訂單明細 → 訂單 → 規格 → 商品 → 售後規則。任何一步失敗整批回滾。</item>
 /// <item>commit 之後才刪附件實體檔（<see cref="AfterSalesFileStore.Delete"/> 不拋例外，刪不掉只記警告），
 /// 再通知 <see cref="IDemoResetParticipant"/>（例如清空對話中暫存的照片），最後寫稽核 <see cref="AuditActions.Demo.Reset"/>。</item>
-/// <item><b>不刪</b>：流程度量、Agent 執行軌跡、Token 用量、AI 對話紀錄、錄製檔、稽核——它們是歷史紀錄，
+/// <item><b>不刪</b>：劇本執行（M6，只清掉「目前的執行」）、流程度量、Agent 執行軌跡、Token 用量、AI 對話紀錄、錄製檔、稽核——它們是歷史紀錄，
 /// 其中的申請 Id、會話識別碼在重置後就對不到資料（本來就沒有外鍵）。</item>
 /// <item>會話與確認卡一併刪除：開著的顧客頁再送出或按確認時，Runner 找不到會話而拒絕（「找不到這段對話…請重新整理頁面」），
 /// 舊確認卡不可能再被確認。</item>
@@ -33,6 +33,7 @@ public sealed record DemoResetResult(bool Success, string Message, int DeletedRe
 public sealed class DemoResetService
 {
     private readonly IDbContextFactory<BackendDBContext> contextFactory;
+    private readonly DemoControlService demoControlService;
     private readonly AfterSalesFileStore fileStore;
     private readonly DemoSettings demoSettings;
     private readonly TimeProvider timeProvider;
@@ -43,6 +44,7 @@ public sealed class DemoResetService
 
     public DemoResetService(
         IDbContextFactory<BackendDBContext> contextFactory,
+        DemoControlService demoControlService,
         AfterSalesFileStore fileStore,
         IOptions<DemoSettings> demoSettings,
         TimeProvider timeProvider,
@@ -52,6 +54,7 @@ public sealed class DemoResetService
         ILogger<DemoResetService> logger)
     {
         this.contextFactory = contextFactory;
+        this.demoControlService = demoControlService;
         this.fileStore = fileStore;
         this.demoSettings = demoSettings.Value;
         this.timeProvider = timeProvider;
@@ -162,6 +165,19 @@ public sealed class DemoResetService
                 actorAccount: actorAccount,
                 detail: "reset failed");
             return new DemoResetResult(false, "重置示範資料失敗，資料維持原狀。", 0, 0);
+        }
+
+        // 目前的劇本執行（M6）隨資料重置而結束；劇本執行與流程度量本身保留。準備劇本會在重置之後再設定新的執行。
+        try
+        {
+            if (demoControlService.IsEnabled && demoControlService.ActiveRunId is not null)
+            {
+                await demoControlService.SetActiveRunAsync(null);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clear the active demo run after reset.");
         }
 
         var failedFiles = photoPaths.Count(path => !fileStore.Delete(path));

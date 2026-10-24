@@ -290,6 +290,7 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         systemSettings.ExternalFileSystem.AfterSalesFilePath = fileRoot;
         var reset = new DemoResetService(
             factory,
+            TestDemoControl.Off(factory),
             new AfterSalesFileStore(Options.Create(systemSettings), NullLogger<AfterSalesFileStore>.Instance),
             Options.Create(new DemoSettings { Enabled = true, DemoUserPassword = "demo1234" }),
             new ManualTimeProvider(UtcNow),

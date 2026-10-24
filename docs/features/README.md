@@ -1,8 +1,8 @@
 ﻿# features — 功能機制
 
-- 文件版本：1.15
+- 文件版本：1.16
 - 文件狀態：維護中
-- 現行系統版本：1.0.7
+- 現行系統版本：1.0.8
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/10/24
 
@@ -16,8 +16,8 @@
 | [系統健康監控](系統健康監控.md) | 14 項檢查、健康百分比、紅黃綠燈號、部署探針與最近 24 小時 WARN 以上日誌（頁面 PRD 見 [系統健康監控 PRD](../prd/系統健康監控-prd.md)）|
 | [AI 日誌分析](AI日誌分析.md) | 日誌送 Azure OpenAI／OpenAI 整理、Markdown 安全渲染、PDF 報告與內嵌中文字型（0.9.4）|
 | [AI 例外分析](AI例外分析.md) | 系統例外紀錄明細窗的 AI 分析報告、多輪追問、複製對話與 PDF（0.9.68；頁面 PRD 見 [系統例外紀錄 PRD](../prd/系統例外紀錄-prd.md)）|
-| [售後 Agent 示範系統](售後Agent示範系統.md) | Microsoft Agent Framework 示範；已實作 M0 計費接軌（`AgentChatClientFactory`／`AuditingChatClient`，1.0.2）、M1 模擬鞋服電商＋傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）、M2 單一售後 Agent（`/shop/assistant` 線上客服、受控工具、確認卡、幕後面板、`/agent-runs` 執行紀錄，1.0.4）與 M3 展示控制（`/demo-console` 控制台、故障模擬、一鍵重置、錄製／回放、身分切換，1.0.5）與 M4 客服後台 AI（申請初審 Workflow、核准開處理單與顧客通知、客服 AI 助手、初審錄製回放，1.0.6）與 M5 多 Agent 交接與長期記憶（線上客服「單一／多 Agent」切換、分流與三位專員、記憶確認卡、`/shop/memory` 我的 AI 記憶，1.0.7）|
-| [售後 Agent 示範系統：MAF 功能運用說明](售後Agent示範系統-MAF功能運用說明.md) | 本系統用到的 MAF 功能（白話用途、技術名稱、用在哪裡、為什麼需要）、沒用到的功能清單與原因、踩到的框架行為，以及 MAF 在本系統的角色與沒有它會怎樣（1.0.7）|
+| [售後 Agent 示範系統](售後Agent示範系統.md) | Microsoft Agent Framework 示範；已實作 M0 計費接軌（`AgentChatClientFactory`／`AuditingChatClient`，1.0.2）、M1 模擬鞋服電商＋傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）、M2 單一售後 Agent（`/shop/assistant` 線上客服、受控工具、確認卡、幕後面板、`/agent-runs` 執行紀錄，1.0.4）與 M3 展示控制（`/demo-console` 控制台、故障模擬、一鍵重置、錄製／回放、身分切換，1.0.5）與 M4 客服後台 AI（申請初審 Workflow、核准開處理單與顧客通知、客服 AI 助手、初審錄製回放，1.0.6）與 M5 多 Agent 交接與長期記憶（線上客服「單一／多 Agent」切換、分流與三位專員、記憶確認卡、`/shop/memory` 我的 AI 記憶，1.0.7）與 M6 效益對照頁（`/benefit-comparison`：傳統表單、單一 Agent、多 Agent 並排的實測指標、AI 成本對帳、假設值與月度推估、Excel／PDF 匯出、劇本執行標記，1.0.8）|
+| [售後 Agent 示範系統：MAF 功能運用說明](售後Agent示範系統-MAF功能運用說明.md) | 本系統用到的 MAF 功能（白話用途、技術名稱、用在哪裡、為什麼需要）、沒用到的功能清單與原因、踩到的框架行為，以及 MAF 在本系統的角色與沒有它會怎樣（1.0.7；1.0.8 補 M6 沒有新增 MAF 功能的說明）|
 
 > 語系與本地化（`RequestLocalization`、`AntDesignLocaleFactory`、支援文化）不另立文件，見 [架構總覽](../architecture/架構總覽.md) 的「語系與本地化」小節。
 

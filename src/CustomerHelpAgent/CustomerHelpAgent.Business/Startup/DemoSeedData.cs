@@ -51,6 +51,8 @@ public static class DemoSeedData
             MagicObjectHelper.角色_售後審核,
             MagicObjectHelper.角色_Agent執行紀錄,
             MagicObjectHelper.角色_售後規則,
+            // 效益對照（M6）：店家只能看；修改假設值留給管理員。
+            PermissionKey.For(MagicObjectHelper.角色_效益對照, PermissionActions.View),
             MagicObjectHelper.角色_首頁,
             MagicObjectHelper.角色_登出,
         ]),

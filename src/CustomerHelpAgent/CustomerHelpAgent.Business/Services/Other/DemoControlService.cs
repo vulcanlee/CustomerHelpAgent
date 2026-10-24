@@ -56,6 +56,9 @@ public sealed class DemoControlService
 
     public int? ActiveRecordingId => IsEnabled ? state.RecordingId : null;
 
+    /// <summary>目前的劇本執行（M6，<c>DemoScenarioRun.Id</c>）：流程埋點據此蓋上編號。示範模式關閉時一律為 null。</summary>
+    public int? ActiveRunId => IsEnabled ? state.RunId : null;
+
     /// <summary>顧客頁幕後面板的預設開關；示範模式關閉時維持預設開。</summary>
     public bool BackstageDefaultOn => !IsEnabled || state.BackstageDefaultOn;
 
@@ -90,7 +93,7 @@ public sealed class DemoControlService
 
             state = row is null
                 ? Snapshot.Default
-                : new Snapshot(ParseFaults(row.FaultsJson), mode, mode == DemoMode.Replay ? row.ActiveRecordingId : null, row.BackstageDefaultOn);
+                : new Snapshot(ParseFaults(row.FaultsJson), mode, mode == DemoMode.Replay ? row.ActiveRecordingId : null, row.BackstageDefaultOn, row.ActiveRunId);
             logger.LogInformation(
                 "Demo control state loaded. FaultCount={FaultCount}, Mode={Mode}, ActiveRecordingId={ActiveRecordingId}",
                 state.Faults.Count, state.Mode, state.RecordingId);
@@ -132,6 +135,9 @@ public sealed class DemoControlService
 
     public Task SetBackstageDefaultAsync(bool on) => UpdateAsync(current => current with { BackstageDefaultOn = on });
 
+    /// <summary>設定（或以 null 清除）目前的劇本執行（M6）；存進資料庫，重啟後仍會蓋上編號。</summary>
+    public Task SetActiveRunAsync(int? runId) => UpdateAsync(current => current with { RunId = runId });
+
     /// <summary>服務注入故障時取時間（例如物流異常事件），與本服務用同一個時鐘。</summary>
     internal DateTime Now() => timeProvider.GetLocalNow().DateTime;
 
@@ -158,13 +164,14 @@ public sealed class DemoControlService
             row.Mode = next.Mode;
             row.ActiveRecordingId = next.RecordingId;
             row.BackstageDefaultOn = next.BackstageDefaultOn;
+            row.ActiveRunId = next.RunId;
             row.UpdatedAt = Now();
             await context.SaveChangesAsync();
 
             state = next;
             logger.LogInformation(
-                "Demo control state changed. Faults={Faults}, Mode={Mode}, ActiveRecordingId={ActiveRecordingId}, BackstageDefaultOn={BackstageDefaultOn}",
-                row.FaultsJson, next.Mode, next.RecordingId, next.BackstageDefaultOn);
+                "Demo control state changed. Faults={Faults}, Mode={Mode}, ActiveRecordingId={ActiveRecordingId}, BackstageDefaultOn={BackstageDefaultOn}, ActiveRunId={ActiveRunId}",
+                row.FaultsJson, next.Mode, next.RecordingId, next.BackstageDefaultOn, next.RunId);
         }
         finally
         {
@@ -225,8 +232,8 @@ public sealed class DemoControlService
         return faults.ToFrozenSet();
     }
 
-    private sealed record Snapshot(FrozenSet<DemoFault> Faults, DemoMode Mode, int? RecordingId, bool BackstageDefaultOn)
+    private sealed record Snapshot(FrozenSet<DemoFault> Faults, DemoMode Mode, int? RecordingId, bool BackstageDefaultOn, int? RunId)
     {
-        public static readonly Snapshot Default = new(FrozenSet<DemoFault>.Empty, DemoMode.Live, null, true);
+        public static readonly Snapshot Default = new(FrozenSet<DemoFault>.Empty, DemoMode.Live, null, true, null);
     }
 }

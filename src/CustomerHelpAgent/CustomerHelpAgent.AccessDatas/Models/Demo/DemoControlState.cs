@@ -22,6 +22,9 @@ public class DemoControlState
     /// <summary>顧客頁幕後面板的預設開關（使用者在本機的偏好優先）。</summary>
     public bool BackstageDefaultOn { get; set; } = true;
 
+    /// <summary>目前的劇本執行（M6，<see cref="DemoScenarioRun.Id"/>）；流程埋點據此蓋上編號。重置時清空。刻意不設外鍵。</summary>
+    public int? ActiveRunId { get; set; }
+
     public DateTime UpdatedAt { get; set; }
 
     public const int SingletonId = 1;

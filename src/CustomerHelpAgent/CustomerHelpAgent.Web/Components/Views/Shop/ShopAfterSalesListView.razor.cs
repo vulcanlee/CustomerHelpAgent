@@ -228,7 +228,7 @@ public partial class ShopAfterSalesListView : IDisposable
             return false;
         }
 
-        await ProcessMetricService.RecordAsync(target.CaseKey, AfterSalesChannel.Traditional, ProcessActor.Customer, ProcessMetricActions.Resubmit, CustomerId, target.Id);
+        await ProcessMetricService.RecordAsync(target.CaseKey, target.Channel, ProcessActor.Customer, ProcessMetricActions.Resubmit, CustomerId, target.Id);
         Logger.LogInformation("Resubmitted after-sales request. RequestId={RequestId}", target.Id);
         ViewNotification.Warning(NotificationService, $"已送出補件，申請編號 {result.RequestNo}。");
 

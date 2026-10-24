@@ -790,12 +790,52 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.ToTable("CustomerMemory");
                 });
 
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.DemoAssumption", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("ContactsPerCaseAi")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ContactsPerCaseTraditional")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("MinutesPerContact")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("MonthlyCaseVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("QueueWaitMinutesAi")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("QueueWaitMinutesTraditional")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("StaffCostPerMinuteTwd")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DemoAssumption");
+                });
+
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.DemoControlState", b =>
                 {
                     b.Property<int>("Id")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("ActiveRecordingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ActiveRunId")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("BackstageDefaultOn")
@@ -814,6 +854,43 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DemoControlState");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.DemoScenarioRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Family")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Flow")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsReplay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScenarioCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt");
+
+                    b.ToTable("DemoScenarioRun");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.ExceptionLog", b =>
@@ -1296,6 +1373,9 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.Property<int>("Channel")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("DemoRunId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("TEXT");
 
@@ -1305,6 +1385,8 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CaseKey");
+
+                    b.HasIndex("DemoRunId");
 
                     b.ToTable("ProcessMetric");
                 });

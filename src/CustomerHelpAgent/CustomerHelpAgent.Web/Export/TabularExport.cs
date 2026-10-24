@@ -46,6 +46,17 @@ public static class TabularExport
     public static byte[] ToXlsx<T>(string sheetName, IReadOnlyList<ExportColumn<T>> columns, IEnumerable<T> rows)
     {
         using var workbook = new XLWorkbook();
+        AddSheet(workbook, sheetName, columns, rows);
+        return Save(workbook);
+    }
+
+    /// <summary>
+    /// 在既有活頁簿加一張工作表（多工作表匯出用，M6 效益對照）：標題列粗體、凍結、自動篩選。
+    /// 標題列永遠在第 1 列並凍結；<paramref name="notes"/> 不為空時，每行說明放在資料列下方（空一列後，淺灰字），這樣長表捲動時標題列仍在、說明不佔畫面。說明只放文字，不放個資。
+    /// </summary>
+    public static void AddSheet<T>(
+        XLWorkbook workbook, string sheetName, IReadOnlyList<ExportColumn<T>> columns, IEnumerable<T> rows, IReadOnlyList<string>? notes = null)
+    {
         var sheet = workbook.Worksheets.Add(sheetName);
         for (var c = 0; c < columns.Count; c++)
         {
@@ -74,6 +85,21 @@ public static class TabularExport
         sheet.SheetView.FreezeRows(1);
         sheet.Range(1, 1, Math.Max(1, r - 1), Math.Max(1, columns.Count)).SetAutoFilter();
 
+        if (notes is { Count: > 0 })
+        {
+            r++;
+            foreach (var text in notes)
+            {
+                var note = sheet.Cell(r++, 1);
+                note.SetValue(text);
+                note.Style.Font.FontColor = XLColor.DimGray;
+            }
+        }
+    }
+
+    /// <summary>活頁簿轉位元組。</summary>
+    public static byte[] Save(XLWorkbook workbook)
+    {
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();

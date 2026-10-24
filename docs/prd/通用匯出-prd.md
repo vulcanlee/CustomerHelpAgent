@@ -1,10 +1,10 @@
 ﻿# 通用匯出 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：1.0.0
+- 現行系統版本：1.0.8
 - 首次實作版本：0.9.107
-- 最後核對日期：2026/10/23
+- 最後核對日期：2026/10/24
 
 ## 一、目標與範圍
 
@@ -19,7 +19,7 @@
 | 上限 | 一次 10000 筆 |
 | 既有 CSV | 收斂到共用服務，格式維持不變 |
 
-- **非範圍**：匯入、排程匯出、多工作表報表、診斷頁改成 Excel。
+- **非範圍**：匯入、排程匯出、通用的多工作表報表、診斷頁改成 Excel（1.0.8 起 M6「效益對照」另有專用的多工作表 Excel 與 PDF，見第二、四節）。
 
 ## 二、使用者與入口
 
@@ -30,11 +30,12 @@
 | `/teams` | 匯出 Excel | 樹狀模式匯出全部；搜尋或「顯示已刪除」時依目前清單 | 同上 |
 | `/myusers` | 匯出 Excel | 目前的搜尋、排序、「顯示已刪除」 | 管理員 |
 | 稽核紀錄、系統例外紀錄、Token 用量、AI 對話紀錄 | 匯出 CSV（不變） | 各頁既有規則 | 管理員 |
+| `/benefit-comparison`（1.0.8 起） | 匯出 Excel／匯出 PDF | 畫面當下的對照結果、假設值（含尚未儲存的，檔案會註明）與選定的一組推估；匯出時不重查資料庫 | 有「效益對照」檢視權限的人；稽核 `Demo.BenefitExport`（`format=xlsx` 或 `pdf`，另記 `range=起~迄; runs=N`） |
 
 ## 三、畫面與欄位
 
 - 工具列「匯出 Excel」（圖示 `file_download`），下載 `CustomerHelpAgent.Web-{projects|categories|teams|users}-{yyyyMMdd-HHmmss}.xlsx`。
-- 工作表：標題列粗體、凍結、自動篩選；日期與時間是 Excel 原生日期（`yyyy-mm-dd`／`yyyy-mm-dd hh:mm`），數字是數字，是／否以文字表示。
+- 工作表：標題列粗體、凍結、自動篩選（標題列永遠在第 1 列）；`AddSheet` 附的說明列（M6 效益對照的檔頭說明）放在資料列下方、空一列之後，這樣長表捲動時標題列仍在、說明不佔畫面；日期與時間是 Excel 原生日期（`yyyy-mm-dd`／`yyyy-mm-dd hh:mm`），數字是數字，是／否以文字表示。
 - 欄位：
   - 專案：標題、描述、開始日期、結束日期、狀態、優先級、完成百分比、負責人、分類、團隊、建立時間、更新時間、刪除時間、刪除者。
   - 分類：名稱、描述、適用團隊、啟用、建立時間、更新時間、刪除時間、刪除者。
@@ -44,7 +45,7 @@
 
 ## 四、內部系統運作
 
-- `Web/Export/TabularExport.cs`：`ExportColumn<T>(Header, Value, ExcelFormat, Width)`；`ToXlsx`（ClosedXML，固定欄寬 —— 自動欄寬要量字型，伺服器上不可靠）、`ToCsvText`／`ToCsv`（標題列不加引號、每一格以雙引號包住並把雙引號加倍、`AppendLine` 換行，經 `TextDownloadPayload.Utf8WithBom`）、`DownloadAsync`（`appFileDownload.downloadFromStream`，與 PDF 同一條路）。
+- `Web/Export/TabularExport.cs`：`ExportColumn<T>(Header, Value, ExcelFormat, Width)`；`ToXlsx`（ClosedXML，固定欄寬 —— 自動欄寬要量字型，伺服器上不可靠）、`ToCsvText`／`ToCsv`（標題列不加引號、每一格以雙引號包住並把雙引號加倍、`AppendLine` 換行，經 `TextDownloadPayload.Utf8WithBom`）、`DownloadAsync`（`appFileDownload.downloadFromStream`，與 PDF 同一條路）。M6 起另有 `AddSheet`（在既有 `XLWorkbook` 加一張工作表；可附說明列，放在資料列下方、空一列之後，標題列固定在第 1 列並凍結）與 `Save`，讓「效益對照」能輸出多工作表的 .xlsx（`Web/Benefit/BenefitExport.cs`：對照摘要、明細、假設值與推估；PDF 沿用 `AiMarkdownPdfRenderer` 骨架加 MigraDoc 表格）；`ToXlsx` 行為不變。
   字串一律寫成文字值，以「=」開頭的內容不會變成公式。
 - `Web/Export/BusinessExports.cs`：`BuildAsync(query, 目前條件, …)` 以第一頁、`PageSize = 10000`、`Take = 1` 呼叫畫面同一個服務方法（`GetAsync`／`GetDeletedAsync`），服務回的總筆數超過上限就不產生檔案；團隊範圍由服務內的 `RecordTeamScope` 套用，與畫面一致。四頁的欄位定義與 `WriteAuditAsync` 也在這裡。
 - 稽核：`Project.Export`／`Category.Export`／`Team.Export`／`User.Export`，目標 `*`，detail `format=xlsx; rows=N`（顯示已刪除時加 `; deleted=true`），不記內容。

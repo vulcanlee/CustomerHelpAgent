@@ -18,6 +18,8 @@ public static class DemoScenarios
         new(
             "A",
             "換尺碼（旗艦）",
+            "換尺碼",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼", "黑色那雙，還沒穿過"],
             [],
@@ -29,6 +31,8 @@ public static class DemoScenarios
         new(
             "B",
             "一句兩事（旗艦）",
+            "一句兩事",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["這雙想換大一碼，另一雙開膠了也幫我看看", "黑的換大一碼，白的開膠"],
             [],
@@ -39,6 +43,8 @@ public static class DemoScenarios
         new(
             "H",
             "多 Agent：一句兩事",
+            "一句兩事",
+            ScenarioFlow.MultiAgent,
             DemoSeedData.Customer1,
             ["這雙想換大一碼，另一雙開膠了也幫我看看", "黑的換大一碼，白的開膠"],
             [],
@@ -50,8 +56,54 @@ public static class DemoScenarios
             ],
             AgentMode.Handoff),
         new(
+            "A-T",
+            "傳統表單：換尺碼",
+            "換尺碼",
+            ScenarioFlow.Traditional,
+            DemoSeedData.Customer1,
+            [
+                "在售後申請表單選擇黑色那雙，申請類型選「換尺碼」並選大一碼",
+                "商品是否穿過選「未穿過」，問題描述填尺寸不合，按「送出申請」",
+            ],
+            [],
+            [
+                "傳統流程：顧客自己填表，沒有 AI 協助；準備後會直接開啟售後申請表單。",
+                "與劇本 A 是同一個情境（黑鞋換大一碼），可並排比較步驟、時間與成本。",
+                "送出後由客服人員在售後審核頁處理，再與 Agent 流程的結果對照。",
+            ]),
+        new(
+            "B-T",
+            "傳統表單：一句兩事",
+            "一句兩事",
+            ScenarioFlow.Traditional,
+            DemoSeedData.Customer1,
+            [
+                "在售後申請表單填第一張表：選擇黑色那雙，申請類型選「換尺碼」並選大一碼，填寫未穿過與問題描述，送出申請",
+                "送出後按「回到我的訂單」，在白色那雙按「申請售後」開第二張表：申請類型選「品質問題（開膠等）」，上傳開膠照片、填寫問題描述，送出申請",
+            ],
+            [],
+            [
+                "傳統流程：一句話的兩件事要填兩張表，各自選訂單商品、原因與照片。",
+                "與劇本 B、H 是同一個情境，可並排比較單一 Agent、多 Agent 與傳統表單。",
+            ]),
+        new(
+            "A-M",
+            "多 Agent：換尺碼",
+            "換尺碼",
+            ScenarioFlow.MultiAgent,
+            DemoSeedData.Customer1,
+            ["剛買的鞋尺碼不合適，想換大一碼", "黑色那雙，還沒穿過"],
+            [],
+            [
+                "與劇本 A 同樣的兩句話，改由多 Agent 處理：分流 Agent 轉給換退貨專員。",
+                "與劇本 A、A-T 是同一個情境，可並排比較三種做法。",
+            ],
+            AgentMode.Handoff),
+        new(
             "C",
             "退貨逾期",
+            "退貨",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer2,
             ["上次買的外套想退貨", "藏青色那件，還沒穿過"],
             [],
@@ -62,6 +114,8 @@ public static class DemoScenarios
         new(
             "D",
             "物流催件",
+            "物流催件",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer2,
             ["我的外套怎麼還沒到？幫我催一下"],
             [],
@@ -72,6 +126,8 @@ public static class DemoScenarios
         new(
             "E",
             "長期記憶",
+            "長期記憶",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["我平常鞋子穿 41 碼，以後記得喔", "想換一雙鞋的尺寸", "想換一雙鞋的尺寸"],
             [],
@@ -85,6 +141,8 @@ public static class DemoScenarios
         new(
             "F1",
             "訂單系統逾時",
+            "故障模擬",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼"],
             [DemoFault.OrderServiceTimeout],
@@ -95,6 +153,8 @@ public static class DemoScenarios
         new(
             "F2",
             "權限過期",
+            "故障模擬",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼"],
             [DemoFault.PermissionExpired],
@@ -105,6 +165,8 @@ public static class DemoScenarios
         new(
             "F3",
             "規則服務停擺",
+            "故障模擬",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼", "黑色那雙，還沒穿過"],
             [DemoFault.PolicyServiceUnavailable],
@@ -114,6 +176,8 @@ public static class DemoScenarios
         new(
             "F4",
             "規則衝突",
+            "故障模擬",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼", "黑色那雙，還沒穿過"],
             [DemoFault.PolicyConflict],
@@ -124,6 +188,8 @@ public static class DemoScenarios
         new(
             "F5",
             "無適用規則",
+            "故障模擬",
+            ScenarioFlow.SingleAgent,
             DemoSeedData.Customer1,
             ["剛買的鞋尺碼不合適，想換大一碼", "黑色那雙，還沒穿過"],
             [DemoFault.PolicyNotFound],
@@ -136,6 +202,8 @@ public static class DemoScenarios
 /// <summary>一個展示劇本。</summary>
 /// <param name="Code">劇本代碼（也是金劇本的劇本代碼）。</param>
 /// <param name="Title">畫面上的名稱。</param>
+/// <param name="Family">情境家族（M6）：同一情境的不同做法同家族，例如「換尺碼」「一句兩事」，效益對照頁依此並排。</param>
+/// <param name="Flow">處理流程（M6）：傳統表單、單一 Agent 或多 Agent。</param>
 /// <param name="Account">切換成哪個示範帳號（<see cref="DemoSeedData.Accounts"/>）。</param>
 /// <param name="CustomerLines">顧客依序要說的話（回放時也是依序帶入）。</param>
 /// <param name="Faults">這個劇本要開的故障；準備時其他故障一律關閉。</param>
@@ -144,6 +212,8 @@ public static class DemoScenarios
 public sealed record DemoScenario(
     string Code,
     string Title,
+    string Family,
+    ScenarioFlow Flow,
     string Account,
     IReadOnlyList<string> CustomerLines,
     IReadOnlyList<DemoFault> Faults,

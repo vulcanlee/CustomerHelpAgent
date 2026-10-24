@@ -81,9 +81,10 @@ public sealed class DemoResetServiceTests : IAsyncLifetime
         return new AfterSalesFileStore(Options.Create(settings), NullLogger<AfterSalesFileStore>.Instance);
     }
 
-    private DemoResetService CreateResetService(bool enabled = true)
+    private DemoResetService CreateResetService(bool enabled = true, DemoControlService? demoControl = null)
         => new(
             factory,
+            demoControl ?? TestDemoControl.Off(factory),
             CreateFileStore(),
             Options.Create(new DemoSettings { Enabled = enabled, DemoUserPassword = "demo1234" }),
             new ManualTimeProvider(SeedUtc.AddDays(5)),
@@ -322,6 +323,19 @@ public sealed class DemoResetServiceTests : IAsyncLifetime
         Assert.All(policies, p => Assert.Null(p.EffectiveTo));
         Assert.All(policies, p => Assert.Equal(ResetLocal.AddDays(-90), p.EffectiveFrom));
         Assert.Equal(7, policies.Single(x => x.Code == "SIZE-EXCHANGE").WindowDays);
+    }
+
+    [Fact]
+    public async Task Reset_KeepsDemoAssumption()
+    {
+        var assumptions = new DemoAssumptionService(factory, new ManualTimeProvider(SeedUtc), audit, Staff(), NullLogger<DemoAssumptionService>.Instance);
+        Assert.True((await assumptions.SaveAsync(new DemoAssumptionInput(240, 30, 2.0, 0.5, 5, 8, 4321))).Success);
+
+        var result = await CreateResetService().ResetAsync();
+
+        Assert.True(result.Success, result.Message);
+        await using var db = factory.CreateDbContext();
+        Assert.Equal(4321, (await db.DemoAssumption.SingleAsync()).MonthlyCaseVolume);
     }
 
     [Fact]

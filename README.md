@@ -339,8 +339,8 @@ dotnet run --project CustomerHelpAgent.Web/CustomerHelpAgent.Web.csproj
 - [系統健康監控](docs/features/系統健康監控.md) — 健康百分比、紅黃綠燈號、部署探針與最近 24 小時 WARN 以上日誌。
 - [AI 日誌分析](docs/features/AI日誌分析.md) — 日誌送 Azure OpenAI／OpenAI 整理、Markdown 安全渲染管線、PDF 報告與內嵌中文字型（0.9.4）。
 - [AI 例外分析](docs/features/AI例外分析.md) — 例外明細送 AI 產生分析報告、多輪追問、複製對話與 PDF 下載（0.9.68）。
-- [售後 Agent 示範系統](docs/features/售後Agent示範系統.md) — Microsoft Agent Framework 示範；M0 計費接軌：Agent 每次模型呼叫都查額度、記 Token 用量與 AI 對話紀錄（1.0.2）；M1 模擬鞋服電商與傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）；M2 單一售後 Agent（1.0.4）；M3 展示控制（1.0.5）；M4 客服後台 AI（1.0.6）；M5 多 Agent 交接與長期記憶（1.0.7）。
-- [售後 Agent 示範系統：MAF 功能運用說明](docs/features/售後Agent示範系統-MAF功能運用說明.md) — 本系統用到與沒用到的 Microsoft Agent Framework 功能、各自用在哪裡與原因，以及 MAF 在本系統的角色（1.0.7）。
+- [售後 Agent 示範系統](docs/features/售後Agent示範系統.md) — Microsoft Agent Framework 示範；M0 計費接軌：Agent 每次模型呼叫都查額度、記 Token 用量與 AI 對話紀錄（1.0.2）；M1 模擬鞋服電商與傳統售後流程（顧客 `/shop`、客服審核、規則版本，1.0.3）；M2 單一售後 Agent（1.0.4）；M3 展示控制（1.0.5）；M4 客服後台 AI（1.0.6）；M5 多 Agent 交接與長期記憶（1.0.7）；M6 效益對照頁（`/benefit-comparison`，1.0.8）。
+- [售後 Agent 示範系統：MAF 功能運用說明](docs/features/售後Agent示範系統-MAF功能運用說明.md) — 本系統用到與沒用到的 Microsoft Agent Framework 功能、各自用在哪裡與原因，以及 MAF 在本系統的角色（1.0.7，1.0.8 補 M6）。
 
 ### 開發與操作指南（guides）
 

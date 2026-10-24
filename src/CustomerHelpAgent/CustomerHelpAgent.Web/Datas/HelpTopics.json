@@ -6,6 +6,7 @@
   { "route": "/after-sales-review", "title": "售後審核", "file": "after-sales-review.md" },
   { "route": "/after-sales-policies", "title": "售後規則管理", "file": "after-sales-policies.md" },
   { "route": "/agent-runs", "title": "Agent 執行紀錄", "file": "agent-runs.md" },
+  { "route": "/benefit-comparison", "title": "效益對照", "file": "benefit-comparison.md" },
   { "route": "/ChangePassword", "title": "變更密碼", "file": "changepassword.md" },
   { "route": "/Profile", "title": "個人資料", "file": "profile.md" },
   { "route": "/TwoFactorSetup", "title": "兩步驟驗證", "file": "twofactorsetup.md" },

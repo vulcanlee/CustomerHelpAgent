@@ -342,6 +342,10 @@ public static class AuditActions
         public const string RecordingGolden = "Demo.RecordingGolden";
         /// <summary>展示控制台刪除錄製（1.0.5 起；Detail 為 <c>recordingId=…</c>）。</summary>
         public const string RecordingDelete = "Demo.RecordingDelete";
+        /// <summary>效益對照頁修改假設值（M6；Detail 為變更的欄位 <c>field=舊→新</c>）。</summary>
+        public const string AssumptionChanged = "Demo.AssumptionChanged";
+        /// <summary>效益對照頁匯出 Excel／PDF（M6；Detail 為 <c>format=xlsx|pdf; range=起~迄; runs=N</c>，不含檔案內容）。</summary>
+        public const string BenefitExport = "Demo.BenefitExport";
     }
 
     /// <summary>「系統參數」頁的修改與還原（0.9.98 起）。Detail 為 <c>key=…; old=…(來源); new=…(來源)</c>。</summary>

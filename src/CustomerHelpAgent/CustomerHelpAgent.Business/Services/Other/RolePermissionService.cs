@@ -25,6 +25,7 @@ public class RolePermissionService
                 MagicObjectHelper.角色_售後審核,
                 MagicObjectHelper.角色_售後規則,
                 MagicObjectHelper.角色_Agent執行紀錄,
+                MagicObjectHelper.角色_效益對照,
             ],
             [MagicObjectHelper.角色_顧客商店],
             [MagicObjectHelper.角色_登出],

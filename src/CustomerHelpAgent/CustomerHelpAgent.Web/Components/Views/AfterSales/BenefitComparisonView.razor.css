@@ -1,0 +1,509 @@
+/*
+    效益對照（M6）。顏色一律走 theme.css :root 定義的別名：本頁專用的 --benefit-*（再指向 --app-*），
+    以及共用的 --app-*（底色、框線、文字），本檔不寫色碼。
+    實測（傳統／單一／多 Agent 卡、成本對帳）用一般卡片底；假設值與月度推估用琥珀底框（--benefit-assumed-*），
+    並且一律附「實測」「假設」「推估」文字標籤，不只靠顏色區分。
+*/
+.benefit-comparison {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.benefit-intro {
+    background: var(--app-tint);
+    border: 1px solid var(--app-line);
+    border-radius: 10px;
+    color: var(--app-muted);
+    font-size: 0.86rem;
+    line-height: 1.75;
+    padding: 0.75rem 1.1rem;
+}
+
+.benefit-intro p {
+    margin: 0 0 0.35rem;
+}
+
+.benefit-intro p:last-child {
+    margin-bottom: 0;
+}
+
+.benefit-legend-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+}
+
+/* 「實測」「假設／推估」標籤：文字一律內文色，底色區分種類。 */
+.benefit-kind {
+    border: 1px solid var(--benefit-measured-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--app-text);
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.6;
+    padding: 0 0.6rem;
+    vertical-align: middle;
+}
+
+.benefit-kind-measured {
+    background: var(--benefit-measured-bg);
+}
+
+.benefit-kind-assumed {
+    background: var(--benefit-assumed-tag-bg);
+    border-color: var(--benefit-assumed-line);
+    color: var(--benefit-assumed-text);
+}
+
+/* ── 篩選列 ── */
+.benefit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.benefit-toolbar-left,
+.benefit-toolbar-right {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.benefit-range {
+    color: var(--app-muted);
+    display: flex;
+    flex-direction: column;
+    font-size: 0.82rem;
+    gap: 0.15rem;
+    margin-top: -0.4rem;
+}
+
+.benefit-range-hint {
+    font-size: 0.78rem;
+}
+
+/* ── 家族分區 ── */
+.benefit-family {
+    background: var(--app-card);
+    border: 1px solid var(--app-line);
+    border-radius: 14px;
+    padding: 0.9rem 1rem 0.6rem;
+}
+
+.benefit-family-title,
+.benefit-section-title {
+    align-items: center;
+    color: var(--app-text);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 1.05rem;
+    font-weight: 700;
+    gap: 0.5rem;
+    margin: 0 0 0.6rem;
+}
+
+.benefit-flow-grid {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(var(--benefit-flow-count, 3), minmax(0, 1fr));
+}
+
+.benefit-flow-card {
+    background: var(--benefit-measured-bg);
+    border: 1px solid var(--benefit-measured-line);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.7rem 0.9rem;
+}
+
+.benefit-flow-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.benefit-flow-name {
+    color: var(--app-text);
+    font-weight: 700;
+}
+
+.benefit-flow-baseline,
+.benefit-flow-code {
+    color: var(--app-muted);
+    font-size: 0.75rem;
+}
+
+.benefit-flow-code {
+    margin-left: auto;
+}
+
+.benefit-flow-sample {
+    color: var(--app-muted);
+    font-size: 0.78rem;
+    margin: 0;
+}
+
+.benefit-flow-missing {
+    background: var(--app-off-bg);
+    border: 1px dashed var(--app-off-line);
+    border-radius: 8px;
+    color: var(--app-muted);
+    font-size: 0.85rem;
+    margin: 0.2rem 0 0;
+    padding: 0.8rem;
+}
+
+.benefit-metric {
+    border-top: 1px solid var(--app-line);
+    display: flex;
+    flex-direction: column;
+    padding-top: 0.35rem;
+}
+
+.benefit-metric-label {
+    color: var(--app-muted);
+    cursor: help;
+    font-size: 0.8rem;
+}
+
+.benefit-help-mark {
+    font-size: 0.72rem;
+    opacity: 0.8;
+}
+
+.benefit-metric-value {
+    color: var(--app-text);
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.benefit-metric-compare,
+.benefit-metric-note {
+    color: var(--app-muted);
+    font-size: 0.78rem;
+}
+
+.benefit-metric-note {
+    opacity: 0.85;
+}
+
+/* 差異膠囊：文字內文色，好壞靠底框色＋文字（改善／變差）。 */
+.benefit-delta {
+    border: 1px solid var(--benefit-neutral-line);
+    border-radius: var(--app-radius-pill);
+    color: var(--benefit-delta-text);
+    font-weight: 600;
+    margin-left: 0.2rem;
+    padding: 0 0.4rem;
+    white-space: nowrap;
+}
+
+.benefit-delta.is-neutral {
+    background: var(--benefit-neutral-bg);
+}
+
+.benefit-delta.is-better {
+    background: var(--benefit-better-bg);
+    border-color: var(--benefit-better-line);
+}
+
+.benefit-delta.is-worse {
+    background: var(--benefit-worse-bg);
+    border-color: var(--benefit-worse-line);
+}
+
+/* 未定價提醒：琥珀底框、內文色字（琥珀字在淺底上對比不足）。 */
+.benefit-unpriced {
+    background: var(--app-warn-bg);
+    border: 1px solid var(--app-warn-line);
+    border-radius: 8px;
+    color: var(--app-text);
+    font-size: 0.8rem;
+    margin: 0.3rem 0 0;
+    padding: 0.3rem 0.6rem;
+}
+
+/* ── 長條圖（座標由 BenefitBarChart 算好；本檔只管顏色）── */
+.benefit-chart-legend {
+    align-items: center;
+    color: var(--app-text);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    gap: 0.3rem 0.9rem;
+    margin: 0.8rem 0 0.4rem;
+}
+
+.benefit-legend-item {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.3rem;
+}
+
+.benefit-legend-note {
+    color: var(--app-muted);
+    font-size: 0.75rem;
+}
+
+.benefit-swatch {
+    border-radius: 3px;
+    display: inline-block;
+    height: 0.8rem;
+    width: 0.8rem;
+}
+
+.benefit-swatch-traditional {
+    background: var(--benefit-flow-traditional);
+}
+
+.benefit-swatch-single {
+    background: var(--benefit-flow-single);
+}
+
+.benefit-swatch-multi {
+    background: var(--benefit-flow-multi);
+}
+
+.benefit-chart-grid {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.benefit-chart {
+    margin: 0;
+}
+
+.benefit-chart-title {
+    color: var(--app-text);
+    font-size: 0.82rem;
+    margin-bottom: 0.15rem;
+}
+
+.benefit-chart svg {
+    display: block;
+    height: auto;
+    width: 100%;
+}
+
+.benefit-chart-baseline {
+    stroke: var(--app-line);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.benefit-bar-traditional {
+    fill: var(--benefit-flow-traditional);
+}
+
+.benefit-bar-single {
+    fill: var(--benefit-flow-single);
+}
+
+.benefit-bar-multi {
+    fill: var(--benefit-flow-multi);
+}
+
+.benefit-bar-group:hover .benefit-bar {
+    opacity: 0.85;
+}
+
+.benefit-chart-value {
+    fill: var(--app-text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.benefit-chart-empty,
+.benefit-chart-category {
+    fill: var(--app-muted);
+    font-size: 11px;
+}
+
+/* ── 示範模式外的案件、成本對帳（實測）── */
+.benefit-others {
+    background: var(--benefit-measured-bg);
+    border: 1px solid var(--benefit-measured-line);
+    border-radius: 14px;
+    padding: 0.8rem 1rem;
+}
+
+.benefit-others-empty,
+.benefit-others-note {
+    color: var(--app-muted);
+    font-size: 0.82rem;
+    margin: 0 0 0.5rem;
+}
+
+.benefit-cost {
+    background: var(--benefit-measured-bg);
+    border: 1px solid var(--benefit-measured-line);
+    border-radius: 14px;
+    color: var(--app-text);
+    font-size: 0.86rem;
+    padding: 0.8rem 1rem;
+}
+
+.benefit-cost p {
+    margin: 0 0 0.3rem;
+}
+
+.benefit-cost-note {
+    color: var(--app-muted);
+}
+
+/* ── 假設值與月度推估（假設／推估：琥珀底框）── */
+.benefit-assumed-zone {
+    background: var(--benefit-assumed-bg);
+    border: 1px solid var(--benefit-assumed-line);
+    border-radius: 14px;
+    color: var(--benefit-assumed-text);
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 0.9rem 1rem;
+}
+
+.benefit-assumed-note {
+    color: var(--app-muted);
+    font-size: 0.8rem;
+    margin: 0 0 0.5rem;
+}
+
+.benefit-assumption-grid {
+    display: grid;
+    gap: 0.5rem 0.8rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0 0 0.6rem;
+}
+
+.benefit-assumption-field {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.82rem;
+    gap: 0.2rem;
+    margin: 0;
+}
+
+.benefit-assumption-field dt {
+    color: var(--app-muted);
+    font-weight: 400;
+}
+
+.benefit-assumption-field dd {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    margin: 0;
+}
+
+.benefit-assumption-error {
+    color: var(--app-error);
+    font-size: 0.82rem;
+    margin: 0 0 0.5rem;
+}
+
+.benefit-assumption-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.benefit-estimate-target {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.benefit-estimate-cards {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 0.5rem;
+}
+
+/* 推估卡：與實測卡刻意不同（虛線框、琥珀底），一眼看得出是推估。 */
+.benefit-estimate-card {
+    background: var(--benefit-assumed-bg);
+    border: 1px dashed var(--benefit-assumed-line);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.8rem;
+}
+
+.benefit-estimate-label {
+    color: var(--app-muted);
+    font-size: 0.8rem;
+}
+
+.benefit-estimate-value {
+    color: var(--app-text);
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.benefit-estimate-meta {
+    color: var(--app-muted);
+    font-size: 0.74rem;
+}
+
+.benefit-insufficient p {
+    margin: 0 0 0.3rem;
+}
+
+.benefit-insufficient p:last-child {
+    margin-bottom: 0;
+}
+
+.benefit-insufficient {
+    background: var(--app-off-bg);
+    border: 1px dashed var(--app-off-line);
+    border-radius: 8px;
+    color: var(--app-text);
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+    padding: 0.7rem;
+}
+
+/* ── 明細 ── */
+.benefit-detail-table-wrap {
+    margin-top: 0.6rem;
+    overflow-x: auto;
+}
+
+.benefit-run-sub {
+    color: var(--app-muted);
+    font-size: 0.75rem;
+}
+
+@media (max-width: 960px) {
+    .benefit-assumed-zone {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 640.98px) {
+    .benefit-flow-grid,
+    .benefit-assumption-grid,
+    .benefit-estimate-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

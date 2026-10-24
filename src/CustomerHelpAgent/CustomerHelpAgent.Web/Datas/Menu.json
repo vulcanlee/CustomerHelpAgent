@@ -27,6 +27,12 @@
         "name": "Agent 執行紀錄",
         "icon": "timeline",
         "url": "/agent-runs"
+      },
+      {
+        "id": 94,
+        "name": "效益對照",
+        "icon": "insights",
+        "url": "/benefit-comparison"
       }
     ]
   },

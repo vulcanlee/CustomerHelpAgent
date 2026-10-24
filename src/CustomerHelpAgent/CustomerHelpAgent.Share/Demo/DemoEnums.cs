@@ -50,3 +50,16 @@ public enum AgentRecordedTurnKind
     /// <summary>顧客上傳照片後續跑。</summary>
     PhotosUploaded,
 }
+
+/// <summary>展示劇本的處理流程（M6）。資料庫以數值保存，新增項目請加在最後、不要調整順序。</summary>
+public enum ScenarioFlow
+{
+    /// <summary>傳統表單：顧客自己填售後申請表單。</summary>
+    Traditional = 1,
+
+    /// <summary>單一 Agent。</summary>
+    SingleAgent = 2,
+
+    /// <summary>多 Agent 交接。</summary>
+    MultiAgent = 3,
+}

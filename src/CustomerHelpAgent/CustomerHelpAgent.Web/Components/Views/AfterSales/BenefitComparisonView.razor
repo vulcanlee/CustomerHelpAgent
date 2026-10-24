@@ -1,0 +1,437 @@
+@using CustomerHelpAgent.Business.Services.DataAccess
+@using CustomerHelpAgent.Models.Benefit
+@using CustomerHelpAgent.Share.Demo
+@using CustomerHelpAgent.Share.Shop
+@using CustomerHelpAgent.Web.Benefit
+@using static CustomerHelpAgent.Web.Benefit.BenefitFamilyLayout
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (loadError is not null)
+{
+    <div class="alert alert-danger benefit-load-error" role="alert">
+        @loadError
+    </div>
+}
+else
+{
+    <div class="benefit-comparison">
+        <div class="benefit-intro">
+            <p>
+                跑完展示劇本後，在這裡並排比較<strong>傳統表單</strong>、<strong>單一 Agent</strong>與<strong>多 Agent</strong>處理同一個情境的差異。
+            </p>
+            <p class="benefit-legend-row">
+                <span class="benefit-kind benefit-kind-measured">實測</span>系統紀錄算出的數字（回放、沒有顧客操作或未建立申請的執行不計）
+                <span class="benefit-kind benefit-kind-assumed">假設／推估</span>人工設定的假設值，以及由假設值推算的月度數字
+            </p>
+        </div>
+
+        <div class="benefit-toolbar">
+            <div class="benefit-toolbar-left">
+                <DatePicker TValue="DateTime?" @bind-Value="startDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("起始日")" Style="width: 140px;" />
+                <DatePicker TValue="DateTime?" @bind-Value="endDate" Picker="@DatePickerType.Date"
+                            Format="yyyy-MM-dd" Placeholder="@("結束日")" Style="width: 140px;" />
+                <ToolbarIconButton Title="查詢" Icon="search" OnClick="@(async () => await OnSearchAsync())" />
+                <Button OnClick="@(async () => await OnTodayAsync())">今天</Button>
+                <Button OnClick="@(async () => await OnLastSevenDaysAsync())">最近 7 天</Button>
+            </div>
+            <div class="benefit-toolbar-right">
+                <ToolbarIconButton Title="重新整理" Icon="refresh" OnClick="@(async () => await OnRefreshAsync())" />
+                <ToolbarIconButton Title="匯出 Excel（對照摘要、明細、假設值與推估）" Icon="file_download" Disabled="@isExporting"
+                                   OnClick="@(async () => await OnExportAsync("xlsx"))" />
+                <ToolbarIconButton Title="匯出 PDF（對照摘要、假設值與推估）" Icon="picture_as_pdf" Disabled="@isExporting"
+                                   OnClick="@(async () => await OnExportAsync("pdf"))" />
+            </div>
+        </div>
+        <div class="benefit-range">
+            <span>目前範圍：@RangeText</span>
+            <span class="benefit-range-hint">範圍要涵蓋整場展示：範圍開始前就開始的執行不列入，執行只算到範圍結束為止。</span>
+        </div>
+
+        @foreach (var section in sections)
+        {
+            var traditional = section.Traditional;
+            <section class="benefit-family" data-family="@section.Family">
+                <h3 class="benefit-family-title">@section.Family</h3>
+
+                <div class="benefit-flow-grid" style="--benefit-flow-count: @section.Slots.Count">
+                    @foreach (var slot in section.Slots)
+                    {
+                        var key = BenefitMetricDisplay.FlowKey(slot.Flow);
+                        <article class="benefit-flow-card" data-flow="@key">
+                            <header class="benefit-flow-header">
+                                <span class="benefit-swatch benefit-swatch-@key" aria-hidden="true"></span>
+                                <span class="benefit-flow-name">@BenefitMetricDisplay.FlowLabel(slot.Flow)</span>
+                                @if (slot.Flow == ScenarioFlow.Traditional)
+                                {
+                                    <span class="benefit-flow-baseline">基準</span>
+                                }
+                                @if (string.IsNullOrEmpty(slot.ScenarioCodes) == false)
+                                {
+                                    <span class="benefit-flow-code">劇本 @slot.ScenarioCodes</span>
+                                }
+                            </header>
+
+                            @if (slot.Metrics is null)
+                            {
+                                <p class="benefit-flow-missing">@MissingHint(slot)</p>
+                            }
+                            else if (slot.Metrics.RunCount == 0)
+                            {
+                                <p class="benefit-flow-sample">@SampleText(slot.Metrics)</p>
+                                <p class="benefit-flow-missing">
+                                    範圍內的執行都不計，沒有可比較的數字。@MissingHint(slot)
+                                </p>
+                            }
+                            else
+                            {
+                                <p class="benefit-flow-sample">@SampleText(slot.Metrics)</p>
+                                @foreach (var metric in BenefitMetricDisplay.Metrics)
+                                {
+                                    var value = Average(metric, slot.Metrics);
+                                    var baseline = Average(metric, traditional);
+                                    var delta = slot.Flow == ScenarioFlow.Traditional ? null : BenefitMetricDisplay.Delta(baseline, value, metric.Direction);
+                                    var partial = PartialSampleText(metric, slot.Metrics);
+                                    <div class="benefit-metric" data-metric="@metric.Label">
+                                        <Tooltip Title="@metric.Definition">
+                                            <span class="benefit-metric-label">@metric.Label <span class="benefit-help-mark" aria-hidden="true">ⓘ</span></span>
+                                        </Tooltip>
+                                        <span class="benefit-metric-value">@metric.Format(value)</span>
+                                        @if (slot.Flow != ScenarioFlow.Traditional && baseline is not null && value is not null)
+                                        {
+                                            <span class="benefit-metric-compare">
+                                                傳統 @metric.Format(baseline) → @metric.Format(value)
+                                                @if (delta is { } d)
+                                                {
+                                                    <span class="benefit-delta is-@d.Tone">（@d.Text）</span>
+                                                }
+                                            </span>
+                                        }
+                                        @if (partial is not null)
+                                        {
+                                            <span class="benefit-metric-note">@partial</span>
+                                        }
+                                    </div>
+                                }
+                                @if (slot.Metrics.UnpricedCallCount > 0)
+                                {
+                                    <p class="benefit-unpriced">⚠ 有 @slot.Metrics.UnpricedCallCount 次 AI 呼叫未定價（沒有費率），AI 成本偏低。</p>
+                                }
+                            }
+                        </article>
+                    }
+                </div>
+
+                @if (HasChartData(section))
+                {
+                    <div class="benefit-chart-legend">
+                        @foreach (var slot in section.Slots)
+                        {
+                            var key = BenefitMetricDisplay.FlowKey(slot.Flow);
+                            <span class="benefit-legend-item">
+                                <span class="benefit-swatch benefit-swatch-@key" aria-hidden="true"></span>@BenefitMetricDisplay.FlowLabel(slot.Flow)
+                            </span>
+                        }
+                        <span class="benefit-legend-note">長條圖只畫@(ChartedMetricNames)，其餘指標見上方卡片；每張小圖各自從 0 起算，不同指標之間不可比較高低。</span>
+                    </div>
+                    <div class="benefit-chart-grid">
+                        @foreach (var metric in ChartedMetrics)
+                        {
+                            var values = section.Slots.Select(x => Average(metric, x.Metrics)).ToList();
+                            var bars = BenefitBarChart.Layout(values, BenefitBarChart.AxisMax(values));
+                            <figure class="benefit-chart">
+                                <figcaption class="benefit-chart-title">@metric.Label</figcaption>
+                                @* 固定 viewBox、保持預設的等比縮放，文字不會被拉扁（同 Token 用量頁的趨勢圖）。 *@
+                                <svg viewBox="0 0 @BenefitBarChart.Num(BenefitBarChart.ChartWidth) @BenefitBarChart.Num(BenefitBarChart.ChartHeight)"
+                                     role="img" aria-label="@ChartAriaLabel(section, metric, values)">
+                                    <line class="benefit-chart-baseline"
+                                          x1="@BenefitBarChart.Num(BenefitBarChart.PlotLeft)" x2="@BenefitBarChart.Num(BenefitBarChart.PlotRight)"
+                                          y1="@BenefitBarChart.Num(BenefitBarChart.Baseline)" y2="@BenefitBarChart.Num(BenefitBarChart.Baseline)" />
+                                    @for (var index = 0; index < bars.Count; index++)
+                                    {
+                                        var bar = bars[index];
+                                        var slot = section.Slots[index];
+                                        var label = bar.HasValue ? metric.Format(values[index]) : "無資料";
+                                        @* SVG 的 <text> 必須包在元素裡：直接寫在 C# 區塊中會被 Razor 當成 <text> 指令標籤。 *@
+                                        <g class="benefit-bar-group">
+                                            <title>@($"{BenefitMetricDisplay.FlowLabel(slot.Flow)}：{label}")</title>
+                                            @if (BenefitBarChart.BarPath(bar) is { Length: > 0 } path)
+                                            {
+                                                <path class="benefit-bar benefit-bar-@BenefitMetricDisplay.FlowKey(slot.Flow)" d="@path" />
+                                            }
+                                            <text class="@(bar.HasValue ? "benefit-chart-value" : "benefit-chart-empty")" text-anchor="middle"
+                                                  x="@BenefitBarChart.Num(bar.CenterX)" y="@BenefitBarChart.Num(bar.Y - 6)">@label</text>
+                                            <text class="benefit-chart-category" text-anchor="middle"
+                                                  x="@BenefitBarChart.Num(bar.CenterX)" y="@BenefitBarChart.Num(BenefitBarChart.CategoryLabelY)">@BenefitMetricDisplay.FlowLabel(slot.Flow)</text>
+                                        </g>
+                                    }
+                                </svg>
+                            </figure>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="benefit-others">
+            <h3 class="benefit-section-title">示範模式外的案件（依管道） <span class="benefit-kind benefit-kind-measured">實測</span></h3>
+            @if (comparison.Others.Count == 0)
+            {
+                <p class="benefit-others-empty">範圍內沒有示範模式外（沒有劇本執行編號）的案件。</p>
+            }
+            else
+            {
+                <p class="benefit-others-note">沒有經過「準備此劇本」的案件，依顧客使用的管道彙總；只有實測，不進月度推估。</p>
+                <Table TItem="ChannelMetrics" DataSource="@comparison.Others" Size="TableSize.Small" HidePagination="true"
+                       RowClassName="@(_ => "benefit-other-row")">
+                    <Column TData="string" Title="管道">@AfterSalesLabels.ChannelText(context.Channel)</Column>
+                    <Column TData="int" Title="案件數" Align="ColumnAlign.Right">@context.RunCount</Column>
+                    <Column TData="int" Title="不計" Align="ColumnAlign.Right">@ExcludedCount(context)</Column>
+                    <Column TData="string" Title="顧客操作步數（平均）" Align="ColumnAlign.Right">@BenefitMetricDisplay.Format(context.CustomerSteps, false)</Column>
+                    <Column TData="string" Title="AI 成本（平均每案）" Align="ColumnAlign.Right">@BenefitMetricDisplay.Format(context.AiCostTwd, true)</Column>
+                </Table>
+            }
+        </section>
+
+        <section class="benefit-cost">
+            <h3 class="benefit-section-title">AI 成本對帳 <span class="benefit-kind benefit-kind-measured">實測</span></h3>
+            <p>
+                劇本執行 @BenefitMetricDisplay.Format(comparison.Cost.DemoRunsTwd, true)
+                ＋ 其他案件 @BenefitMetricDisplay.Format(comparison.Cost.OtherCasesTwd, true)
+                ＋ 對應不到 @BenefitMetricDisplay.Format(comparison.Cost.UnattributedTwd, true)（@comparison.Cost.UnattributedCallCount 次）
+                ＝ 「Token 用量」頁同一範圍三種售後作業（AI 售後客服 Agent、AI 售後多 Agent、AI 售後初審 Workflow）的合計。
+            </p>
+            <p class="benefit-cost-note">
+                客服 AI 助手 @BenefitMetricDisplay.Format(comparison.Cost.StaffAssistantTwd, true)（@comparison.Cost.StaffAssistantCallCount 次）<strong>未歸入每案</strong>：
+                它的呼叫對應不到案件，不算在上方任何一張卡的 AI 成本裡。
+            </p>
+        </section>
+
+        <section class="benefit-assumed-zone">
+            <div class="benefit-assumptions">
+                <h3 class="benefit-section-title">假設值 <span class="benefit-kind benefit-kind-assumed">假設</span></h3>
+                <p class="benefit-assumed-note">
+                    這些不是實測，是人工設定的假設，只用在下方的月度推估。
+                    @if (savedAssumption.UpdatedAt is { } updatedAt)
+                    {
+                        <span>最後儲存：@updatedAt.ToString("yyyy/MM/dd HH:mm")。</span>
+                    }
+                    else
+                    {
+                        <span>目前是系統預設值，尚未儲存過。</span>
+                    }
+                </p>
+
+                <RequirePermission Page="@MagicObjectHelper.角色_效益對照" Action="@PermissionActions.Edit">
+                    <ChildContent>
+                        <div class="benefit-assumption-grid">
+                            <label class="benefit-assumption-field">
+                                <span>傳統排隊等待（分鐘）</span>
+                                <span class="benefit-assumption-input" data-field="QueueWaitMinutesTraditional">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.QueueWaitMinutesTraditional" Min="0" Max="@DemoAssumptionService.MaxMinutes" Step="10" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>AI 排隊等待（分鐘）</span>
+                                <span class="benefit-assumption-input" data-field="QueueWaitMinutesAi">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.QueueWaitMinutesAi" Min="0" Max="@DemoAssumptionService.MaxMinutes" Step="10" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>傳統每案聯繫次數</span>
+                                <span class="benefit-assumption-input" data-field="ContactsPerCaseTraditional">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.ContactsPerCaseTraditional" Min="0" Max="@DemoAssumptionService.MaxContacts" Step="0.5" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>AI 每案聯繫次數</span>
+                                <span class="benefit-assumption-input" data-field="ContactsPerCaseAi">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.ContactsPerCaseAi" Min="0" Max="@DemoAssumptionService.MaxContacts" Step="0.5" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>每次聯繫（分鐘）</span>
+                                <span class="benefit-assumption-input" data-field="MinutesPerContact">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.MinutesPerContact" Min="0" Max="@DemoAssumptionService.MaxMinutes" Step="1" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>客服每分鐘成本（NT$）</span>
+                                <span class="benefit-assumption-input" data-field="StaffCostPerMinuteTwd">
+                                    <AntDesign.InputNumber TValue="double" @bind-Value="draft.StaffCostPerMinuteTwd" Min="0" Step="1" Style="width: 100%;" />
+                                </span>
+                            </label>
+                            <label class="benefit-assumption-field">
+                                <span>每月案件量</span>
+                                <span class="benefit-assumption-input" data-field="MonthlyCaseVolume">
+                                    <AntDesign.InputNumber TValue="int" @bind-Value="draft.MonthlyCaseVolume" Min="@DemoAssumptionService.MinMonthlyCaseVolume" Max="@DemoAssumptionService.MaxMonthlyCaseVolume" Step="100" Style="width: 100%;" />
+                                </span>
+                            </label>
+                        </div>
+                        @if (assumptionError is not null)
+                        {
+                            <p class="benefit-assumption-error" role="alert">@assumptionError</p>
+                        }
+                        <div class="benefit-assumption-actions">
+                            <Button Type="ButtonType.Primary" Class="benefit-save-button" Loading="@isSaving" Disabled="@(IsDirty == false)"
+                                    OnClick="@(async () => await OnSaveAssumptionsAsync())">儲存假設值</Button>
+                            <Button Disabled="@(IsDirty == false)" OnClick="OnRevertAssumptions">還原為已儲存的值</Button>
+                            @if (IsDirty)
+                            {
+                                <span class="benefit-assumed-note">尚未儲存：下方推估已先用這組值重算。</span>
+                            }
+                        </div>
+                    </ChildContent>
+                    <Fallback>
+                        <dl class="benefit-assumption-grid">
+                            <div class="benefit-assumption-field"><dt>傳統排隊等待（分鐘）</dt><dd class="benefit-assumption-value">@AssumptionText(draft.QueueWaitMinutesTraditional)</dd></div>
+                            <div class="benefit-assumption-field"><dt>AI 排隊等待（分鐘）</dt><dd class="benefit-assumption-value">@AssumptionText(draft.QueueWaitMinutesAi)</dd></div>
+                            <div class="benefit-assumption-field"><dt>傳統每案聯繫次數</dt><dd class="benefit-assumption-value">@AssumptionText(draft.ContactsPerCaseTraditional)</dd></div>
+                            <div class="benefit-assumption-field"><dt>AI 每案聯繫次數</dt><dd class="benefit-assumption-value">@AssumptionText(draft.ContactsPerCaseAi)</dd></div>
+                            <div class="benefit-assumption-field"><dt>每次聯繫（分鐘）</dt><dd class="benefit-assumption-value">@AssumptionText(draft.MinutesPerContact)</dd></div>
+                            <div class="benefit-assumption-field"><dt>客服每分鐘成本（NT$）</dt><dd class="benefit-assumption-value">@AssumptionText(draft.StaffCostPerMinuteTwd)</dd></div>
+                            <div class="benefit-assumption-field"><dt>每月案件量</dt><dd class="benefit-assumption-value">@AssumptionText(draft.MonthlyCaseVolume)</dd></div>
+                        </dl>
+                        <p class="benefit-assumed-note">你只有檢視權限，無法修改假設值。</p>
+                    </Fallback>
+                </RequirePermission>
+            </div>
+
+            <div class="benefit-estimate">
+                <h3 class="benefit-section-title">月度推估 <span class="benefit-kind benefit-kind-assumed">推估（依假設值）</span></h3>
+                @if (EstimateFamilies.Count == 0)
+                {
+                    <p class="benefit-assumed-note">沒有可以推估的情境（需要有傳統表單做法的情境）。</p>
+                }
+                else
+                {
+                    var estimate = Estimate;
+                    <div class="benefit-estimate-target">
+                        <span>情境</span>
+                        <Select TItem="string" TItemValue="string" Value="@estimateFamily" ValueChanged="@((string family) => OnEstimateFamilyChanged(family))" Style="width: 140px;">
+                            @foreach (var family in EstimateFamilies)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@family.Family" Label="@family.Family" />
+                            }
+                        </Select>
+                        <span>傳統表單 對比</span>
+                        <Select TItem="string" TItemValue="ScenarioFlow" @bind-Value="estimateFlow" Style="width: 130px;">
+                            @foreach (var flow in EstimateFlows)
+                            {
+                                <SelectOption TItemValue="ScenarioFlow" TItem="string" Value="@flow" Label="@BenefitMetricDisplay.FlowLabel(flow)" />
+                            }
+                        </Select>
+                    </div>
+
+                    @if (estimate.IsSufficient == false)
+                    {
+                        <div class="benefit-insufficient">
+                            <p>@estimate.InsufficientReason。</p>
+                            @if (estimate.MissingCompletedRuns)
+                            {
+                                <p>請在範圍內各跑一次兩種做法，並在「售後審核」開啟申請、做出決定後再回來看。</p>
+                            }
+                            @if (estimate.AiCallsAllUnpriced)
+                            {
+                                <p>AI 呼叫尚未設定價格，請依 AI 模型計費更新指南設定費率。</p>
+                            }
+                            @if (estimate.AiCallsMissing)
+                            {
+                                <p class="benefit-insufficient-calls-missing">AI 的費用要靠「AI 對話紀錄」對到案件：請系統管理員確認 AI 對話紀錄已啟用且寫入正常，再以即時模式重新跑一次 AI 做法並審核；超過保存天數的紀錄會被清除，查詢範圍不要選太久以前。</p>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="benefit-estimate-cards">
+                            <article class="benefit-estimate-card" data-estimate="saved-hours">
+                                <span class="benefit-estimate-label">每月節省客服時數</span>
+                                <span class="benefit-estimate-value">@BenefitMetricDisplay.FormatMonthly(estimate.SavedStaffHoursPerMonth) 小時</span>
+                                <span class="benefit-estimate-meta">（傳統每案 @BenefitMetricDisplay.FormatMonthly(estimate.TraditionalStaffMinutesPerCase) 分 − AI 每案 @BenefitMetricDisplay.FormatMonthly(estimate.AiStaffMinutesPerCase) 分）× @BenefitMetricDisplay.FormatMonthly(estimate.MonthlyCaseVolume) 件 ÷ 60</span>
+                            </article>
+                            <article class="benefit-estimate-card" data-estimate="saved-cost">
+                                <span class="benefit-estimate-label">每月節省成本</span>
+                                <span class="benefit-estimate-value">@BenefitMetricDisplay.FormatMonthlyTwd(estimate.SavedCostPerMonthTwd)</span>
+                                <span class="benefit-estimate-meta">節省的客服分鐘 × 每分鐘成本 − 每月 AI 成本@(estimate.SavedCostPerMonthTwd < 0 ? "；負數代表 AI 做法反而比較貴" : string.Empty)</span>
+                            </article>
+                            <article class="benefit-estimate-card" data-estimate="ai-cost">
+                                <span class="benefit-estimate-label">每月 AI 成本</span>
+                                <span class="benefit-estimate-value">@BenefitMetricDisplay.FormatMonthlyTwd(estimate.AiCostPerMonthTwd)</span>
+                                <span class="benefit-estimate-meta">AI 每案 @BenefitMetricDisplay.Format(estimate.AiCostPerCaseTwd, true)（已完成執行的實測平均）× @BenefitMetricDisplay.FormatMonthly(estimate.MonthlyCaseVolume) 件</span>
+                            </article>
+                            <article class="benefit-estimate-card" data-estimate="wait">
+                                <span class="benefit-estimate-label">顧客等待（每案）</span>
+                                <span class="benefit-estimate-value">@BenefitMetricDisplay.FormatMonthly(estimate.TraditionalCustomerWaitMinutes) → @BenefitMetricDisplay.FormatMonthly(estimate.AiCustomerWaitMinutes) 分</span>
+                                <span class="benefit-estimate-meta">端到端實測平均＋排隊等待假設（傳統 → AI）</span>
+                            </article>
+                        </div>
+                    }
+                    @if (estimate.Warning is not null)
+                    {
+                        <p class="benefit-unpriced">⚠ @estimate.Warning</p>
+                    }
+                    @if (BenefitMetricDisplay.UnattributedWarning(comparison.Cost) is { } unattributedWarning)
+                    {
+                        <p class="benefit-unpriced benefit-unattributed">⚠ @unattributedWarning</p>
+                    }
+                    <p class="benefit-assumed-note">
+                        依傳統 @estimate.TraditionalCompletedRunCount 次、AI @estimate.AiCompletedRunCount 次「已完成」（客服已開啟並做出決定）執行的實測平均，加上方假設值計算；
+                        客服 AI 助手的成本未歸入每案，不在推估裡。
+                    </p>
+                }
+            </div>
+        </section>
+
+        <section class="benefit-detail">
+            <Button Class="benefit-detail-toggle" OnClick="ToggleDetails">
+                @(showDetails ? "收合每次執行明細" : $"展開每次執行明細（{comparison.Runs.Count} 筆）")
+            </Button>
+            @if (showDetails)
+            {
+                <div class="benefit-detail-table-wrap">
+                    <Table TItem="RunMetrics"
+                           DataSource="@comparison.Runs"
+                           Size="TableSize.Small"
+                           PageSize="20"
+                           Loading="@isLoading"
+                           RowClassName="@(_ => "benefit-run-row")">
+                        <Column TData="int" Title="編號" Width="70">#@context.RunId</Column>
+                        <Column TData="string" Title="劇本" Width="170">@context.ScenarioCode　@RunTitle(context)</Column>
+                        <Column TData="string" Title="流程" Width="100">@BenefitMetricDisplay.FlowLabel(context.Flow)</Column>
+                        <Column TData="string" Title="示範帳號" Width="100">@context.Account</Column>
+                        <Column TData="string" Title="時間" Width="190">
+                            @context.StartedAt.ToString("MM/dd HH:mm:ss") ～ @context.EndBoundary.ToString("MM/dd HH:mm")
+                            @if (context.LastActivityAt is { } last)
+                            {
+                                <div class="benefit-run-sub">最後活動 @last.ToString("HH:mm:ss")</div>
+                            }
+                        </Column>
+                        @foreach (var metric in BenefitMetricDisplay.Metrics)
+                        {
+                            <Column TData="string" Title="@metric.Label" Width="96" Align="ColumnAlign.Right">@metric.Format(metric.RunValue(context))</Column>
+                        }
+                        <Column TData="string" Title="計入平均" Width="150">
+                            <span class="benefit-run-status">
+                                <StatusPill Text="@(context.ExclusionReason is null ? "計入" : "不計")" Tone="@RunStatusTone(context)" />
+                            </span>
+                            <div class="benefit-run-sub">@RunStatusText(context)</div>
+                            @if (context.UnpricedCallCount > 0)
+                            {
+                                <div class="benefit-unpriced">未定價 @context.UnpricedCallCount 次</div>
+                            }
+                        </Column>
+                    </Table>
+                </div>
+            }
+        </section>
+    </div>
+}

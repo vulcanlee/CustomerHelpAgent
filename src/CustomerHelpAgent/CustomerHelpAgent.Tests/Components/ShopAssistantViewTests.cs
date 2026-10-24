@@ -196,6 +196,8 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         });
         Assert.Equal(1, RequestCount());
         Assert.Equal(1, MetricCount(ProcessMetricActions.AgentConfirm));
+        // 確實建立申請才記 AgentRequestCreated，並帶申請 Id（M6 申請筆數）。
+        Assert.Equal([RequestIds().Single()], CreatedRequestMetricIds());
     }
 
     [Fact]
@@ -213,6 +215,7 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         });
         Assert.Equal(0, RequestCount());
         Assert.Equal(1, MetricCount(ProcessMetricActions.AgentReject));
+        Assert.Empty(CreatedRequestMetricIds());
     }
 
     [Fact]
@@ -234,6 +237,8 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
                 x => x.TextContent.Contains("這次沒有完成送出，請稍後再試或到「我的申請」確認。", StringComparison.Ordinal));
         });
         Assert.Equal(0, RequestCount());
+        Assert.Equal(1, MetricCount(ProcessMetricActions.AgentConfirm));
+        Assert.Empty(CreatedRequestMetricIds());
     }
 
     [Fact]
@@ -262,6 +267,8 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
                 x => x.TextContent.Contains("這次沒有完成送出", StringComparison.Ordinal));
         });
         Assert.Equal(1, RequestCount());
+        // 版本衝突時沒有結果，但申請已建立：仍記 AgentRequestCreated。
+        Assert.Equal([RequestIds().Single()], CreatedRequestMetricIds());
     }
 
     [Fact]
@@ -848,6 +855,9 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
             Assert.Empty(cut.FindAll("[data-action=confirm]"));
         });
         Assert.Equal(["41"], MemoryValues());
+        // 記憶卡的確認不是申請。
+        Assert.Equal(1, MetricCount(ProcessMetricActions.AgentConfirm));
+        Assert.Empty(CreatedRequestMetricIds());
 
         // 下一輪：記憶以系統指示注入，幕後面板那一列是「記憶」來源色。
         model.Reply("請問這次想換哪一雙？");
@@ -1086,6 +1096,20 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
     {
         using var db = Factory.CreateDbContext();
         return db.AfterSalesRequest.Count();
+    }
+
+    private List<int?> RequestIds()
+    {
+        using var db = Factory.CreateDbContext();
+        return db.AfterSalesRequest.OrderBy(x => x.Id).Select(x => (int?)x.Id).ToList();
+    }
+
+    private List<int?> CreatedRequestMetricIds()
+    {
+        using var db = Factory.CreateDbContext();
+        return db.ProcessMetric
+            .Where(x => x.Action == ProcessMetricActions.AgentRequestCreated && x.Actor == ProcessActor.Customer && x.Channel == AfterSalesChannel.Agent)
+            .OrderBy(x => x.Id).Select(x => x.AfterSalesRequestId).ToList();
     }
 
     private int MetricCount(string action, AfterSalesChannel channel = AfterSalesChannel.Agent)

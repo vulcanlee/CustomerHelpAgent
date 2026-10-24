@@ -1,8 +1,8 @@
 ﻿# 售後 Agent 示範系統
 
-- 文件版本：0.6
-- 文件狀態：部分實作（M0 計費接軌、M1 傳統流程、M2 單一售後 Agent、M3 展示控制、M4 客服後台 AI、M5 多 Agent 交接與長期記憶已實作；M6 規劃中）
-- 現行系統版本：1.0.7
+- 文件版本：0.7
+- 文件狀態：已實作（M0 計費接軌、M1 傳統流程、M2 單一售後 Agent、M3 展示控制、M4 客服後台 AI、M5 多 Agent 交接與長期記憶、M6 效益對照頁全部已實作）
+- 現行系統版本：1.0.8
 - 首次實作版本：1.0.2
 - 最後核對日期：2026/10/24
 
@@ -109,7 +109,7 @@ M1 做出「鞋服電商」的模擬業務資料與**傳統流程**（顧客填�
 
 **權限鍵**：`顧客商店`、`售後服務`（選單群組 9）、`售後審核`、`售後規則管理`。
 
-⚠️ **「預設角色」會自動取得新頁面**：`DefaultRoleViewSeeder` 每次啟動都把新頁面加入「預設角色」，所以新建帳號與 Google 自動建立的帳號會看得到「售後審核」「售後規則管理」「顧客商店」（1.0.4 起再加「Agent 執行紀錄」）。正式部署時，管理員應到角色管理把這些頁從「預設角色」移除（見[正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)）。
+⚠️ **「預設角色」會自動取得新頁面**：`DefaultRoleViewSeeder` 每次啟動都把新頁面加入「預設角色」，所以新建帳號與 Google 自動建立的帳號會看得到「售後審核」「售後規則管理」「顧客商店」（1.0.4 起再加「Agent 執行紀錄」，1.0.8 起再加「效益對照」）。正式部署時，管理員應到角色管理把這些頁從「預設角色」移除（見[正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)）。
 
 **稽核代碼**：`Shop.Request.Submit`／`Shop.Request.Resubmit`／`Shop.Request.MoreInfo`／`Shop.Request.Decide`／`Shop.Policy.AddVersion`／`Shop.Attachment.Download`（常數在 `AuditActions.Shop`；Detail 只記狀態與編號，不含地址、手機、說明內容）。
 
@@ -212,7 +212,7 @@ migration `AddAgentRuntime`、`AddAgentSessionVersion`（1.0.5）；四個實體
 - 來源色標（`AgentDataSource`）：對話、資料庫、規則、記憶（M5 起，見 §8.3）、程式。
 - 每列有白話與可展開的原始資料（`RawJson`，不含地址／手機）；面板開關記在瀏覽器（預設開）。
 - 後台 `/agent-runs`（選單 93、權限鍵「Agent 執行紀錄」，歸「售後服務」群組，客服、店家與管理員有）：唯讀，列表＋逐步時間軸，與顧客面板共用 `AgentStepTimeline`。
-- 埋點（`ProcessMetricActions`）：`AgentSendMessage`、`AgentConfirm`、`AgentReject`、`AgentUploadPhoto`（`Channel=Agent`、`Actor=Customer`）。Token 用量的作業名稱：`TokenUsageOperations.AfterSalesAgent`＝「AI 售後客服 Agent」。
+- 埋點（`ProcessMetricActions`）：`AgentSendMessage`、`AgentConfirm`、`AgentReject`、`AgentUploadPhoto`（`Channel=Agent`、`Actor=Customer`）；M6 起確認卡確實建立申請後另記 `AgentRequestCreated`（帶申請 Id，記憶卡不記；不是點擊、不算操作步數，效益對照的申請筆數靠它）。Token 用量的作業名稱：`TokenUsageOperations.AfterSalesAgent`＝「AI 售後客服 Agent」。
 - 沒有新增稽核代碼（`AuditActions` 不變）；模型呼叫的額度擋下沿用 `Ai.QuotaBlocked`，申請寫入沿用 `Shop.Request.Submit`。
 
 ### 5.7 M1 服務補強（隨 M2 一併實作）
@@ -250,8 +250,8 @@ M3 讓一個人就能穩定地展示：一鍵把資料重置成劇本需要的�
 
 ### 6.1 展示控制狀態（`DemoControlService`）
 
-- Singleton，啟動時在 migration 與系統參數之後 `LoadAsync()`；狀態存在固定單列的 `DemoControlState`（`Id=1`：`FaultsJson`（故障名稱的 JSON 陣列）、`Mode`（`Live`／`Replay`）、`ActiveRecordingId`、`BackstageDefaultOn`、`UpdatedAt`），讀取走記憶體快照、不查資料庫。
-- 寫入（`SetFaultAsync`、`ClearFaultsAsync`、`SetModeAsync`、`SetBackstageDefaultAsync`）先存資料庫成功才換快照並發 `Changed`；故障、模式與幕後面板預設是**全站共用**、對所有人立即生效。
+- Singleton，啟動時在 migration 與系統參數之後 `LoadAsync()`；狀態存在固定單列的 `DemoControlState`（`Id=1`：`FaultsJson`（故障名稱的 JSON 陣列）、`Mode`（`Live`／`Replay`）、`ActiveRecordingId`、`BackstageDefaultOn`、`ActiveRunId`（M6）、`UpdatedAt`），讀取走記憶體快照、不查資料庫。
+- 寫入（`SetFaultAsync`、`ClearFaultsAsync`、`SetModeAsync`、`SetBackstageDefaultAsync`、`SetActiveRunAsync`（M6：目前劇本執行，`ProcessMetricService.RecordAsync` 據此蓋上 `DemoRunId`；重置時清空，「準備此劇本」在重置後建立新執行並設定））先存資料庫成功才換快照並發 `Changed`；故障、模式與幕後面板預設是**全站共用**、對所有人立即生效。
 - 示範模式關閉時一律回報：無故障、即時、沒有錄製、幕後面板預設開；所有寫入方法拋 `InvalidOperationException`。`SetModeAsync(Replay, null)` 拒絕（回放一定要指定錄製）。
 - 服務本身不寫稽核（Singleton 拿不到登入者）；稽核由展示控制台以登入的管理員寫（§6.8）。
 
@@ -276,7 +276,7 @@ M3 讓一個人就能穩定地展示：一鍵把資料重置成劇本需要的�
 
 - 一個交易內依外鍵順序刪除：照片附件 → 售後申請 → 確認卡 → Agent 會話 → 物流事件 → 物流單 → 訂單明細 → 訂單 → 規格 → 商品 → 售後規則，再以 `DemoCatalogSeeder.WriteCatalogAsync`（與首次種子同一段程式）重建，日期以現在重新計算（黑鞋簽收 3 天前、白鞋 2 天前…）。失敗整批回滾、檔案不動，稽核 `Demo.Reset` 記一筆失敗。
 - 交易提交後才刪照片檔，並通知所有 `IDemoResetParticipant`（照片暫存區 `AgentPhotoInbox`、回放游標 `ReplayCursorStore`）清空記憶體狀態。
-- **不刪**：流程埋點、Agent 執行紀錄、Token 用量、AI 對話紀錄、錄製、稽核、展示控制狀態。
+- **不刪**：流程埋點、Agent 執行紀錄、Token 用量、AI 對話紀錄、錄製、稽核、展示控制狀態；M6 起另有劇本執行（`DemoScenarioRun`）與假設值（`DemoAssumption`）也不刪，重置只清空目前執行（`ActiveRunId`）。
 - **固定編號**：商品、規格、訂單、明細、物流單與事件、售後規則一律用 `DemoSeedData` 指定的 Id（例：`SO-DEMO-0001` 的明細 Id 1、黑鞋 38～44 為規格 1～7），重置幾次都一樣，錄製裡的工具參數才對得上。之後新增的編號只能往後加，不可重編。售後申請與 Agent 相關資料表仍自動編號。
 - 重置時開著的顧客頁再送出或按確認，Runner 找不到會話而拒絕（「找不到這段對話…請重新整理頁面」），舊確認卡不可能再被確認。
 
@@ -700,8 +700,228 @@ M5 讓顧客端「線上客服」可以切換成**多 Agent**：分流 Agent 判
 兩個腳本化假模型預設比照 Responses API 檢查工具呼叫與結果成對（`ResponsesApiPairing`，不成對或同一個 CallId 的呼叫／結果重複時拋出模擬的 HTTP 400；檢查本身由 `ResponsesApiPairingTests` 驗證），讓這類只在實機出錯的缺陷在自動測試就被抓到。
 會跑 OffThread Handoff Workflow 的測試類別（`MafHandoffBehaviorTests`、`AfterSalesHandoffRunnerTests`、`ShopAssistantViewTests`）放在不平行的 `HeavyWorkflowCollection`；bUnit 預設等待 10 秒（`ComponentTestBase.WaitTimeout`）。
 
-## 9. 規劃中
+## 9. 已實作：M6 效益對照頁（1.0.8）
 
-M6（效益對照頁）尚未實作，範圍見 [設計文件 §6](../prd/售後Agent展示系統-設計.md)。
+M6 做一頁「效益對照」（`/benefit-comparison`）：展示者跑完劇本後切過來，把**傳統表單、單一 Agent、多 Agent** 三種做法在同一個情境下的實測數字並排，
+再依可調整的假設值推估每月可省下的客服時數與成本。原則是**實測與假設分開**：實測只來自系統紀錄，假設值與由它算出的推估一律標「假設／推估」並用琥珀色底框。
+實作計畫見 [M6 實作計畫](../prd/售後Agent展示系統-M6實作計畫.md)；畫面操作見頁面的「操作說明」（`Datas/Help/benefit-comparison.md`）。
+
+### 9.1 劇本執行與埋點標記
+
+- 展示控制台每按一次「準備此劇本」，就在重置、故障、模式設定**之後**建立一筆 `DemoScenarioRun`（劇本代碼、家族、流程、示範帳號、`IsReplay`＝當下是否回放模式、`StartedAt`），
+  並以 `DemoControlService.SetActiveRunAsync` 設為「目前執行」（存在 `DemoControlState.ActiveRunId`，重啟後仍有效）。
+- `ProcessMetricService.RecordAsync` 簽章不變，內部把 `DemoRunId` 蓋成目前執行的編號；示範模式關閉或沒有目前執行時為 null。
+- 一鍵重置會清空 `ActiveRunId`，但**不刪** `DemoScenarioRun` 與 `ProcessMetric`，所以舊的展示數字重置後仍看得到。
+- 確認卡確實建立申請後，`ShopAssistantView` 在 `ConfirmAsync` **之後**另記一筆 `AgentRequestCreated`（`ProcessMetricService.RecordAgentRequestCreatedAsync`：以申請編號＋顧客本人查出申請 Id；查不到仍照記、Id 為 null）。它不是點擊，不算操作步數；記憶確認卡不記。
+- `ShopAfterSalesListView` 的「重新送出」埋點改用申請本身的管道（原本寫死傳統）。
+
+### 9.2 劇本家族與流程
+
+`DemoScenario` 多 `Family`（情境家族）與 `Flow`（`ScenarioFlow`：1 傳統表單、2 單一 Agent、3 多 Agent）；展示控制台的劇本由 11 個增為 14 個（順序 A、B、H、**A-T**、**B-T**、**A-M**、C、D、E、F1～F5）。
+
+| 家族 | 傳統表單 | 單一 Agent | 多 Agent |
+|---|---|---|---|
+| 換尺碼 | **A-T**（新） | A | **A-M**（新，台詞同 A，多 Agent 模式） |
+| 一句兩事 | **B-T**（新，兩張表） | B | H |
+| 退貨／物流催件／長期記憶／故障模擬 | — | C／D／E／F1～F5 | — |
+
+- 傳統劇本（A-T、B-T）「準備此劇本」後切換成 `customer1` 並開啟售後申請表單 `/shop/after-sales/new`，確認窗第 3、4 步寫「傳統表單流程，不使用 AI」，也不顯示「AI 模型尚未設定」警告。卡片的「顧客說」是要在表單上做的操作，**第一句一律從售後申請表單開始**（用詞照表單實際標籤）：
+  - A-T：「在售後申請表單選擇黑色那雙，申請類型選「換尺碼」並選大一碼」→「商品是否穿過選「未穿過」，問題描述填尺寸不合，按「送出申請」」。
+  - B-T：「在售後申請表單填第一張表：選擇黑色那雙，申請類型選「換尺碼」並選大一碼，填寫未穿過與問題描述，送出申請」→「送出後按「回到我的訂單」，在白色那雙按「申請售後」開第二張表：申請類型選「品質問題（開膠等）」，上傳開膠照片、填寫問題描述，送出申請」（第二張表只能從送出完成頁的連結開，台詞把路徑固定下來，每次展示的步數才一致）。
+- 傳統劇本沒有金劇本：回放模式下準備傳統劇本時，模式自動改回即時（不會被標成回放）。
+
+### 9.3 指標定義（實測）
+
+時間一律本地時間，查詢範圍 **[from, to)**（含頭不含尾）。所有指標**只讀示範重置後仍保留的資料表**：`DemoScenarioRun`、`ProcessMetric`、`AgentRunTrace`、`TokenUsageLog`、`AiCallLog`；不讀售後申請、初審等會被重置刪掉的表，所以重置前後算出的數字相同（`Metrics_SurviveDemoReset` 守門）。
+
+**範圍與執行區間**
+
+- `StartedAt` 落在範圍內的執行才列入；每次執行只算 **[StartedAt, 下一次執行的 StartedAt 與 to 較早者)** 內、且蓋上該執行編號的埋點。
+- 執行的 CaseKey＝上述埋點的 CaseKey 去重；`LastActivityAt` 取區間內最後的埋點、已歸入的 AI 呼叫或軌跡時間。
+
+**每次執行的指標（`RunMetrics`）**
+
+| 指標 | 定義 |
+|---|---|
+| 顧客操作步數 | Actor＝顧客的埋點筆數，扣掉不是顧客操作的 `AgentRequestCreated`（程式記錄的結果）與 `OpenForm`（表單頁載入時自動記錄），依時間（再依 Id）排序；同一 CaseKey **連續的 `FillDetail` 合併成 1 步**（避免每改一個欄位就多算一步；中間隔了別的動作或不同 CaseKey 不合併）。AI 打開線上客服頁不記埋點，所以**兩邊都不算「打開頁面」**，才對等（裁定 R11） |
+| 客服操作步數 | Actor＝客服的埋點筆數 |
+| 端到端（分鐘） | 第一筆顧客操作（不含 `AgentRequestCreated`，也不含 `OpenForm`）→ 其後**第一筆**客服決策（`Approve`／`Reject`／`RequestMoreInfo`）；沒有決策＝未完成（null）。傳統表單不從打開表單算起（準備傳統劇本後表單直接打開，展示者可能還在講解，裁定 R10），從第一次選商品、選類型或填寫算起；AI 做法從第一句話（`AgentSendMessage`）算起 |
+| 客服處理（分鐘） | 依申請（`AfterSalesRequestId`）分組，每組取「第一個決策之前的第一次 `OpenRequest` → 第一個決策」，各組**相加**（代表客服總工作量；一句兩事有兩筆申請時兩筆相加）；沒有任何一組成對時為 null |
+| AI 成本（每次） | 已歸入這次執行的 AI 呼叫 `TokenUsageLog.CostTwd` 加總（新台幣，在記憶體中加總；歸屬規則見 §9.5）；`CostTwd` 為 null 的呼叫另計「未定價呼叫數」，不在成本裡 |
+| 模型呼叫次數 | 已歸入這次執行的 `TokenUsageLog` **列數**（含失敗與未定價）；不用 `AgentRunTrace.ModelCallCount`，因為回放也會累加它 |
+| Agent 停下詢問次數 | `SessionKey` 是這次執行的 CaseKey、在區間內開始、`StopReason＝AwaitingUserReply` 的軌跡筆數 |
+| 等待上傳次數 | 同上，`StopReason＝AwaitingPhotoUpload` |
+| 申請筆數 | 顧客埋點 `Submit`＋`UrgeShipment`＋`AgentRequestCreated` 的筆數（不讀申請表；`AgentConfirm` 只是點擊，可能是記憶卡或沒建成，不算） |
+
+### 9.4 有效、已完成與回放排除
+
+- **排除原因**依序判斷：
+  1. 「回放（不計）」：執行建立時是回放模式，或這次執行任一 CaseKey 的任何 `AgentRunTrace.ReplayRecordingId` 有值（**不限時間**）。回放不呼叫模型、AI 成本是 0，算進去會讓 AI 看起來不花錢。
+  2. 「沒有顧客操作，不計」。
+  3. 「未建立申請，不計」（例如只聊天就離開）。
+- **有效**＝沒有排除原因（至少一筆顧客操作，且至少一筆建立申請的埋點）。「顧客操作」與步數用同一個排除集合（`NonStepActions`：`AgentRequestCreated`、`OpenForm`），所以**只有 `OpenForm` 的執行或案件（打開表單就離開）算「沒有顧客操作」**，不列入平均。排除的執行**不列入任何平均**，但照列在明細並寫出原因（`ExcludedRunCount` 為無效筆數，回放另計 `ReplayExcludedCount`）。
+- **已完成**＝有效，而且端到端與客服處理**兩者都有值**（客服已開啟申請並做出決定）。
+- **平均**（`BenefitAverages`）：一般平均用全部有效筆數；端到端與客服處理只平均有值的筆數（另列有值筆數）；`Completed*` 欄位只用已完成的同一群。`UnpricedCallCount` 等是合計不是平均；`TotalAiCostTwd` 是全部筆數（含排除）的成本合計，只供對帳。
+- **示範模式外的案件（`Others`）**：範圍內 `DemoRunId == null` 的埋點依 CaseKey 成為案件，再依案件第一筆埋點的管道彙總；只有瀏覽頁面（我的訂單、物流、我的申請）的 CaseKey、以及屬於任一劇本執行的 CaseKey 不算案件。只判斷回放與「沒有顧客操作」兩項排除，不進月度推估。
+
+### 9.5 AI 成本口徑（與「Token 用量」頁一致）
+
+- 取 `TokenUsageLog.OccurredAt` 在範圍內、作業為「AI 售後客服 Agent」「AI 售後多 Agent」「AI 售後初審 Workflow」三種之一的列（`BenefitMetricsService.CaseOperations`），以 `CallId` 對到 `AiCallLog.ConversationId`。
+- 每一列只歸一處：落在某次執行區間內且會話識別碼是該執行的 CaseKey → 該執行；否則是「其他」案件的 CaseKey → 該案件；否則 →「對應不到」。
+- **對帳恆等式**：劇本執行＋其他案件＋對應不到＝「Token 用量」頁同一範圍三種作業的合計（`AiCost_MatchesTokenUsageSummary` 守門）。頁面的「AI 成本對帳」區塊照列這個等式。
+- **「客服 AI 助手」不計入每案成本**：它的呼叫對應不到案件，頁面另列並標「未歸入每案」，也不在推估裡。
+- **範圍規則**：
+  - Token 用量頁以整天篩選；效益頁的查詢也以整天（起始日 00:00 到結束日隔天 00:00）為單位，所以兩邊同日期範圍時完全一致。
+  - 執行被裁在範圍內：範圍開始前就開始的執行不列入，它在範圍內的 AI 成本歸「對應不到」；跨過範圍結束的執行只算到範圍結束。頁面提醒「**範圍要涵蓋整場展示**」。
+
+### 9.6 假設值與月度推估（假設／推估）
+
+假設值存在固定單列的 `DemoAssumption`（`Id=1`），由 `DemoAssumptionService`（Scoped）讀寫；沒有資料時回傳預設值。比設計 §4.8 多 3 個欄位（排隊與聯繫次數各分傳統／AI 兩值、另加每次聯繫分鐘數），月度推估的公式才完整。
+
+| 欄位 | 預設 | 允許範圍 |
+|---|---|---|
+| 傳統排隊等待（分鐘）`QueueWaitMinutesTraditional` | 240 | 0～10080 |
+| AI 排隊等待（分鐘）`QueueWaitMinutesAi` | 30 | 0～10080 |
+| 傳統每案聯繫次數 `ContactsPerCaseTraditional` | 2 | 0～50 |
+| AI 每案聯繫次數 `ContactsPerCaseAi` | 0.5 | 0～50 |
+| 每次聯繫（分鐘）`MinutesPerContact` | 5 | 0～10080 |
+| 客服每分鐘成本（NT$）`StaffCostPerMinuteTwd` | 8 | ≥ 0 |
+| 每月案件量 `MonthlyCaseVolume` | 1,000 | 1～1,000,000 |
+
+- 不合理的值（負數、超出範圍、NaN／無限大）一律拒絕並回中文訊息；儲存成功寫稽核 `Demo.AssumptionChanged`（Detail 只列變動欄位 `欄位=舊→新`）。重置示範資料不刪這一列。
+- **推估公式**（`BenefitEstimator`，純函式；傳統與 AI 都只用**已完成**執行的平均，每案客服分鐘、端到端與 AI 成本來自同一群）：
+  - 每案客服分鐘＝已完成的客服處理平均＋每案聯繫次數 × 每次聯繫分鐘（傳統、AI 各用自己的聯繫次數）
+  - 每月節省客服時數＝（傳統每案 − AI 每案）× 每月案件量 ÷ 60
+  - 每月 AI 成本＝AI 每案成本（已完成執行的實測平均）× 每月案件量
+  - 每月節省成本＝每月節省客服分鐘 × 客服每分鐘成本 − 每月 AI 成本（傳統表單不跑 AI 初審，本來就是零 AI，不扣）
+  - 顧客等待（每案）＝已完成的端到端平均＋排隊等待假設（傳統 → AI）
+  - 節省值可能是負的（AI 比較慢或比較貴），照實呈現；公式沒有除以變數。
+- **資料不足**：依序判斷，任一成立 → 計算結果全為 0，顯示「資料不足：…」並依原因給建議：
+  1. 任一邊沒有已完成的執行（`MissingCompletedRuns`）：請兩種做法各跑一次並在售後審核開啟、決定。
+  2. AI 有已完成的執行，但對不到任何模型呼叫（`CompletedModelCallCount == 0`，`AiCallsMissing`）：「AI 已完成的執行找不到模型呼叫紀錄（AI 對話紀錄未啟用、寫入失敗或已過期），無法估算 AI 成本」；頁面建議請系統管理員確認 AI 對話紀錄已啟用且寫入正常，再以即時模式重跑 AI 做法並審核，查詢範圍不要選太久以前（超過保存天數的紀錄會被清除）。
+  3. AI 已完成執行的模型呼叫全部未定價（`AiCallsAllUnpriced`）：請依 [AI 模型計費更新指南](../operations/AI模型計費更新指南.md) 補費率。
+- **提醒**（不擋推估）：部分未定價時照算，附「AI 有 N 次模型呼叫未定價（沒有費率），AI 成本偏低。」；範圍內有對應不到案件的 AI 呼叫（`Cost.UnattributedCallCount > 0`，以整個查詢範圍計算）時，推估區與匯出的推估表都顯示「有 N 次 AI 呼叫對應不到案件，AI 成本可能偏低。」（`BenefitMetricDisplay.UnattributedWarning`，頁面與匯出共用）。
+
+### 9.7 頁面（`/benefit-comparison`）
+
+選單 id 94「效益對照」（「售後服務」群組，icon `insights`，權限鍵常數 `角色_效益對照`＝「效益對照」，有「檢視」「修改」兩個動作）。
+
+| 區塊 | 內容 |
+|---|---|
+| 說明框 | 「實測」「假設／推估」兩個文字標籤；回放、沒有顧客操作或未建立申請的執行不計 |
+| 查詢列 | 起始日／結束日（整天）、查詢、今天（預設）、最近 7 天、重新整理、匯出 Excel、匯出 PDF；下方寫出實際套用的起訖與「範圍要涵蓋整場展示」 |
+| 情境對照（依家族） | 劇本清單中有兩種以上做法的家族一律列出（換尺碼、一句兩事，沒資料也列），範圍內有資料的其他家族也列。每區三張卡：傳統（基準）、單一 Agent、多 Agent；AI 卡寫「傳統 3 → 1（−67%，改善）」，差異膠囊綠框＝改善、紅框＝變差並一定附文字；筆數寫「有效 N 次（不計：回放 x、無效 y）」；缺流程時提示要準備的劇本（例「請在展示控制台準備劇本 A-M」）；每個指標的 ⓘ 顯示定義 |
+| 長條圖 | 只畫 5 項主要指標（顧客操作步數、客服操作步數、端到端、客服處理、AI 成本），每項一張手寫 SVG 小圖、各自從 0 起算，長條上方寫數值、`aria-label` 含數值；其餘 4 項只在卡片與明細。情境裡沒有任何計入的執行（例如只有回放）時不畫圖，只顯示卡片上的「準備劇本」提示 |
+| 示範模式外的案件（依管道） | 管道、案件數、不計、顧客操作步數平均、AI 成本平均每案；只有實測 |
+| AI 成本對帳（實測） | 劇本執行＋其他案件＋對應不到（含次數）＝ Token 用量頁同範圍三種作業合計；客服 AI 助手另列「未歸入每案」 |
+| 假設值與月度推估（琥珀底框） | 7 個欄位（有修改權限才是輸入框，改值立即重算、不自動儲存；按「儲存假設值」經確認窗才存，送出前程式再查一次修改權限）；「還原為已儲存的值」；推估目標選「情境」與「對比哪一種 AI 做法」；四張推估卡（每月節省客服時數、每月節省成本、每月 AI 成本、顧客等待）都寫出算式；資料不足時顯示原因與處理建議，另有未定價與對應不到的提醒（§9.6） |
+| 每次執行明細 | 按「展開每次執行明細（N 筆）」才顯示，每頁 20 筆：編號、劇本、流程、示範帳號、時間、9 個指標、計入平均（「計入（已完成）」「計入（未完成，不進推估）」或「不計」＋原因） |
+
+- **個資**：頁面與匯出只顯示示範帳號代號（例 `customer1`）與劇本，不顯示顧客姓名、帳號以外的聯絡資料、地址、手機。
+- 讀取失敗時整頁只顯示「讀取效益對照時發生未預期的錯誤，請稍後再試。」，不中斷連線；之後的查詢失敗只通知。
+- 色票：`theme.css :root` 的 `--benefit-*` 別名（實測、假設琥珀色、差異好／壞、三種流程），全部指向既有 `--app-*`。
+- 頁面與匯出共用 `Web/Benefit/BenefitFamilyLayout.cs`（要列哪些家族與流程、缺資料提示、筆數說明、平均與執行狀態文字），指標標籤、定義與格式共用 `BenefitMetricDisplay`，兩邊不會各自漂移。
+
+### 9.8 匯出（Excel／PDF）
+
+| 格式 | 內容 |
+|---|---|
+| Excel | 三張工作表「對照摘要」（每個情境一張實測表，AI 欄括號內為相對傳統的差異；另有示範模式外的案件與 AI 成本對帳）、「明細」（每次執行一列，含不計的與原因；指標為原生數字，金額 2 位、分鐘 1 位、次數不帶小數）、「假設值與推估」（假設值為數字儲存格，整數不帶小數點，標題與資料列琥珀色底；推估表含資料不足原因與未定價、對應不到的「提醒」列）。標題列凍結在第 1 列，說明列放在表格下方、空一列之後 |
+| PDF | 對照摘要＋假設值與推估（同樣琥珀色底），沿用 `AiMarkdownPdfRenderer` 的骨架（字型、頁首頁尾、檔頭）加 MigraDoc 表格；不含逐次明細（請用 Excel） |
+
+- 檔名 `CustomerHelpAgent.Web-benefit-{起始日}-{結束日}.xlsx|pdf`；兩種檔案的檔頭都寫明資料範圍、「回放與無效執行不計（原因見明細）」、AI 成本口徑與「客服 AI 助手成本未歸入每案」、標示說明與「假設值／推估僅供參考，不是實際發生的數字。」
+- 內容就是畫面當下的資料（含尚未儲存的假設值，檔案會註明），匯出時不重查資料庫；只含目前選定的那一組推估。
+- 失敗時：PDF 缺少內建中文字型顯示「匯出失敗：缺少內建中文字型，請確認建置產物完整。」；其他錯誤（含 Excel）一律「匯出時發生未預期的錯誤，請稍後再試。」。
+- 有檢視權限就能匯出；每次匯出寫稽核 `Demo.BenefitExport`（Detail `format=xlsx|pdf; range=起~迄; runs=N`，不含內容）。`TabularExport` 為此多了 `AddSheet`／`Save`（多工作表），既有 `ToXlsx` 行為不變，見[通用匯出 PRD](../prd/通用匯出-prd.md)。
+
+### 9.9 權限
+
+- 管理員與店家管理者看得到（示範角色 `店家管理者` 只有 `效益對照:view`，**只能看**）；客服人員沒有。**示範環境只有管理員能修改假設值**（管理員一律短路通過）；管理員可在角色管理替其他角色勾「修改」。
+- 沒有檢視權限時顯示無權限訊息並記 `Permission.Denied`。與其他售後頁相同，「預設角色」會自動取得這個新頁面（見 §4），正式部署請移除。
+
+### 9.10 資料表變更
+
+| 變更 | migration |
+|---|---|
+| 新表 `DemoScenarioRun`（`StartedAt` 索引，不設外鍵）；`ProcessMetric.DemoRunId`（int?，有索引）；`DemoControlState.ActiveRunId`（int?） | `AddDemoScenarioRun` |
+| 新表 `DemoAssumption`（固定單列，數值欄位用 double——SQLite 會把 decimal 存成 TEXT；`UpdatedByUserId` 不設外鍵） | `AddDemoAssumption` |
+
+稽核碼新增 `Demo.AssumptionChanged`、`Demo.BenefitExport`（`AuditActions` 現共 152 個）。
+
+### 9.11 已知限制
+
+- **客服 AI 助手的成本無法歸到案件**：只在成本對帳另列，不在每案成本與推估裡。
+- **AI 對話紀錄保留 90 天**（`AiCallLogSettings:RetentionDays`）：過期後該期間的 AI 成本對不到案件，移到「對應不到」（總額不變），每案成本無法再計算。
+- **目前執行持續到下一次「準備此劇本」**（或重置）為止，重啟後仍有效：展示結束後、下一次準備前的隨手操作仍會算進最後一次執行（每次執行已限縮在「到下一次執行開始為止」的區間）。
+- **舊資料**：M6 之前（以及加入 `AgentRequestCreated` 之前）的 Agent 執行沒有建立申請的埋點，會顯示「未建立申請，不計」；「其他」案件的申請筆數也是 0。展示前請重跑劇本。
+- **執行被裁在查詢範圍內**：範圍開始前就開始的執行不列入（成本歸「對應不到」），跨過範圍結束的執行後半段不算；快速範圍只有「今天」與「最近 7 天」（整天）。
+- **端到端只算到第一個決策、客服處理則各申請相加**：一句兩事有兩筆申請時兩者口徑不同（刻意：前者是顧客等待、後者是客服工作量），頁面 ⓘ 與操作說明已寫明。客服處理從第一次開啟起算，開著不動的時間也算在內；客服沒有開啟紀錄就直接決策的執行不算已完成（審核頁進入時一定會記 `OpenRequest`，實務上不會發生）。
+- **「對應不到」提醒以整個查詢範圍計算**，不只選定的情境或流程：範圍開始前就開始的執行、舊案件晚跑完的初審也會觸發，所以措辭是「可能偏低」。
+- **B-T 從「回到我的訂單」開第二張表**，會多記 `ViewOrders`（算顧客步數）與第二次 `OpenForm`（不算）；這是真實操作，台詞已固定路徑，每次展示的數字一致。
+- **「其他」案件可能包含被查詢範圍截斷或只有客服操作的案件**：後者不列入平均（計入不計），成本仍算在「其他案件」。
+- **回放判斷不限時間**：依該 CaseKey 的任何軌跡；重置會刪會話、會話識別碼每次都是新的 Guid，實務上不會誤傷。
+- 回放模式下建立的執行，之後切回即時仍標為回放（影響可忽略）；示範模式關閉時的蓋章閘門只是縱深防禦（`LoadAsync` 在關閉時不讀狀態）。
+- 第一次儲存假設值時若兩人同時儲存，其中一人可能遇到主鍵衝突而儲存失敗（不會損壞資料，重試即可；同 `DemoControlService` 的模式）。
+- 長條圖只畫 5 項指標；推估與匯出只含目前選定的一組「情境＋AI 做法」；摘要表的數字是格式化文字（明細表才是原生數字）。
+- PDF 內文在自動測試裡無法抽出（內嵌字型子集），以產生它的同一份報告模型斷言內容、PDF 本身只驗簽章、頁數與表格數。
+- 匯出的稽核在下載觸發之後寫入；匯出權限沿用頁面檢視權限。
+- 版面與長條圖只用 bUnit 與 CSS 檢查過，實際瀏覽器排版見下方實機驗證。
+
+### 9.12 如何展示
+
+1. 管理員開展示控制台，模式選「即時」。依序對劇本 **A-T** 按「準備此劇本」→ 以 `customer1` 在售後申請表單送出黑鞋換大一碼 →「回到展示者」；再對劇本 **A**、**A-M** 各準備一次，照卡片台詞跑到確認送出。
+2. 以 `agent1`（身分切換）到「售後審核」，把這三筆申請各**開啟並做出決定**（例如核准），三次執行才算「已完成」、才進得了推估。
+3. 開「售後服務 › 效益對照」，範圍保持「今天」：看「換尺碼」區塊三張卡、差異百分比與長條圖；「AI 成本對帳」與「Token 用量」頁同日的三種作業合計相同。
+4. 調整假設值（例如每月案件量改成 3,000），推估立即重算；需要保留再按「儲存假設值」。
+   - **話術**：「上面這排是系統實際記錄到的數字；琥珀色這區是假設，是我們一起填的，數字可以換成貴公司的。」明說哪些是實測、哪些是假設。
+5. 按「匯出 Excel」或「匯出 PDF」交給客戶（Excel 有逐次明細）。
+6. 一句兩事：同樣準備 **B-T**（兩張表）、**B**、**H** 並審核後，「一句兩事」區塊也有三欄數字。
+
+### 9.13 實機驗證
+
+2026/10/24 以 Azure `gpt-6.1-sol`（Responses API、`store=false`）驗證。做法和前幾個里程碑一樣：用暫時的整合測試（`WebApplicationFactory`、Development 設定、user secrets）依畫面順序驅動真實服務，跑完就刪除，不提交。另外以瀏覽器（1366×900）截圖檢查版面。
+
+| 項目 | 結果 |
+|---|---|
+| 1 A-T 傳統表單 | ✅ 表單送出、客服核准、開出處理單；沒有呼叫模型 |
+| 2 A 單一 Agent（即時） | ✅ 第 1 句停下詢問、第 2 句出確認卡、確認後建立申請；初審跑到「待決策」後客服核准；模型呼叫 8 次 |
+| 3 A-M 多 Agent（即時） | ✅ 會話為多 Agent 模式，流程同 A；模型呼叫 9 次 |
+| 4 B 回放（金劇本 #8） | ✅ 4 個動作依序播完、沒有呼叫模型；明細列出並標「回放（不計）」，「一句兩事」計入 0 次 |
+| 5 對照數字 | ✅ 換尺碼三種做法都有數字（下表）；回放被排除 |
+| 6 AI 成本對帳（今天整天） | ✅ 劇本執行 NT$1.1560＋其他案件 NT$0＋對應不到 NT$8.8117（164 次）＝ NT$9.9677，與 Token 用量頁三種作業合計相同，差額 0；客服 AI 助手兩邊都是 NT$0.2874／3 次 |
+| 7 月度推估 | ✅ 預設假設值下資料足夠，標示「推估（依假設值）」；傳統對單一 Agent：每月省 125 小時、NT$59,474（已扣 AI 成本 NT$525） |
+| 8 匯出 | ✅ Excel 三張工作表、檔頭說明與「實測／假設／推估」標籤齊全；PDF 3 頁 |
+| 9 版面 | ✅ 沒有水平捲動；卡片、差異標籤、長條圖數值不重疊；展示控制台列出 A-T、B-T、A-M |
+
+換尺碼的實測數字（各 1 次執行）：
+
+| 指標 | 傳統表單 | 單一 Agent | 多 Agent |
+|---|---|---|---|
+| 顧客操作步數 | 4 | 3（−25%） | 3（−25%） |
+| 客服操作步數 | 2 | 2 | 2 |
+| 端到端（分鐘） | 0.39 | 0.63 | 0.58 |
+| AI 成本（每次） | NT$0 | NT$0.52 | NT$0.63 |
+| 模型呼叫次數 | 0 | 8 | 9 |
+| Agent 停下詢問 | 0 | 1 | 1 |
+
+> 端到端在這次驗證中 AI 比傳統慢：驗證程式以每步 3 秒的固定節奏填表，AI 則是真實的模型等待加上初審時間。這只用來確認計算正確，**正式展示的數字以真人操作為準**。
+
+實機發現並已修正的兩個外觀問題：
+- Excel 的數字格式 `#,##0.##` 會把整數顯示成「4.」「1,000.」。已改為依指標固定小數位數（金額 2 位、分鐘 1 位、次數不帶小數），假設值是整數時不帶小數點。
+- 情境裡只有回放執行時，仍畫出 5 張全是「無資料」的空圖。已改為沒有任何計入的執行時不畫圖。
+
+記為已知限制：
+- 明細表在 1366px 寬需要在表格內水平捲動，表頭「端到端（分鐘）」會斷行。
+- 「今天整天」的範圍若包含 M6 以前的實機呼叫，會出現「AI 成本可能偏低」的提醒。展示當天請選從乾淨時點開始的範圍，或先向觀眾說明。
+- 即時劇本會自動錄成錄製（這次是 #42、#43）。依設計保留，可在展示控制台刪除。
+
+驗證後開發資料庫已重置回初始示範資料（故障全關、即時模式、沒有指定回放、沒有目前執行），劇本執行、錄製與 Token 用量依設計保留。
+
+### 9.14 測試
+
+`DemoScenarioRunTests`（準備劇本建立執行並蓋章、沒有目前執行或示範模式關閉不蓋章、重置保留執行並清空目前執行、家族與流程定義）、`DemoAssumptionServiceTests`（預設值、儲存與稽核、11 組非法值拒絕、邊界）、`DemoResetServiceTests.Reset_KeepsDemoAssumption`、
+`BenefitMetricsServiceTests`（`CustomerSteps_CollapseConsecutiveFillDetail`、`Replay_RunsAndCases_Excluded`、`RunWindow_RecordsAfterNextRunIgnored`、`EndToEnd_UndecidedRunExcludedFromAverage`、`StaffHandling_SumsEachRequest`、`StopToAsk_CountsAwaitingUserReply`、`Others_*`、`InvalidRuns_ExcludedFromAllAverages`、`CompletedPopulation_UsedForEstimatorInputs`、`AiCost_MatchesTokenUsageSummary`、`Metrics_SurviveDemoReset`）、`BenefitEstimatorTests`（公式、AI 較慢得到負值、部分未定價提醒、資料不足不除以零、AI 已完成卻沒有模型呼叫 `Estimator_AiCompletedRunsWithoutModelCalls_Insufficient`）、`BenefitMetricsServiceTests.EndToEnd_TraditionalStartsAfterAutoRecordedOpenForm`（R10／R11）、
+`ProcessMetricServiceTests`（`AgentRequestCreated` 查無申請仍記、不連到別人的同號申請）、`ShopAssistantViewTests`（確認建立申請才記 `AgentRequestCreated`）、`ShopAfterSalesResubmitChannelTests`、`DemoConsoleViewTests`（準備劇本建立執行、傳統劇本開表單且確認窗沒有 AI 字樣、傳統劇本台詞從表單開始 `TraditionalScenarios_FirstLineStartsOnForm`、回放模式標記）、
+`BenefitComparisonViewTests`（權限、差異百分比、缺流程提示、假設值修改權限、改值重算、儲存要確認、權限收回後不寫入、驗證訊息、回放標示不計、示範模式外案件、讀取失敗不中斷、匯出寫稽核、Excel 失敗顯示一般錯誤、AI 呼叫缺失的建議與對應不到提醒、頁面與匯出結構一致）、`BenefitBarChartTests`、`BenefitExportTests`（三張工作表與標示、PDF 表格數、不含個資、沒有資料不拋例外、檔名含日期、標題凍結與說明在表格下方、假設值為數字儲存格、數字不出現「4.」這種多餘小數點），以及慣例測試（選單權限、圖示、操作說明、色票、頁面授權、稽核總數）。
 
 > 返回 [features 索引](README.md)

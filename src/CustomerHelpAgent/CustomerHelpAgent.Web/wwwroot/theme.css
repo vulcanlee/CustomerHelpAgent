@@ -198,6 +198,28 @@
     --staff-assistant-notice-line: var(--app-warn-line);
     --staff-assistant-tag: var(--app-code-text);
     --staff-assistant-tag-bg: var(--app-code-bg);
+
+    /* ── 效益對照（M6）──
+       別名層：實測卡沿用一般卡片；「假設／推估」一律用琥珀底框，與實測一眼分得開（另附文字標籤，不只靠顏色）。
+       差異是小膠囊：文字一律內文色（小字要過 AA），好壞靠底框色＋「改善／變差」文字：改善＝綠底框、變差＝錯誤色框。
+       三種流程的長條色：傳統＝灰（沒有 AI 的基準）、單一 Agent＝重點色、多 Agent＝淺重點色；
+       灰與淺重點色不相鄰，且每根長條下方都寫流程名稱。 */
+    --benefit-measured-bg: var(--app-card);
+    --benefit-measured-line: var(--app-line);
+    --benefit-assumed-bg: var(--app-warn-bg);
+    --benefit-assumed-line: var(--app-warn-line);
+    --benefit-assumed-tag-bg: var(--app-warn-line);
+    --benefit-assumed-text: var(--app-text);
+    --benefit-delta-text: var(--app-text);
+    --benefit-better-bg: var(--app-ok-bg);
+    --benefit-better-line: var(--app-ok);
+    --benefit-worse-bg: var(--app-tint);
+    --benefit-worse-line: var(--app-error);
+    --benefit-neutral-bg: var(--app-off-bg);
+    --benefit-neutral-line: var(--app-off-line);
+    --benefit-flow-traditional: var(--app-off);
+    --benefit-flow-single: var(--app-accent);
+    --benefit-flow-multi: var(--app-accent-dim);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

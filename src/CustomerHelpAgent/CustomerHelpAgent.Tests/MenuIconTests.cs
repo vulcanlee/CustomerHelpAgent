@@ -50,6 +50,7 @@ public sealed class MenuIconTests
         "support_agent",
         "rule",
         "timeline",
+        "insights",
     };
 
     [Fact]

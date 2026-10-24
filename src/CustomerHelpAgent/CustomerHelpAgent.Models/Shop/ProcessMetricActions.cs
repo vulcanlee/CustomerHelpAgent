@@ -22,6 +22,12 @@ public static class ProcessMetricActions
     public const string AgentReject = "AgentReject";
     public const string AgentUploadPhoto = "AgentUploadPhoto";
 
+    /// <summary>
+    /// 確認卡確實建立了售後申請（M6）：在 <c>ConfirmAsync</c> 之後、只在有申請編號時記一筆（帶申請 Id，記憶卡不記）。
+    /// 不是顧客的點擊，不算操作步數；效益對照的申請筆數靠它（<see cref="AgentConfirm"/> 是點擊，可能是記憶卡或沒建成）。
+    /// </summary>
+    public const string AgentRequestCreated = "AgentRequestCreated";
+
     // 客服
     public const string OpenRequest = "OpenRequest";
     public const string ViewOrder = "ViewOrder";

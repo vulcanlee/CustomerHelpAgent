@@ -443,6 +443,12 @@ public partial class ShopAssistantView : IDisposable
         // 記憶卡：以顧客的記憶裡是否確實有卡片上的種類與內容為準（工具執行後才失敗、或版本衝突時也一樣）。
         var isMemory = card.Kind == ConfirmationCardKind.Memory;
         entry.RequestNo = isMemory ? null : result?.CreatedRequestNo ?? conflictRequestNo;
+        // 確實建立了申請才記（M6 效益對照的申請筆數）；確認點擊本身已記為 AgentConfirm。
+        if (approve && entry.RequestNo is { } createdNo)
+        {
+            await ProcessMetricService.RecordAgentRequestCreatedAsync(key, AfterSalesChannelExtensions.ForAgentMode(sessionMode), createdNo, CustomerId);
+        }
+
         entry.CardState = !approve ? CardState.Canceled
             : isMemory ? (await IsRememberedAsync(card) ? CardState.Remembered : CardState.NotCreated)
             : entry.RequestNo is not null ? CardState.Created

@@ -1,8 +1,8 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.20
+- 文件版本：1.21
 - 文件狀態：已實作
-- 現行系統版本：1.0.7
+- 現行系統版本：1.0.8
 - 首次實作版本：0.9.42
 - 最後核對日期：2026/10/24
 
@@ -104,7 +104,7 @@ scoped CSS 連 `::deep` 都打不到。
 
 ## 六、資料來源
 
-0.9.78 起所有動作代碼集中在 `CustomerHelpAgent.Business/Helpers/AuditActions.cs`（0.9.78 時約 55 個，現行 150 個），呼叫點一律引用常數，
+0.9.78 起所有動作代碼集中在 `CustomerHelpAgent.Business/Helpers/AuditActions.cs`（0.9.78 時約 55 個，現行 152 個），呼叫點一律引用常數，
 由 `AuditConventionTests` 守門；0.9.78 新增的事件（分類／團隊／專案增刪改、附件、登出、SSO、自行改密碼、JWT 刷新失敗、
 Blazor 頁面權限拒絕、各頁匯出與維護、自動清理）見 [日誌與例外處理 PRD](日誌與例外處理-prd.md) §6.3 LOG-14。
 **來源 IP（0.9.117 起）** 不由呼叫端傳入：`AuditLogService` 寫入時向 `IClientIpProvider` 取，
@@ -151,7 +151,7 @@ Debug 預設不寫進檔案，要到「日誌等級設定」調到 Debug 才看�
 | `Shop.Request.Submit` / `Shop.Request.Resubmit` / `Shop.Request.MoreInfo` / `Shop.Request.Decide` / `Shop.Policy.AddVersion` / `Shop.Attachment.Download` | 售後展示（1.0.3 起）：`AfterSalesRequestService`（顧客送件、補件；客服要求補件、核准／駁回）、`AfterSalesPolicyService`（店家新增規則版本）、`AfterSalesFileController`（下載申請照片，成功才記）。Detail 只有編號、類型、狀態等，不含說明、地址、手機 |
 | `AfterSales.Fulfilled` | 售後決策執行（1.0.6 起）：`AfterSalesDecisionService`（核准時建立處理單並扣庫存／加物流事件）。Detail 只有處理單種類與單號。客服決定本身仍記 `Shop.Request.Decide`／`Shop.Request.MoreInfo`，現由 `AfterSalesDecisionService` 統一寫入 |
 | `Memory.Saved` / `Memory.Deleted` | 顧客長期記憶（M5，1.0.7）：`CustomerMemoryService`（顧客確認後寫入偏好、刪除一筆或全部）。Detail 只有偏好種類（`kind=ShoeSize`）或刪除筆數（`all; rows=N`），**不含記憶內容**；操作者為顧客本人 |
-| `Demo.Reset` / `Demo.FaultChanged` / `Demo.ModeChanged` / `Demo.SwitchIdentity` / `Demo.SwitchBack` / `Demo.RecordingGolden` / `Demo.RecordingDelete` | 售後展示控制（1.0.5 起，只在 `DemoSettings:Enabled=true` 時出現）：`DemoResetService`（一鍵重置；成功 Detail `requests=N, sessions=N, files=N, failedFiles=N`，失敗 `reset failed`）、`DemoConsoleView`（「展示控制台」以登入的管理員寫：故障 `fault=…; state=on|off`、模式 `mode=Live` 或 `mode=Replay; recordingId=N`、金劇本 `recordingId=N; scenario=A`、刪除錄製 `recordingId=N`）、`DemoSwitch`（`/Auths/DemoSwitch` 身分切換：成功 Detail `target=<帳號>`／`from=<帳號>`，操作者＝展示者；被拒 Detail `reason=<代碼>`）。Detail 只有帳號、Id 與代碼，不含姓名 |
+| `Demo.Reset` / `Demo.FaultChanged` / `Demo.ModeChanged` / `Demo.SwitchIdentity` / `Demo.SwitchBack` / `Demo.RecordingGolden` / `Demo.RecordingDelete` / `Demo.AssumptionChanged` / `Demo.BenefitExport` | 售後展示控制（1.0.5 起，只在 `DemoSettings:Enabled=true` 時出現）：`DemoResetService`（一鍵重置；成功 Detail `requests=N, sessions=N, files=N, failedFiles=N`，失敗 `reset failed`）、`DemoConsoleView`（「展示控制台」以登入的管理員寫：故障 `fault=…; state=on|off`、模式 `mode=Live` 或 `mode=Replay; recordingId=N`、金劇本 `recordingId=N; scenario=A`、刪除錄製 `recordingId=N`）、`DemoSwitch`（`/Auths/DemoSwitch` 身分切換：成功 Detail `target=<帳號>`／`from=<帳號>`，操作者＝展示者；被拒 Detail `reason=<代碼>`）。`DemoAssumptionService`（M6 效益對照頁修改假設值，Detail 為變動欄位 `欄位=舊→新`，以 `; ` 分隔，沒有變動時為 `no change`）；`BenefitComparisonView`（效益對照頁匯出 Excel／PDF，Detail `format=xlsx; range=起~迄; runs=N`（PDF 為 `format=pdf`），不含檔案內容）。Detail 只有帳號、Id 與代碼，不含姓名 |
 | `LogLevel.Apply` / `LogLevel.Restore` | `LogLevelSettingView` |
 | `LogViewer.AiAnalyze` / `LogViewer.AiAnalyzeExportPdf` | `LogViewerView` |
 | `Audit.Purge` / `Audit.ClearAll` | `AuditLogView`（0.9.42 起）|

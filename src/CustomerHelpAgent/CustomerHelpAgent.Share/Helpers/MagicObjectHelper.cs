@@ -115,6 +115,9 @@ public class MagicObjectHelper
     public const string 角色_售後規則 = "售後規則管理";
     public const string 角色_Agent執行紀錄 = "Agent 執行紀錄";
 
+    /// <summary>效益對照（M6）：檢視可看實測對照與推估；修改假設值另需「修改」動作（或裸鍵）。</summary>
+    public const string 角色_效益對照 = "效益對照";
+
     /// <summary>
     /// 監控與診斷群組（0.9.113 前名為「統計與分析」）。刻意不列入 <c>RolePermissionService.GetRoleListPermissionAllName()</c>：
     /// 不種 Permission 資料列、角色矩陣不顯示、任何角色都無法被授予；

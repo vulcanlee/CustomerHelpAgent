@@ -17,4 +17,7 @@ public class ProcessMetric
     public int? UserId { get; set; }
     public int? AfterSalesRequestId { get; set; }
     public DateTime OccurredAt { get; set; }
+
+    /// <summary>示範模式下，記錄當下的劇本執行（M6，<see cref="DemoScenarioRun.Id"/>）；沒有則為 null。刻意不設外鍵。</summary>
+    public int? DemoRunId { get; set; }
 }
