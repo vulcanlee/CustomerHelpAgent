@@ -37,6 +37,7 @@ public sealed class PageHelpCatalogTests
         ["/shop/after-sales/new"] = "顧客商店版面沒有頂欄操作說明按鈕",
         ["/shop/after-sales"] = "顧客商店版面沒有頂欄操作說明按鈕",
         ["/shop/assistant"] = "顧客商店版面沒有頂欄操作說明按鈕",
+        ["/shop/memory"] = "顧客商店版面沒有頂欄操作說明按鈕",
     };
 
     private static readonly string[] UnfinishedMarkers = ["TODO", "TBD", "待補", "（略）", "(略)"];

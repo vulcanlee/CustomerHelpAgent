@@ -1,12 +1,15 @@
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.Business.Startup;
 
 /// <summary>
 /// 展示劇本（1.0.5 起，只有資料）：展示控制台逐一列出，「準備此劇本」依序重置示範資料、只開這個劇本的故障、
-/// 選定模式，再切換成 <see cref="DemoScenario.Account"/> 到線上客服。
+/// 選定模式，再切換成 <see cref="DemoScenario.Account"/> 到線上客服（<see cref="DemoScenario.Mode"/> 是多 Agent 時帶 <c>?mode=handoff</c>）。
 /// A、B 的顧客台詞取自設計文件 §3.2 的旗艦劇本，錄製與回放都以這幾句為準 —— 改字會讓既有的金劇本對不上（回放中止），
 /// 請同時重新錄製。<see cref="DemoScenario.Code"/> 也是金劇本的劇本代碼（存進錄製檔），既有代碼不要改名。
+/// M5：H 是 B 的多 Agent 版本（台詞相同，金劇本要以多 Agent 模式錄）；E（長期記憶）跨三段對話——回放一次只播一段會話，
+/// 所以 E 的金劇本只涵蓋第一段（記住偏好），之後的開新對話與刪除記憶請用即時模式示範。
 /// </summary>
 public static class DemoScenarios
 {
@@ -34,6 +37,19 @@ public static class DemoScenarios
                 "黑鞋照換碼規則繼續辦；白鞋屬品質問題，請顧客先補開膠照片，停下來等上傳、不空轉。",
             ]),
         new(
+            "H",
+            "多 Agent：一句兩事",
+            DemoSeedData.Customer1,
+            ["這雙想換大一碼，另一雙開膠了也幫我看看", "黑的換大一碼，白的開膠"],
+            [],
+            [
+                "與劇本 B 同樣的兩句話，改由多 Agent 處理：分流 Agent 判斷要先找誰，不自己查資料。",
+                "分流 Agent 先轉給換退貨專員：專員查換碼規則、處理黑鞋換大一碼。",
+                "換退貨專員處理完交回分流 Agent，分流再轉給品質專員處理白鞋開膠（請顧客補開膠照片）。",
+                "每則回覆標示發言的專員；幕後面板的交接列寫出「誰 → 誰：理由」。每位專員只拿得到自己的工具，安全規則與單一 Agent 相同。",
+            ],
+            AgentMode.Handoff),
+        new(
             "C",
             "退貨逾期",
             DemoSeedData.Customer2,
@@ -52,6 +68,19 @@ public static class DemoScenarios
             [
                 "灰色外套已出貨 4 天尚未送達，Agent 查物流軌跡、由程式判定可以催件，再經確認卡送出催件申請。",
                 "想示範配送異常時，準備好之後再到「故障模擬」打開「物流異常」。",
+            ]),
+        new(
+            "E",
+            "長期記憶",
+            DemoSeedData.Customer1,
+            ["我平常鞋子穿 41 碼，以後記得喔", "想換一雙鞋的尺寸", "想換一雙鞋的尺寸"],
+            [],
+            [
+                "第 1 段對話：說第一句，出現記憶確認卡（鞋碼偏好 41 碼），按下確認才會記住；按取消就什麼都不寫入。",
+                "按「開新對話」說第二句：Agent 帶出「記得您平常穿 41 碼，這次也是嗎？」——記憶只是偏好，仍要跟顧客確認，不當成訂單事實。",
+                "到「我的 AI 記憶」頁刪除這筆鞋碼偏好。",
+                "再按「開新對話」說第三句（與第二句相同）：Agent 不再提起 41 碼，刪除後下一次呼叫立即不再注入。",
+                "回放只播一段會話：金劇本只涵蓋第 1 段，後面三步請用即時模式示範。",
             ]),
         new(
             "F1",
@@ -111,10 +140,12 @@ public static class DemoScenarios
 /// <param name="CustomerLines">顧客依序要說的話（回放時也是依序帶入）。</param>
 /// <param name="Faults">這個劇本要開的故障；準備時其他故障一律關閉。</param>
 /// <param name="TalkingPoints">展示者的講解重點。</param>
+/// <param name="Mode">線上客服的 Agent 模式（M5）：多 Agent 時準備劇本後導向 <c>/shop/assistant?mode=handoff</c>；預設單一 Agent。</param>
 public sealed record DemoScenario(
     string Code,
     string Title,
     string Account,
     IReadOnlyList<string> CustomerLines,
     IReadOnlyList<DemoFault> Faults,
-    IReadOnlyList<string> TalkingPoints);
+    IReadOnlyList<string> TalkingPoints,
+    AgentMode Mode = AgentMode.Single);

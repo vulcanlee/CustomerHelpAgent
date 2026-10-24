@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.DataAccess;
 
 namespace CustomerHelpAgent.Web.Agents.PreReview;
@@ -13,7 +13,7 @@ namespace CustomerHelpAgent.Web.Agents.PreReview;
 /// </list>
 /// ⚠️ 原文只在程式內比對，絕不送給模型、不寫進日誌。結果是確定的（同樣的資料得到同樣的文字），回放的請求摘要才比得起來。
 /// </summary>
-public static partial class PreReviewPrivacy
+public static class PreReviewPrivacy
 {
     public const string Masked = "［已遮蔽］";
     public const string CustomerAlias = "此顧客";
@@ -36,14 +36,8 @@ public static partial class PreReviewPrivacy
             text = text.Replace(value, with, StringComparison.Ordinal);
         }
 
-        text = EmailPattern().Replace(text, Masked);
-        return PhonePattern().Replace(text, Masked);
+        // Email 與電話的樣式由 Business 的 PersonalDataPatterns 統一定義（顧客長期記憶的內容政策共用）。
+        text = PersonalDataPatterns.Email().Replace(text, Masked);
+        return PersonalDataPatterns.Phone().Replace(text, Masked);
     }
-
-    [GeneratedRegex(@"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")]
-    private static partial Regex EmailPattern();
-
-    /// <summary>手機（09xx-xxx-xxx，可含空白或連字號）、市話（區碼 0x 或 0xx 後接 6～8 碼，可含括號、連字號）。</summary>
-    [GeneratedRegex(@"(?<!\d)(?:09\d{2}[-\s]?\d{3}[-\s]?\d{3}|\(?0\d{1,2}\)?[-\s]?\d{3,4}[-\s]?\d{4})(?!\d)")]
-    private static partial Regex PhonePattern();
 }

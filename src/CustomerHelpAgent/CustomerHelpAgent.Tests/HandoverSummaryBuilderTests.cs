@@ -109,4 +109,40 @@ public sealed class HandoverSummaryBuilderTests : IAsyncLifetime
         Assert.Contains("［已遮蔽］", summary.Confirmation!.Facts.Single(), StringComparison.Ordinal);
         Assert.Contains(steps, x => x.Kind == "Agent 回覆" && x.Text.Contains("此顧客", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// 記憶確認卡（M5）不是申請：交接摘要的確認卡只取售後申請卡；記憶卡之後的「顧客決定」也不可蓋掉申請卡的結果。
+    /// </summary>
+    [Fact]
+    public async Task Handover_SkipsMemoryCard()
+    {
+        var requestId = await kit.Host.AddRequestAsync();
+        var detail = await kit.DetailAsync(requestId);
+        var memoryCard = new ConfirmationCard(
+            8, "approval-2", "記住您的偏好", string.Empty, string.Empty, null, "鞋碼", string.Empty,
+            ["要我記住：鞋子平常穿 41 碼嗎？之後的對話會先向您確認。"], 0, ConfirmationCardKind.Memory, MemoryKind.ShoeSize, "41");
+        await kit.SeedTrailAsync(detail.CaseKey, kit.Host.Alice,
+        [
+            (AgentStepKind.ConfirmationShown, "顯示確認卡", Card("簽收第 2 天（程式計算）").ToJson()),
+            (AgentStepKind.ConfirmationDecided, "你按下「確認送出」", JsonSerializer.Serialize(new { confirmationId = 7, approved = true })),
+            (AgentStepKind.ConfirmationShown, "顯示記憶確認卡", memoryCard.ToJson()),
+            (AgentStepKind.ConfirmationDecided, "你按下「不用記住」", JsonSerializer.Serialize(new { confirmationId = 8, approved = false })),
+        ]);
+
+        var summary = await kit.Builder.BuildAsync(detail);
+
+        var card = Assert.IsType<HandoverConfirmation>(summary.Confirmation);
+        Assert.Equal("確認換尺碼申請", card.Title);
+        Assert.Equal("顧客按下確認送出", card.Outcome);
+
+        // 只有記憶卡的案件：沒有申請確認卡。
+        var onlyMemoryId = await kit.Host.AddRequestAsync();
+        var onlyMemory = await kit.DetailAsync(onlyMemoryId);
+        await kit.SeedTrailAsync(onlyMemory.CaseKey, kit.Host.Alice,
+        [
+            (AgentStepKind.ConfirmationShown, "顯示記憶確認卡", memoryCard.ToJson()),
+            (AgentStepKind.ConfirmationDecided, "你按下「記住」", JsonSerializer.Serialize(new { confirmationId = 8, approved = true })),
+        ]);
+        Assert.Null((await kit.Builder.BuildAsync(onlyMemory)).Confirmation);
+    }
 }

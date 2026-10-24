@@ -35,7 +35,10 @@ namespace CustomerHelpAgent.Tests.Components;
 /// 線上客服頁（/shop/assistant）：真實的 <see cref="AfterSalesAgentRunner"/>＋腳本化模型（<see cref="ScriptedAgentModel"/>），
 /// 驗證對話泡泡、規則卡、確認卡、照片上傳區、幕後面板與會話還原。種子沿用 <see cref="ShopViewTestBase"/>（黑 40 簽收 3 天、白 41），
 /// 另補換尺碼與品質問題兩條規則。
+/// 多 Agent 模式（M5）的測試會跑 OffThread 的 Handoff Workflow（背景執行緒寫 checkpoint、執行工具），所以整個類別用暫存檔資料庫
+/// （<c>fileDatabase: true</c>），並放進不與其他測試平行的 <see cref="HeavyWorkflowCollection"/>。
 /// </summary>
+[Collection(nameof(HeavyWorkflowCollection))]
 public sealed class ShopAssistantViewTests : ShopViewTestBase
 {
     private const string ReplayFirstLine = "剛買的鞋尺碼不合適，想換大一碼";
@@ -59,6 +62,7 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
     };
 
     public ShopAssistantViewTests()
+        : base(fileDatabase: true)
     {
         SeedPolicies();
         permissionContext = Factory.CreateDbContext();
@@ -81,6 +85,7 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         });
         Services.AddSingleton(sp => new AgentSessionStore(Factory, sp.GetRequiredService<TimeProvider>(), NullLogger<AgentSessionStore>.Instance));
         Services.AddSingleton(sp => new AgentTraceService(Factory, sp.GetRequiredService<TimeProvider>(), NullLogger<AgentTraceService>.Instance));
+        Services.AddSingleton(sp => new CustomerMemoryService(Factory, new RecordingAuditLogService(), sp.GetRequiredService<TimeProvider>(), NullLogger<CustomerMemoryService>.Instance));
         Services.AddSingleton(sp =>
         {
             var currentUser = sp.GetRequiredService<CurrentUserService>();
@@ -89,10 +94,12 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
                 sp.GetRequiredService<AgentChatClientFactory>(),
                 new StubSystemPromptProvider(),
                 sp.GetRequiredService<AgentSessionStore>(),
+                new WorkflowCheckpointService(Factory, time, NullLogger<WorkflowCheckpointService>.Instance),
                 sp.GetRequiredService<AgentTraceService>(),
                 sp.GetRequiredService<ShopOrderService>(),
                 new AfterSalesPolicyService(Factory, new RecordingAuditLogService(), currentUser, TestDemoControl.Off(Factory), time, NullLogger<AfterSalesPolicyService>.Instance),
                 sp.GetRequiredService<AfterSalesRequestService>(),
+                sp.GetRequiredService<CustomerMemoryService>(),
                 new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
                 inbox,
                 sp.GetRequiredService<DemoControlService>(),
@@ -149,6 +156,24 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         });
         Assert.Equal(0, RequestCount());
         Assert.Equal(2, MetricCount(ProcessMetricActions.AgentSendMessage));
+    }
+
+    /// <summary>M5 Task 6：續用的會話是多 Agent 模式時，流程度量記在「AI 多 Agent」管道（M6 依管道分組對照）。</summary>
+    [Fact]
+    public async Task Metric_HandoffSession_RecordsMultiAgentChannel()
+    {
+        await Services.GetRequiredService<AgentSessionStore>().CreateAsync(CustomerId, AgentMode.Handoff);
+        model.Reply("您好，請問需要什麼協助？");
+        var cut = Render<ShopAssistantView>();
+
+        Send(cut, "你好");
+
+        cut.WaitForAssertion(() =>
+        {
+            using var db = Factory.CreateDbContext();
+            Assert.Equal(1, db.ProcessMetric.Count(x => x.Action == ProcessMetricActions.AgentSendMessage && x.Channel == AfterSalesChannel.AgentHandoff));
+        });
+        Assert.Equal(0, MetricCount(ProcessMetricActions.AgentSendMessage));
     }
 
     [Fact]
@@ -621,6 +646,324 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-role=backstage-faults]")));
     }
 
+    // ───────────────────────── M5：模式切換、交接呈現、記憶卡 ─────────────────────────
+
+    /// <summary>
+    /// 切換模式後按取消：對話、模式、會話都不變。
+    /// （取消後 AntDesign 會延遲拆掉確認窗並再重繪檢視；在那之後立刻再點切換鈕，bUnit 偶爾會點到舊的事件代號，
+    /// 所以取消與確認分成兩個測試，取消之後不再點擊。）
+    /// </summary>
+    [Fact]
+    public async Task ModeSwitch_Cancel_KeepsConversation()
+    {
+        model.Reply("您好，請問需要什麼協助？");
+        var cut = Render<AssistantWithContainer>();
+        Send(cut, "你好");
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".chat-bubble-agent")));
+
+        await cut.InvokeAsync(() => cut.Find("[data-mode=handoff]").Click());
+        var dialog = cut.WaitForElement(".ant-modal-confirm");
+        Assert.Contains("切換模式會開始新對話，目前的對話會保留在紀錄中。", dialog.TextContent, StringComparison.Ordinal);
+        await cut.InvokeAsync(() => cut.FindAll(".ant-modal-confirm-btns .ant-btn").First(x => !x.ClassList.Contains("ant-btn-primary")).Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll(".ant-modal-confirm"));
+            Assert.Single(cut.FindAll(".chat-bubble-agent"));
+            Assert.Equal("true", cut.Find("[data-mode=single]").GetAttribute("aria-checked"));
+        });
+        Assert.Equal(1, SessionCount());
+        Assert.Empty(cut.FindAll("[data-role=handoff-hint]"));
+    }
+
+    /// <summary>
+    /// 切換模式：先以確認窗提示，確認後以新模式開新對話，舊對話關閉但保留在紀錄中；
+    /// 多 Agent 模式顯示三位專員的提示；之後的流程度量記在新模式的管道（頁面的模式跟著實際會話走）。
+    /// </summary>
+    [Fact]
+    public async Task ModeSwitch_StartsNewConversation()
+    {
+        model.Reply("您好，請問需要什麼協助？");
+        var cut = Render<AssistantWithContainer>();
+        Send(cut, "你好");
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".chat-bubble-agent")));
+        Assert.Equal("true", cut.Find("[data-mode=single]").GetAttribute("aria-checked"));
+        Assert.Equal("false", cut.Find("[data-mode=handoff]").GetAttribute("aria-checked"));
+        Assert.Equal("radiogroup", cut.Find("[data-role=mode-switch]").GetAttribute("role"));
+        Assert.Empty(cut.FindAll("[data-role=handoff-hint]"));
+
+        // 確認：開新對話（多 Agent），舊會話關閉但還在。Find 與 Click 包在 InvokeAsync 裡，避免點到重繪前的事件代號。
+        await cut.InvokeAsync(() => cut.Find("[data-mode=handoff]").Click());
+        cut.WaitForElement(".ant-modal-confirm .ant-btn-primary");
+        Assert.Contains("切換模式會開始新對話，目前的對話會保留在紀錄中。", cut.Find(".ant-modal-confirm").TextContent, StringComparison.Ordinal);
+        await cut.InvokeAsync(() => cut.Find(".ant-modal-confirm .ant-btn-primary").Click());
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-mode=handoff]").GetAttribute("aria-checked"));
+            Assert.Empty(cut.FindAll(".chat-bubble-agent"));
+            Assert.Empty(cut.FindAll(".chat-bubble-user"));
+            var hint = cut.Find("[data-role=handoff-hint]").TextContent;
+            Assert.Contains("分流 Agent", hint, StringComparison.Ordinal);
+            Assert.Contains("換退貨專員", hint, StringComparison.Ordinal);
+            Assert.Contains("品質專員", hint, StringComparison.Ordinal);
+            Assert.Contains("物流專員", hint, StringComparison.Ordinal);
+        });
+        using (var db = Factory.CreateDbContext())
+        {
+            var sessions = db.AgentSessionRecord.OrderBy(x => x.Id).ToList();
+            Assert.Equal(2, sessions.Count);
+            Assert.True(sessions[0].IsClosed);
+            Assert.Equal(AgentMode.Single, sessions[0].Mode);
+            Assert.False(sessions[1].IsClosed);
+            Assert.Equal(AgentMode.Handoff, sessions[1].Mode);
+        }
+
+        model.Call("handoff_to_2", Handoff("顧客反映鞋子開膠"));
+        model.Reply("了解，請問是哪一雙鞋開膠呢？");
+        Send(cut, "我的鞋子開膠了");
+
+        cut.WaitForAssertion(() => Assert.Equal("品質專員", cut.Find("[data-role=speaker]").TextContent.Trim()));
+        Assert.Equal(1, MetricCount(ProcessMetricActions.AgentSendMessage));
+        Assert.Equal(1, MetricCount(ProcessMetricActions.AgentSendMessage, AfterSalesChannel.AgentHandoff));
+    }
+
+    /// <summary>
+    /// 展示控制台的 <c>?mode=handoff</c>：沒有多 Agent 會話時以多 Agent 模式開新對話；重新整理（同一個網址）續用同一段，不再開新的。
+    /// </summary>
+    [Fact]
+    public void QueryModeHandoff_StartsHandoff()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/shop/assistant?mode=handoff");
+
+        var cut = Render<ShopAssistantView>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-mode=handoff]").GetAttribute("aria-checked"));
+            Assert.Single(cut.FindAll("[data-role=handoff-hint]"));
+        });
+        Guid key;
+        using (var db = Factory.CreateDbContext())
+        {
+            var open = db.AgentSessionRecord.Single(x => !x.IsClosed);
+            Assert.Equal(AgentMode.Handoff, open.Mode);
+            key = open.SessionKey;
+        }
+
+        var refreshed = Render<ShopAssistantView>();
+
+        refreshed.WaitForAssertion(() => Assert.Equal("true", refreshed.Find("[data-mode=handoff]").GetAttribute("aria-checked")));
+        using var check = Factory.CreateDbContext();
+        Assert.Equal(key, check.AgentSessionRecord.Single(x => !x.IsClosed).SessionKey);
+    }
+
+    /// <summary>
+    /// 劇本 B 的多 Agent 版本：分流 → 換退貨專員（回覆後交回）→ 分流 → 品質專員。對話裡每段回覆標示發言者，
+    /// 「已轉給…」接在該專員的回覆之前；幕後面板的交接列有專屬樣式與 Agent 名稱徽章；重新整理後還原成相同的順序。
+    /// </summary>
+    [Fact]
+    public async Task Handoff_ShowsSpeakerAndSystemEntry()
+    {
+        await Services.GetRequiredService<AgentSessionStore>().CreateAsync(CustomerId, AgentMode.Handoff);
+        model.Call("handoff_to_1", Handoff("先處理換尺碼"));
+        model.Call("get_effective_policy", new() { ["orderItemId"] = Black40ItemId, ["issueType"] = "size_exchange" });
+        model.Respond(new ChatMessage(ChatRole.Assistant,
+        [
+            new TextContent("黑色 40 碼可以換 41，請看下方規則卡。"),
+            new FunctionCallContent("call-back", "handoff_to_1", Handoff("顧客另有品質問題")),
+        ]));
+        model.Call("handoff_to_2", Handoff("白色那雙脫線"));
+        model.Reply("白色那雙脫線的部分，請問方便上傳照片嗎？");
+        var cut = Render<ShopAssistantView>();
+
+        Send(cut, "黑色那雙想換大一號，另外白色那雙脫線了");
+
+        string[] expected =
+        [
+            "user:黑色那雙想換大一號，另外白色那雙脫線了",
+            "handoff:已轉給換退貨專員",
+            "agent[換退貨專員]:黑色 40 碼可以換 41，請看下方規則卡。",
+            "handoff:已轉給分流 Agent",
+            "handoff:已轉給品質專員",
+            "agent[品質專員]:白色那雙脫線的部分，請問方便上傳照片嗎？",
+            "policy",
+        ];
+        cut.WaitForAssertion(() => Assert.Equal(expected, ChatLog(cut)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var rows = cut.FindAll("[data-role=backstage] .backstage-row[data-kind=Handoff]");
+            Assert.Equal(3, rows.Count);
+            Assert.All(rows, row => Assert.True(row.ClassList.Contains("is-handoff")));
+            Assert.Equal("分流 Agent", rows[2].QuerySelector("[data-role=handoff-from]")!.TextContent.Trim());
+            Assert.Equal("品質專員", rows[2].QuerySelector("[data-role=handoff-to]")!.TextContent.Trim());
+            Assert.Contains("白色那雙脫線", rows[2].TextContent, StringComparison.Ordinal);
+        });
+
+        // 重新整理：交接列與發言者以相同順序還原。
+        var restored = Render<ShopAssistantView>();
+        restored.WaitForAssertion(() => Assert.Equal(expected, ChatLog(restored)));
+        Assert.Equal(3, restored.FindAll("[data-role=backstage] .backstage-row.is-handoff").Count);
+    }
+
+    /// <summary>
+    /// 記憶確認卡：專屬樣式（種類、內容、只代表偏好的說明），按鈕是「記住／不用記住」，輸入框提示也對應記憶卡；
+    /// 按「記住」後卡片標成已記住並連到「我的 AI 記憶」；下一輪的記憶注入在幕後面板以「記憶」來源色顯示。
+    /// </summary>
+    [Fact]
+    public void MemoryCard_RenderedAndConfirmable()
+    {
+        model.Call("remember_preference", new() { ["kind"] = "shoe_size", ["value"] = "41" });
+        var cut = Render<ShopAssistantView>();
+
+        Send(cut, "我平常鞋子穿 41 碼，以後記得喔");
+
+        cut.WaitForAssertion(() =>
+        {
+            var card = cut.Find(".agent-confirm-card");
+            Assert.True(card.ClassList.Contains("is-memory"));
+            Assert.Contains("記住您的偏好", card.QuerySelector(".agent-confirm-title")!.TextContent, StringComparison.Ordinal);
+            Assert.Contains("鞋碼偏好", card.TextContent, StringComparison.Ordinal);
+            Assert.Contains("要我記住：鞋子平常穿 41 碼嗎？", card.TextContent, StringComparison.Ordinal);
+            Assert.Contains("只代表您的偏好", card.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("商品", card.TextContent, StringComparison.Ordinal);
+            Assert.Equal("記住", card.QuerySelector("[data-action=confirm]")!.Children.Last().TextContent.Trim());
+            Assert.Equal("不用記住", card.QuerySelector("[data-action=cancel]")!.Children.Last().TextContent.Trim());
+            Assert.False(card.QuerySelector("[data-action=confirm]")!.HasAttribute("disabled"));
+            Assert.Equal("請先按下確認卡上的「記住」或「不用記住」", cut.Find("[data-role=composer] input").GetAttribute("placeholder"));
+        });
+        Assert.Empty(MemoryValues());
+        // 停止原因本來就是「等待確認」：幕後面板不另加「確認卡仍在等待」的說明。
+        Assert.Empty(cut.FindAll("[data-role=backstage-pending-card]"));
+
+        model.Reply("好的，已經記住了。");
+        cut.Find("[data-action=confirm]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var card = cut.Find(".agent-confirm-card");
+            Assert.Contains("已記住", card.TextContent, StringComparison.Ordinal);
+            Assert.NotNull(card.QuerySelector("a[href='/shop/memory']"));
+            Assert.DoesNotContain("請看下方的說明", card.TextContent, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-action=confirm]"));
+        });
+        Assert.Equal(["41"], MemoryValues());
+
+        // 下一輪：記憶以系統指示注入，幕後面板那一列是「記憶」來源色。
+        model.Reply("請問這次想換哪一雙？");
+        Send(cut, "想換一雙鞋的尺寸");
+        cut.WaitForAssertion(() => Assert.Contains(
+            cut.FindAll("[data-role=backstage] .backstage-row[data-kind=ModelContext]"),
+            row => row.QuerySelector(".backstage-source.is-memory") is not null));
+    }
+
+    /// <summary>單一模式的一般申請卡：幕後面板的停止原因照舊，不出現「確認卡仍在等待」的說明（單一模式畫面不變）。</summary>
+    [Fact]
+    public void Backstage_OrdinaryCard_NoPendingCardNote()
+    {
+        var cut = ReachConfirmation();
+
+        cut.WaitForAssertion(() => Assert.Contains("等待你確認", cut.Find("[data-role=backstage] .backstage-stop").TextContent, StringComparison.Ordinal));
+        Assert.Empty(cut.FindAll("[data-role=backstage-pending-card]"));
+    }
+
+    /// <summary>
+    /// M5 Task 3 遺留（m1）：同一輪先查到規則衝突、再提出記住偏好時，停止原因是「規則衝突」，但記憶卡照常有效——
+    /// 卡片維持待確認、按鈕可按，幕後面板在停止原因下方說明這張卡仍在等待（衝突說明可以保留），按「記住」照常寫入。
+    /// </summary>
+    [Fact]
+    public void MemoryCard_AfterPolicyConflict_StaysPendingAndConfirmable()
+    {
+        using (var db = Factory.CreateDbContext())
+        {
+            var effectiveFrom = DateTime.Now.AddDays(-30);
+            db.AfterSalesPolicy.Add(new AfterSalesPolicy
+            {
+                Code = "SIZE-EXCHANGE-B",
+                Type = AfterSalesType.SizeExchange,
+                Category = ProductCategories.All,
+                Title = "換尺碼（另一版）",
+                Content = "簽收 14 天內可申請換尺碼。",
+                Source = "示範售後說明",
+                Version = 1,
+                EffectiveFrom = effectiveFrom,
+                WindowDays = 14,
+                CreatedAt = effectiveFrom,
+            });
+            db.SaveChanges();
+        }
+
+        model.Call("get_effective_policy", new() { ["orderItemId"] = Black40ItemId, ["issueType"] = "size_exchange" });
+        model.Call("remember_preference", new() { ["kind"] = "shoe_size", ["value"] = "41" });
+        var cut = Render<ShopAssistantView>();
+
+        Send(cut, "黑色那雙想換大一號，另外我平常穿 41 碼，以後記得");
+
+        cut.WaitForAssertion(() =>
+        {
+            var card = cut.Find(".agent-confirm-card.is-memory");
+            Assert.True(card.ClassList.Contains("is-pending"));
+            Assert.False(card.QuerySelector("[data-action=confirm]")!.HasAttribute("disabled"));
+            Assert.DoesNotContain("沒有記住", card.TextContent, StringComparison.Ordinal);
+            var stop = cut.Find("[data-role=backstage] .backstage-stop");
+            Assert.Contains("規則衝突", stop.TextContent, StringComparison.Ordinal);
+            Assert.Contains("記住您的偏好", stop.QuerySelector("[data-role=backstage-pending-card]")!.TextContent, StringComparison.Ordinal);
+        });
+
+        model.Reply("好的，已經記住了。");
+        cut.Find("[data-action=confirm]").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("已記住", cut.Find(".agent-confirm-card").TextContent, StringComparison.Ordinal));
+        Assert.Equal(["41"], MemoryValues());
+    }
+
+    /// <summary>
+    /// 回放多 Agent 錄製：網址的 <c>?mode=single</c> 被忽略，頁面以錄製時的模式（多 Agent）開新對話，模式切換鎖定；
+    /// 回放出交接與發言者，不呼叫模型。
+    /// </summary>
+    [Fact]
+    public async Task Replay_LocksMode()
+    {
+        demo = TestDemoControl.Create(Factory, enabled: true);
+        Services.GetRequiredService<CurrentUserService>().CurrentUser = new CurrentUser { Id = CustomerId, Account = "customer1" };
+        var runner = Services.GetRequiredService<AfterSalesAgentRunner>();
+        var recordedKey = await runner.StartNewAsync(AgentMode.Handoff);
+        model.Call("handoff_to_2", Handoff("顧客反映鞋子開膠"));
+        model.Reply("了解，請問是哪一雙鞋開膠呢？");
+        await runner.SendAsync(recordedKey, "我的鞋子開膠了", _ => Task.CompletedTask, _ => Task.CompletedTask, CancellationToken.None);
+        int recordingId;
+        using (var db = Factory.CreateDbContext())
+        {
+            recordingId = db.AgentRecording.Where(x => x.SessionKey == recordedKey).Select(x => x.Id).Single();
+        }
+
+        await demo.SetModeAsync(DemoMode.Replay, recordingId);
+        await runner.StartNewAsync();
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/shop/assistant?mode=single");
+        var callsBefore = model.CallCount;
+
+        var cut = Render<ShopAssistantView>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-mode=handoff]").GetAttribute("aria-checked"));
+            Assert.True(cut.Find("[data-mode=handoff]").HasAttribute("disabled"));
+            Assert.True(cut.Find("[data-mode=single]").HasAttribute("disabled"));
+            Assert.Contains("回放", cut.Find("[data-role=mode-switch]").GetAttribute("title"), StringComparison.Ordinal);
+        });
+        using (var db = Factory.CreateDbContext())
+        {
+            Assert.Equal(AgentMode.Handoff, db.AgentSessionRecord.Single(x => !x.IsClosed).Mode);
+        }
+
+        SendPrefilled(cut, "我的鞋子開膠了");
+
+        cut.WaitForAssertion(() => Assert.Equal(
+            ["user:我的鞋子開膠了", "handoff:已轉給品質專員", "agent[品質專員]:了解，請問是哪一雙鞋開膠呢？"],
+            ChatLog(cut)));
+        Assert.Equal(callsBefore, model.CallCount);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -709,7 +1052,8 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         return Path.Combine(dir?.FullName ?? throw new DirectoryNotFoundException("找不到 CustomerHelpAgent.Web。"), "CustomerHelpAgent.Web");
     }
 
-    private static void Send(IRenderedComponent<ShopAssistantView> cut, string text)
+    private static void Send<TComponent>(IRenderedComponent<TComponent> cut, string text)
+        where TComponent : IComponent
     {
         cut.WaitForAssertion(() => Assert.False(cut.Find("[data-role=composer] input").HasAttribute("disabled")));
         cut.Find("[data-role=composer] input").Input(text);
@@ -744,11 +1088,52 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
         return db.AfterSalesRequest.Count();
     }
 
-    private int MetricCount(string action)
+    private int MetricCount(string action, AfterSalesChannel channel = AfterSalesChannel.Agent)
     {
         using var db = Factory.CreateDbContext();
-        return db.ProcessMetric.Count(x => x.Action == action && x.Channel == AfterSalesChannel.Agent);
+        return db.ProcessMetric.Count(x => x.Action == action && x.Channel == channel);
     }
+
+    private int SessionCount()
+    {
+        using var db = Factory.CreateDbContext();
+        return db.AgentSessionRecord.Count();
+    }
+
+    private List<string> MemoryValues()
+    {
+        using var db = Factory.CreateDbContext();
+        return db.CustomerMemory.Select(x => x.Value).ToList();
+    }
+
+    private static Dictionary<string, object?> Handoff(string reason) => new() { ["reasonForHandoff"] = reason };
+
+    /// <summary>對話區依序的摘要：顧客泡泡、交接訊息、Agent 泡泡（含發言者）、系統訊息、規則卡、確認卡。</summary>
+    private static List<string> ChatLog<TComponent>(IRenderedComponent<TComponent> cut)
+        where TComponent : IComponent
+        => cut.Find(".chat-log").Children.Select(x =>
+        {
+            if (x.QuerySelector(".chat-bubble-user") is { } user)
+            {
+                return "user:" + user.TextContent.Trim();
+            }
+
+            if (x.GetAttribute("data-role") == "handoff-entry")
+            {
+                return "handoff:" + x.Children.Last().TextContent.Trim();
+            }
+
+            if (x.QuerySelector(".chat-bubble-agent") is { } agent)
+            {
+                var speaker = x.QuerySelector("[data-role=speaker]")?.TextContent.Trim();
+                return (speaker is null ? "agent:" : $"agent[{speaker}]:") + agent.TextContent.Trim();
+            }
+
+            return x.ClassList.Contains("chat-system") ? "system:" + x.TextContent.Trim()
+                : x.ClassList.Contains("chat-cards") ? "policy"
+                : x.ClassList.Contains("agent-confirm-card") ? "card"
+                : "other:" + x.TextContent.Trim();
+        }).ToList();
 
     private void SeedPolicies()
     {
@@ -789,5 +1174,17 @@ public sealed class ShopAssistantViewTests : ShopViewTestBase
     private sealed class StaticAuthenticationStateProvider(ClaimsPrincipal principal) : AuthenticationStateProvider
     {
         public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(principal));
+    }
+
+    /// <summary>AntContainer（確認窗的落點）＋線上客服。</summary>
+    public sealed class AssistantWithContainer : ComponentBase
+    {
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder)
+        {
+            builder.OpenComponent<AntDesign.AntContainer>(0);
+            builder.CloseComponent();
+            builder.OpenComponent<ShopAssistantView>(1);
+            builder.CloseComponent();
+        }
     }
 }

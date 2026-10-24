@@ -199,6 +199,31 @@ public sealed class DemoResetServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reset_DeletesDemoCustomersMemory()
+    {
+        int other;
+        await using (var db = factory.CreateDbContext())
+        {
+            var user = new MyUser { Account = "real-customer", Password = "x", Name = "真實顧客" };
+            db.MyUser.Add(user);
+            await db.SaveChangesAsync();
+            other = user.Id;
+            var customer2 = (await db.MyUser.SingleAsync(x => x.Account == DemoSeedData.Customer2)).Id;
+            db.CustomerMemory.AddRange(
+                new CustomerMemory { CustomerUserId = customer1, Kind = MemoryKind.ShoeSize, Value = "41", CreatedAt = ResetLocal, UpdatedAt = ResetLocal },
+                new CustomerMemory { CustomerUserId = customer2, Kind = MemoryKind.ShoeSize, Value = "38", CreatedAt = ResetLocal, UpdatedAt = ResetLocal },
+                new CustomerMemory { CustomerUserId = other, Kind = MemoryKind.ShoeSize, Value = "40", CreatedAt = ResetLocal, UpdatedAt = ResetLocal });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateResetService().ResetAsync();
+
+        Assert.True(result.Success, result.Message);
+        await using var after = factory.CreateDbContext();
+        Assert.Equal(other, (await after.CustomerMemory.SingleAsync()).CustomerUserId);
+    }
+
+    [Fact]
     public async Task Reset_RemovesRequestsAndFiles()
     {
         await SubmitWithPhotoAsync();
@@ -262,8 +287,10 @@ public sealed class DemoResetServiceTests : IAsyncLifetime
         var runService = new PreReviewRunService(factory, new ManualTimeProvider(SeedUtc), NullLogger<PreReviewRunService>.Instance);
         var run = (await runService.CreateAsync(requestId))!;
         await runService.SetNodeAsync(run.Id, PreReviewNode.Intake, NodeStatus.Done);
-        await new WorkflowCheckpointService(factory, new ManualTimeProvider(SeedUtc), NullLogger<WorkflowCheckpointService>.Instance)
-            .AddAsync(run.WorkflowSessionId, "cp1", null, "{}");
+        var checkpoints = new WorkflowCheckpointService(factory, new ManualTimeProvider(SeedUtc), NullLogger<WorkflowCheckpointService>.Instance);
+        await checkpoints.AddAsync(run.WorkflowSessionId, "cp1", null, "{}");
+        // 多 Agent 會話（M5）的 checkpoint：SessionId 是 Workflow 會話 Id，不對應任何初審，也要一併清掉。
+        await checkpoints.AddAsync("handoff-agent-session", "cp2", null, "{}");
 
         var result = await CreateResetService().ResetAsync();
 

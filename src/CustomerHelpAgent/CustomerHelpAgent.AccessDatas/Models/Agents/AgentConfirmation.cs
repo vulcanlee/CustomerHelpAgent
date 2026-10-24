@@ -22,6 +22,12 @@ public class AgentConfirmation
     public string ArgumentsJson { get; set; } = string.Empty;
     public string CardJson { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 多 Agent 模式（M5）的外部核准請求原文（<c>ToolApprovalRequestContent</c> 以 <c>AIJsonUtilities.DefaultOptions</c> 序列化，含原始呼叫的 CallId）：
+    /// 顧客按下確認或取消時（含應用程式重啟後）以它 <c>CreateResponse</c>。單一模式為 null（原始請求從還原的會話歷史找）。
+    /// </summary>
+    public string? ApprovalRequestJson { get; set; }
+
     /// <summary>null＝尚未決定。</summary>
     public bool? Approved { get; set; }
 

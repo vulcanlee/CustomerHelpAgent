@@ -14,6 +14,7 @@ using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Agents;
@@ -173,6 +174,50 @@ public sealed class DemoConsoleViewTests : ShopViewTestBase
         var faultAudits = await AuditsAsync(AuditActions.Demo.FaultChanged);
         Assert.Contains($"fault={DemoFault.PolicyConflict}; state=off", faultAudits);
         Assert.Contains($"fault={DemoFault.OrderServiceTimeout}; state=on", faultAudits);
+    }
+
+    /// <summary>M5：劇本 H 是多 Agent 模式：卡片標示模式，確認窗講明，切換身分後到 <c>/shop/assistant?mode=handoff</c>。</summary>
+    [Fact]
+    public async Task Console_PrepareScenarioH_StartsHandoffMode()
+    {
+        var scenario = DemoScenarios.All.Single(x => x.Code == "H");
+        Assert.Equal(AgentMode.Handoff, scenario.Mode);
+        var cut = RenderConsole();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.demo-console-prepare")));
+        Assert.Contains("多 Agent", cut.Find(".demo-console-scenario[data-code='H'] .demo-console-scenario-mode").TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".demo-console-scenario[data-code='A'] .demo-console-scenario-mode"));
+
+        cut.Find(".demo-console-scenario[data-code='H'] button.demo-console-prepare").Click();
+        ConfirmDestructive(cut, expectedText: "多 Agent 模式");
+
+        cut.WaitForAssertion(() => Assert.Equal("/Auths/DemoSwitch", new Uri(Navigation.Uri).AbsolutePath), TimeSpan.FromSeconds(10));
+        Assert.True(tickets.TryRedeem(TicketOf(Navigation.Uri), out var ticket));
+        Assert.Equal(new DemoSwitchTicket(adminId, DemoSwitchPurpose.SwitchIdentity, DemoSeedData.Customer1, "/shop/assistant?mode=handoff"), ticket);
+        Assert.Equal(DemoMode.Live, demoControl.Mode);
+    }
+
+    /// <summary>M5：劇本 E（長期記憶）：customer1、單一模式；台詞跨三段對話，講解重點講清楚開新對話與到記憶頁刪除的時機。</summary>
+    [Fact]
+    public void ScenarioE_Defined()
+    {
+        var e = DemoScenarios.All.Single(x => x.Code == "E");
+        Assert.Equal(DemoSeedData.Customer1, e.Account);
+        Assert.Equal(AgentMode.Single, e.Mode);
+        Assert.Empty(e.Faults);
+        Assert.Equal(["我平常鞋子穿 41 碼，以後記得喔", "想換一雙鞋的尺寸", "想換一雙鞋的尺寸"], e.CustomerLines);
+        var points = string.Join("\n", e.TalkingPoints);
+        Assert.Contains("記憶確認卡", points, StringComparison.Ordinal);
+        Assert.Contains("開新對話", points, StringComparison.Ordinal);
+        Assert.Contains("我的 AI 記憶", points, StringComparison.Ordinal);
+        Assert.Contains("41 碼", points, StringComparison.Ordinal);
+
+        // H 是 B 的多 Agent 版本：同一個帳號、同樣的台詞；其餘劇本維持單一模式。代碼不重複。
+        var b = DemoScenarios.All.Single(x => x.Code == "B");
+        var h = DemoScenarios.All.Single(x => x.Code == "H");
+        Assert.Equal(b.CustomerLines, h.CustomerLines);
+        Assert.Equal(b.Account, h.Account);
+        Assert.All(DemoScenarios.All.Where(x => x.Code != "H"), x => Assert.Equal(AgentMode.Single, x.Mode));
+        Assert.Equal(DemoScenarios.All.Count, DemoScenarios.All.Select(x => x.Code).Distinct().Count());
     }
 
     [Fact]

@@ -136,6 +136,28 @@ public sealed class OptionsValidationTests
             }),
             key);
 
+    /// <summary>多 Agent 模式的每輪步數（M5）：1–40，預設 14。</summary>
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(14, true)]
+    [InlineData(40, true)]
+    [InlineData(41, false)]
+    public void AfterSalesAgentSettings_HandoffMaxSteps_Range(int handoffMaxSteps, bool valid)
+    {
+        var result = new AfterSalesAgentSettingsValidator().Validate(null, new AfterSalesAgentSettings { HandoffMaxSteps = handoffMaxSteps });
+        if (valid)
+        {
+            AssertValid(result);
+        }
+        else
+        {
+            AssertInvalid(result, "AfterSalesAgentSettings:HandoffMaxSteps");
+        }
+
+        Assert.Equal(14, new AfterSalesAgentSettings().HandoffMaxSteps);
+    }
+
     [Theory]
     [InlineData("Responses", "", null)]
     [InlineData("chatcompletions", "none", 0.2)]

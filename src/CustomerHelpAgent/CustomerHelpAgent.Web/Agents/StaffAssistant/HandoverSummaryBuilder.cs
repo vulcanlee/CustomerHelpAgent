@@ -86,6 +86,7 @@ public sealed partial class HandoverSummaryBuilder
         var statements = new List<string>();
         var photos = 0;
         HandoverConfirmation? confirmation = null;
+        var lastCardIsMemory = false;
         string? pendingTool = null;
 
         foreach (var step in steps)
@@ -114,7 +115,12 @@ public sealed partial class HandoverSummaryBuilder
 
                     pendingTool = null;
                     break;
+                case AgentStepKind.ConfirmationShown when TryReadCard(step.RawJson) is { Kind: ConfirmationCardKind.Memory }:
+                    // 記憶確認卡（M5）不是申請：不列入交接；它之後的「顧客決定」也屬於這張記憶卡，不可蓋掉申請卡的結果。
+                    lastCardIsMemory = true;
+                    break;
                 case AgentStepKind.ConfirmationShown when TryReadCard(step.RawJson) is { } card:
+                    lastCardIsMemory = false;
                     confirmation = new HandoverConfirmation(
                         card.Title,
                         card.ProductLine,
@@ -124,7 +130,7 @@ public sealed partial class HandoverSummaryBuilder
                         card.PhotoCount,
                         "顧客尚未回應");
                     break;
-                case AgentStepKind.ConfirmationDecided when confirmation is not null:
+                case AgentStepKind.ConfirmationDecided when confirmation is not null && !lastCardIsMemory:
                     confirmation = confirmation with { Outcome = DecisionOf(step.RawJson) };
                     break;
             }

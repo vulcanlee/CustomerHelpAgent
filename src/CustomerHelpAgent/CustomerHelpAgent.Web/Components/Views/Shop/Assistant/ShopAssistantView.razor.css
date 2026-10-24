@@ -259,6 +259,52 @@
     padding: 0.45rem 0.85rem;
 }
 
+/* 多 Agent 模式（M5）：發言者徽章、「已轉給…」訊息與標題下的模式提示（色票取 --assistant-* 別名）。 */
+.chat-agent {
+    display: grid;
+    gap: 0.25rem;
+    justify-items: start;
+    max-width: 85%;
+    min-width: 0;
+}
+
+.chat-agent .chat-bubble {
+    max-width: 100%;
+}
+
+.chat-speaker {
+    background: var(--assistant-speaker-bg);
+    border-radius: var(--shop-radius-pill);
+    color: var(--assistant-speaker);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.05rem 0.6rem;
+}
+
+.chat-handoff {
+    align-items: center;
+    background: var(--assistant-handoff-bg);
+    border: 1px dashed var(--assistant-handoff-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--assistant-handoff);
+    display: flex;
+    font-size: 0.85rem;
+    font-weight: 600;
+    gap: 0.35rem;
+    justify-self: center;
+    margin: 0;
+    padding: 0.2rem 0.85rem;
+}
+
+.assistant-mode-hint {
+    align-items: center;
+    color: var(--assistant-handoff);
+    display: flex;
+    font-size: 0.85rem;
+    gap: 0.35rem;
+    margin: 0;
+}
+
 .chat-cards {
     display: grid;
     gap: 0.5rem;
@@ -361,7 +407,8 @@
         padding: 0.75rem;
     }
 
-    .chat-bubble {
+    .chat-bubble,
+    .chat-agent {
         max-width: 92%;
     }
 }

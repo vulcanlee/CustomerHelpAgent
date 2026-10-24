@@ -109,6 +109,28 @@ public sealed class AfterSalesReviewViewTests : PreReviewViewTestBase
         Assert.DoesNotContain("初審", traditionalRow.TextContent, StringComparison.Ordinal);
     }
 
+    /// <summary>M5：「AI 多 Agent」管道與單一 Agent 一樣有初審標籤、AI 初審面板與「AI 助手」分頁。</summary>
+    [Fact]
+    public async Task Queue_HandoffRow_ShowsPreReviewTagPanelAndAssistantTab()
+    {
+        var handoffRequestId = await AddRequestAsync(White41ItemId, AfterSalesChannel.AgentHandoff);
+        await SeedRunAsync(
+            handoffRequestId,
+            PreReviewStatus.AwaitingDecision,
+            new PreReviewSummary(PreReviewRecommendations.Approve, "建議核准換貨", ["簽收 3 天"], ["確認庫存"]));
+
+        var cut = Render<AfterSalesReviewView>();
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr.after-sales-review-row").Count));
+        var handoffRow = cut.FindAll("tr.after-sales-review-row").Single(x => x.TextContent.Contains("AI 多 Agent", StringComparison.Ordinal));
+        Assert.Contains("建議核准", handoffRow.TextContent, StringComparison.Ordinal);
+
+        handoffRow.Click();
+
+        cut.WaitForElement(".prereview-flow");
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(".ant-tabs-tab"), x => x.TextContent.Contains("AI 助手", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public async Task Decide_WhileRunning_AsksConfirm()
     {

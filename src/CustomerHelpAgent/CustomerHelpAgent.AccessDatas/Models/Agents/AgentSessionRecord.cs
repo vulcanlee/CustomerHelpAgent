@@ -23,4 +23,10 @@ public class AgentSessionRecord
     /// 會話狀態的樂觀版本（1.0.5 起）：每次存回 <see cref="StateJson"/> 加 1；存回時版本與讀入時不同（另一個分頁先存了）就拒絕覆寫。
     /// </summary>
     public int StateVersion { get; set; }
+
+    /// <summary>
+    /// 會話模式（M5）：單一 Agent 或多 Agent 交接，建立時決定、之後不變（Runner 依它組 Agent 結構；<see cref="StateJson"/> 的格式也不同：
+    /// 單一＝<c>ChatClientAgent</c> 會話，多 Agent＝Workflow 會話，checkpoint 在 <c>WorkflowCheckpoint</c>）。M5 之前的會話為 <see cref="AgentMode.Single"/>。
+    /// </summary>
+    public AgentMode Mode { get; set; } = AgentMode.Single;
 }

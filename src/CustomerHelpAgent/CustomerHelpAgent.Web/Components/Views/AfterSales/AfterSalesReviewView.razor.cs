@@ -146,7 +146,7 @@ public partial class AfterSalesReviewView
         requests = result.Result.ToList();
         _total = result.Count;
         preReviews = await PreReviewRunService.GetLatestByRequestIdsAsync(
-            requests.Where(x => x.Channel == AfterSalesChannel.Agent).Select(x => x.Id).ToList());
+            requests.Where(x => x.Channel.IsAi()).Select(x => x.Id).ToList());
         Logger.LogDebug("After-sales review queue reloaded. RequestStatus={RequestStatus}, Count={Count}", status, _total);
     }
 
@@ -238,8 +238,8 @@ public partial class AfterSalesReviewView
         latestRun = run;
     }
 
-    /// <summary>決策按鈕旁的提示：Agent 管道、最新一輪還在初審中。</summary>
-    private bool PreReviewUnfinished => current?.Channel == AfterSalesChannel.Agent && IsUnfinished(latestRun);
+    /// <summary>決策按鈕旁的提示：AI 管道、最新一輪還在初審中。</summary>
+    private bool PreReviewUnfinished => current?.Channel.IsAi() == true && IsUnfinished(latestRun);
 
     /// <summary>上一次執行失敗的原因（例如目標規格無庫存）：流程回到人工決策後，節點的備註帶著它。</summary>
     private string? PreviousFailure
@@ -304,7 +304,7 @@ public partial class AfterSalesReviewView
     /// </summary>
     private async Task<bool> AskStaffDecisionAsync(AfterSalesRequestView target, StaffDecisionKind kind)
     {
-        var unfinished = target.Channel == AfterSalesChannel.Agent
+        var unfinished = target.Channel.IsAi()
             && IsUnfinished(await PreReviewRunService.GetLatestForRequestAsync(target.Id));
         var verb = kind switch
         {

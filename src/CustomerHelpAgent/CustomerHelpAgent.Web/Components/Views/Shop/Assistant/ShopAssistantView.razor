@@ -23,6 +23,13 @@ else
             <div class="assistant-heading">
                 <h1 class="assistant-title">線上客服</h1>
                 <p class="assistant-hint">AI 客服會查您的訂單與售後規則；建立申請前一定會先請您確認。</p>
+                @if (sessionMode == AgentMode.Handoff)
+                {
+                    <p class="assistant-mode-hint" data-role="handoff-hint">
+                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="groups" />
+                        <span>@HandoffHint</span>
+                    </p>
+                }
                 @if (IsReplay)
                 {
                     @* 回放中一定要明確標示：回覆是錄製的內容，不是模型當場產生的。 *@
@@ -33,6 +40,7 @@ else
                 }
             </div>
             <div class="assistant-tools">
+                <AgentModeSwitch Mode="sessionMode" Disabled="@(busy || sessionKey is null)" Locked="IsReplay" OnChange="OnSwitchModeAsync" />
                 <button type="button" role="switch" class="assistant-switch @(showBackstage ? "is-on" : null)"
                         aria-checked="@(showBackstage ? "true" : "false")" data-action="toggle-backstage" @onclick="ToggleBackstageAsync">
                     <span class="assistant-switch-track" aria-hidden="true"><span class="assistant-switch-thumb"></span></span>
@@ -58,7 +66,7 @@ else
                 @* 單一子元素＋column-reverse：內容增加時捲軸停在底部，不需要 JS 捲動。 *@
                 <div class="chat-scroll">
                     <div class="chat-log" role="log" aria-live="polite" aria-label="對話內容">
-                        @if (entries.Count == 0 && streaming is null)
+                        @if (entries.Count == 0 && live is null)
                         {
                             <p class="chat-empty">您好，我是 AI 售後客服。可以告訴我想換尺碼、換顏色、退貨，或商品有品質問題，我會先查您的訂單與規則。</p>
                         }
@@ -75,8 +83,25 @@ else
                                 case EntryKind.Agent:
                                     @* 模型文字一律經 AiMarkdownRenderer.ToSafeHtml（速查表 §6.5），不可直接丟進 MarkupString。 *@
                                     <div class="chat-row is-agent">
-                                        <div class="chat-bubble chat-bubble-agent">@((MarkupString)entry.Html)</div>
+                                        @if (entry.Speaker is { } speaker)
+                                        {
+                                            @* 多 Agent 模式（M5）：每段回覆標示發言者；單一模式沒有發言者，畫面與之前相同。 *@
+                                            <div class="chat-agent">
+                                                <span class="chat-speaker" data-role="speaker">@speaker</span>
+                                                <div class="chat-bubble chat-bubble-agent">@((MarkupString)entry.Html)</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="chat-bubble chat-bubble-agent">@((MarkupString)entry.Html)</div>
+                                        }
                                     </div>
+                                    break;
+                                case EntryKind.Handoff:
+                                    <p class="chat-handoff" role="note" data-role="handoff-entry">
+                                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="swap_horiz" />
+                                        <span>@($"已轉給{entry.Text}")</span>
+                                    </p>
                                     break;
                                 case EntryKind.System:
                                     <p class="chat-system" role="note">
@@ -103,12 +128,42 @@ else
                             }
                         }
 
-                        @if (streaming is not null)
+                        @if (live is not null)
                         {
-                            @* 串流中的預覽一律純文字；完成後以最終回覆重繪。 *@
-                            <div class="chat-row is-agent">
-                                <div class="chat-bubble chat-bubble-streaming" aria-busy="true">@(streaming.Length == 0 ? "客服正在處理…" : streaming.ToString())</div>
-                            </div>
+                            @* 串流中的預覽一律純文字（多 Agent 模式依交接切段）；完成後以最終回覆重繪。 *@
+                            @foreach (var item in live)
+                            {
+                                if (item.HandoffTo is { } handoffTo)
+                                {
+                                    <p class="chat-handoff" role="note">
+                                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="swap_horiz" />
+                                        <span>@($"已轉給{handoffTo}")</span>
+                                    </p>
+                                }
+                                else
+                                {
+                                    <div class="chat-row is-agent">
+                                        @if (item.Speaker is { } liveItemSpeaker)
+                                        {
+                                            <div class="chat-agent">
+                                                <span class="chat-speaker">@liveItemSpeaker</span>
+                                                <div class="chat-bubble chat-bubble-streaming" aria-busy="true">@item.Text.ToString()</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="chat-bubble chat-bubble-streaming" aria-busy="true">@item.Text.ToString()</div>
+                                        }
+                                    </div>
+                                }
+                            }
+
+                            @if (live.Count == 0 || live[^1].HandoffTo is not null)
+                            {
+                                <div class="chat-row is-agent">
+                                    <div class="chat-bubble chat-bubble-streaming" aria-busy="true">客服正在處理…</div>
+                                </div>
+                            }
                         }
                     </div>
                 </div>
@@ -174,7 +229,7 @@ else
 
             @if (showBackstage)
             {
-                <AgentBackstagePanel Events="traceEvents" />
+                <AgentBackstagePanel Events="traceEvents" PendingCardTitle="@BackstagePendingCardTitle" />
             }
         </div>
     </section>

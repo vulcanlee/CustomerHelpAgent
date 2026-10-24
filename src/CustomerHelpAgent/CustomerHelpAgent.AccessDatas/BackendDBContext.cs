@@ -57,6 +57,7 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<AgentRunTrace> AgentRunTrace { get; set; }
     public virtual DbSet<AgentRunStep> AgentRunStep { get; set; }
     public virtual DbSet<AgentConfirmation> AgentConfirmation { get; set; }
+    public virtual DbSet<CustomerMemory> CustomerMemory { get; set; }
     public virtual DbSet<DemoControlState> DemoControlState { get; set; }
     public virtual DbSet<AgentRecording> AgentRecording { get; set; }
     public virtual DbSet<AgentRecordedTurn> AgentRecordedTurn { get; set; }
@@ -387,6 +388,13 @@ public partial class BackendDBContext : DbContext
         modelBuilder.Entity<AgentConfirmation>(entity =>
         {
             entity.HasIndex(x => x.SessionKey);
+        });
+
+        // 顧客長期記憶（M5）：一種偏好只存一筆；CustomerUserId 不設外鍵（與上面的 Agent 資料表一致）。
+        modelBuilder.Entity<CustomerMemory>(entity =>
+        {
+            entity.HasIndex(x => x.CustomerUserId);
+            entity.HasIndex(x => new { x.CustomerUserId, x.Kind }).IsUnique();
         });
         #endregion
 

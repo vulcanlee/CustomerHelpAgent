@@ -472,6 +472,36 @@ public sealed class PreReviewModelNodeTests : IAsyncLifetime
         Assert.DoesNotContain("多久會處理", late);
     }
 
+    /// <summary>顧客長期記憶（M5）只是偏好、不是業務事實：記憶工具的結果（成功或失敗）不送歷史初審；其他查詢結果照送。</summary>
+    [Fact]
+    public async Task HistoryReviewer_ExcludesMemoryResults()
+    {
+        var caseKey = Guid.NewGuid();
+        var requestId = await AddRequestAsync(caseKey: caseKey);
+        var traces = new AgentTraceService(factory, new ManualTimeProvider(UtcNow), NullLogger<AgentTraceService>.Instance);
+        var runId = await traces.StartRunAsync(caseKey, customerId);
+        var rememberRequest = JsonSerializer.Serialize(new { tool = AfterSalesAgentTools.RememberPreferenceName, arguments = new { kind = "shoe_size", value = "41" } });
+        await traces.AppendStepAsync(runId, AgentStepKind.UserMessage, AgentDataSource.Conversation, "鞋底開膠了", null);
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolRequest, AgentDataSource.Conversation, "你已確認，Agent 記住你的鞋碼偏好", rememberRequest);
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolResult, AgentDataSource.Memory, "已記住偏好：鞋碼 41", "{}");
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolRequest, AgentDataSource.Conversation, "你已確認，Agent 記住你的溝通偏好", rememberRequest);
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolResult, AgentDataSource.Memory, "不符條件：溝通偏好請在 40 字以內。", "{}");
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolRequest, AgentDataSource.Conversation, "Agent 決定先查你的訂單",
+            JsonSerializer.Serialize(new { tool = AfterSalesAgentTools.QueryMyOrdersName, arguments = new { } }));
+        await traces.AppendStepAsync(runId, AgentStepKind.ToolResult, AgentDataSource.Database, "查到 1 筆訂單商品", "{}");
+        var kit = Kit();
+        model.Respond(PreReviewNodeKit.Json(new { priorRequestCount = 0, notes = Array.Empty<string>(), customerStatements = Array.Empty<string>() }));
+
+        await kit.History.ReviewAsync(await kit.CaseAsync(requestId), CancellationToken.None);
+
+        var text = PromptText(Assert.Single(model.Requests));
+        Assert.Contains("- 顧客：鞋底開膠了", text);
+        Assert.Contains("- 查詢結果：查到 1 筆訂單商品", text);
+        Assert.DoesNotContain("記住", text);
+        Assert.DoesNotContain("鞋碼", text);
+        Assert.DoesNotContain("溝通偏好", text);
+    }
+
     [Fact]
     public async Task VisionModel_Empty_FallsBackToMainModel()
     {

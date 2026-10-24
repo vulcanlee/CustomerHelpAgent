@@ -1,0 +1,56 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.agent-mode-switch {
+    background: var(--shop-tint);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    display: inline-flex;
+    gap: 0.15rem;
+    padding: 0.15rem;
+}
+
+.agent-mode-option {
+    align-items: center;
+    background: none;
+    border: none;
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-muted);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.25rem;
+    padding: 0.25rem 0.85rem;
+}
+
+.agent-mode-option:hover:not(:disabled),
+.agent-mode-option:focus-visible {
+    background: var(--shop-accent-soft);
+    color: var(--shop-text);
+}
+
+.agent-mode-option.is-selected {
+    background: var(--shop-accent);
+    color: var(--shop-on-accent);
+}
+
+.agent-mode-option:disabled {
+    cursor: not-allowed;
+}
+
+/* 執行中停用：未選的那個淡出；選中的維持可讀。回放鎖定時選中的帶鎖頭。 */
+.agent-mode-option:disabled:not(.is-selected) {
+    opacity: 0.55;
+}
+
+/* 鎖定原因只給輔助技術讀（aria-describedby），畫面上以鎖頭與滑鼠提示呈現。 */
+.agent-mode-hidden {
+    border: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}

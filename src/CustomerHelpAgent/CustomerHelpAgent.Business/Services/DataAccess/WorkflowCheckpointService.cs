@@ -92,4 +92,36 @@ public class WorkflowCheckpointService
             return 0;
         }
     }
+
+    /// <summary>
+    /// 刪掉某個 Workflow 會話的 checkpoint，只留下 <paramref name="keepCheckpointId"/>（null＝全部刪除），回傳刪除筆數（M5 多 Agent 會話）。
+    /// 售後多 Agent 的會話每輪存回後只需要最後一個 checkpoint（會話的 <c>lastCheckpoint</c>）：每個 superstep 一筆、每筆都含所有參與者的完整狀態，
+    /// 不清會一直累積；會話關閉（開新對話）後整批刪除。
+    /// ⚠️ 這是清理：失敗只記 Warning、不往外拋 —— 呼叫時會話已經存好，不可因為清不掉 checkpoint 而回報失敗。
+    /// </summary>
+    public async Task<int> DeleteSessionCheckpointsAsync(string sessionId, string? keepCheckpointId)
+    {
+        try
+        {
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var query = context.WorkflowCheckpoint.Where(x => x.SessionId == sessionId);
+            if (keepCheckpointId is not null)
+            {
+                query = query.Where(x => x.CheckpointId != keepCheckpointId);
+            }
+
+            var deleted = await query.ExecuteDeleteAsync();
+            if (deleted > 0)
+            {
+                logger.LogDebug("Workflow checkpoints of a session deleted. SessionId={SessionId}, Count={Count}", sessionId, deleted);
+            }
+
+            return deleted;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete workflow checkpoints of a session. SessionId={SessionId}", sessionId);
+            return 0;
+        }
+    }
 }

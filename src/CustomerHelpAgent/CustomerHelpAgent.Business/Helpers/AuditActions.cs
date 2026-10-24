@@ -320,6 +320,13 @@ public static class AuditActions
         public const string Fulfilled = "AfterSales.Fulfilled";
     }
 
+    /// <summary>顧客長期記憶（M5）：顧客確認後寫入偏好、顧客刪除一筆或全部。Detail 只有偏好種類與筆數，不含記憶內容。</summary>
+    public static class Memory
+    {
+        public const string Saved = "Memory.Saved";
+        public const string Deleted = "Memory.Deleted";
+    }
+
     /// <summary>
     /// 售後展示控制（1.0.5 起，只在 <c>DemoSettings:Enabled</c> 時發生）：一鍵重置示範資料、故障模擬與即時／回放切換、
     /// 以示範帳號身分檢視與切回、設定金劇本。<c>DemoControlService</c> 是 Singleton 拿不到登入者，

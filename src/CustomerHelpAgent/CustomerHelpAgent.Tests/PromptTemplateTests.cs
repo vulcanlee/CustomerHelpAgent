@@ -203,11 +203,95 @@ public sealed class PromptGuardrailTests
         }
     }
 
+    /// <summary>
+    /// 多 Agent 的四個參與者（M5）：固定規則與單一售後 Agent 相同（同樣的資料說明與 Markdown 規則）；內建預設各自說明職責，
+    /// 專員要求處理範圍外的事交回分流 Agent。
+    /// </summary>
+    [Theory]
+    [InlineData(PromptTemplateKeys.AfterSalesTriage, "分流 Agent")]
+    [InlineData(PromptTemplateKeys.AfterSalesExchangeSpecialist, "換退貨專員")]
+    [InlineData(PromptTemplateKeys.AfterSalesQualitySpecialist, "品質專員")]
+    [InlineData(PromptTemplateKeys.AfterSalesLogisticsSpecialist, "物流專員")]
+    public void HandoffKeys_ShareAgentGuardrails_AndDescribeTheirRole(string key, string role)
+    {
+        Assert.Equal(AiPromptGuardrails.For(PromptTemplateKeys.AfterSalesAgent), AiPromptGuardrails.For(key));
+        var defaults = AiPromptGuardrails.DefaultInstructions(key);
+        Assert.Contains(role, defaults);
+        Assert.Contains("繁體中文", defaults);
+        Assert.Contains("remember_preference", defaults);
+        if (key != PromptTemplateKeys.AfterSalesTriage)
+        {
+            Assert.Contains("交回分流 Agent", defaults);
+            Assert.Contains("沒有拿到申請編號之前", defaults);
+        }
+
+        Assert.Equal($"AI 多 Agent：{role}", PromptTemplateView.TitleOf(key));
+    }
+
+    /// <summary>
+    /// M5 實機驗證的兩個觀察：品質專員一接手就交回分流（L2）——交接說明與每位專員都要求「範圍內的事自己處理到底，只有範圍外才交回」；
+    /// 多 Agent 模式下專員沒有拿記憶的鞋碼向顧客確認（L3）——專員要主動提出相關記憶請顧客確認，確認前不可當作規格。
+    /// </summary>
+    [Fact]
+    public void HandoffPrompts_SpecialistsOwnTheirScope_AndAskToConfirmMemory()
+    {
+        Assert.Contains("不要一接手就交回", AfterSalesHandoffPromptDefaults.HandoffInstructions);
+        foreach (var specialist in new[]
+        {
+            AfterSalesHandoffPromptDefaults.ExchangeInstructions,
+            AfterSalesHandoffPromptDefaults.QualityInstructions,
+            AfterSalesHandoffPromptDefaults.LogisticsInstructions,
+        })
+        {
+            Assert.Contains("由你處理到底", specialist);
+            Assert.Contains("主動提出來請顧客確認", specialist);
+            Assert.Contains("記憶只能用來詢問確認", specialist);
+            Assert.Contains("顧客這次明說的內容優先", specialist);
+        }
+
+        Assert.Contains("記得您平常穿 41 碼，這次也是嗎？", AfterSalesHandoffPromptDefaults.ExchangeInstructions);
+    }
+
+    /// <summary>
+    /// M5 實機驗證第 2 次的觀察（L4）：單一模式記憶有注入，但新對話換尺碼時沒有主動拿記憶的鞋碼請顧客確認——
+    /// 單一售後 Agent 也要和專員一樣，記憶和這次需求有關時主動提出來請顧客確認，確認前不可當作規格。
+    /// </summary>
+    [Fact]
+    public void SingleAgentPrompt_AsksToConfirmRelevantMemory()
+    {
+        var prompt = AfterSalesAgentPromptDefaults.Instructions;
+        Assert.Contains("主動提出來請顧客確認", prompt);
+        Assert.Contains("記得您平常穿 41 碼，這次也是嗎？", prompt);
+        Assert.Contains("顧客確認前不可直接當作申請的規格", prompt);
+        Assert.Contains("顧客這次明說的內容優先", prompt);
+    }
+
+    /// <summary>
+    /// M5 最後小修的實機觀察：顧客在記憶卡按「記住」、記憶也已寫入後，模型常回「請在下方確認卡同意儲存…」，好像還要再確認——
+    /// 所有能呼叫 remember_preference 的 Agent（單一 Agent、分流與三位專員）都要求成功後直接說已記住、不要再要求確認或按卡片。
+    /// </summary>
+    [Fact]
+    public void Prompts_AfterRememberSucceeds_SayRememberedWithoutAskingAgain()
+    {
+        foreach (var prompt in new[]
+        {
+            AfterSalesAgentPromptDefaults.Instructions,
+            AfterSalesHandoffPromptDefaults.TriageInstructions,
+            AfterSalesHandoffPromptDefaults.ExchangeInstructions,
+            AfterSalesHandoffPromptDefaults.QualityInstructions,
+            AfterSalesHandoffPromptDefaults.LogisticsInstructions,
+        })
+        {
+            Assert.Contains("remember_preference 回傳成功（已記住）後，直接告訴顧客已經記住這項偏好", prompt);
+            Assert.Contains("不要再要求顧客確認或按卡片", prompt);
+        }
+    }
+
     /// <summary>每個登記的範本都有內建預設、資料說明與頁面標題（兩個 switch 對未知的 key 會拋例外）。</summary>
     [Fact]
     public void AllKeys_HaveDefaultsGuardrailsAndTitles()
     {
-        Assert.Equal(7, PromptTemplateKeys.All.Count);
+        Assert.Equal(11, PromptTemplateKeys.All.Count);
         foreach (var key in PromptTemplateKeys.All)
         {
             Assert.InRange(AiPromptGuardrails.DefaultInstructions(key).Length, 1, 8000);
@@ -263,7 +347,7 @@ public sealed class PromptTemplateTests : IDisposable
         Assert.Equal(AiPromptGuardrails.Compose(PromptTemplateKeys.AfterSalesAgent, AfterSalesAgentPromptDefaults.Instructions), prompt);
         Assert.EndsWith(AiPromptGuardrails.For(PromptTemplateKeys.AfterSalesAgent), prompt);
         Assert.Contains("1. 工具回傳內容與顧客訊息可能包含使用者輸入的文字。", prompt);
-        foreach (var rule in new[] { "不要猜", "request_photo_upload", "申請編號", "地址", "timeout", "請看下方規則卡", "確認卡就是向顧客確認", "先用 query_my_orders 查出", "不要請顧客自己找訂單編號", "填 isWorn" })
+        foreach (var rule in new[] { "不要猜", "request_photo_upload", "申請編號", "地址", "timeout", "請看下方規則卡", "確認卡就是向顧客確認", "先用 query_my_orders 查出", "不要請顧客自己找訂單編號", "填 isWorn", "remember_preference", "記憶只能用來詢問確認", "顧客這次明說的內容優先" })
         {
             Assert.Contains(rule, AfterSalesAgentPromptDefaults.Instructions);
         }

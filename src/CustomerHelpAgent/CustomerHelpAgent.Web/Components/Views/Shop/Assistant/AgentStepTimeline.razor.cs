@@ -29,11 +29,12 @@ public partial class AgentStepTimeline
         expandedRows.RemoveWhere(index => index >= Events.Count);
     }
 
-    /// <summary>停止列底色、程式提醒（<see cref="AgentStepKind.Warning"/>）標紅；其他列沒有額外樣式。</summary>
+    /// <summary>停止列底色、程式提醒（<see cref="AgentStepKind.Warning"/>）標紅、多 Agent 交接（<see cref="AgentStepKind.Handoff"/>）專屬樣式；其他列沒有額外樣式。</summary>
     private static string? RowClass(AgentStepKind kind) => kind switch
     {
         AgentStepKind.Stop => "is-stop",
         AgentStepKind.Warning => "is-warning",
+        AgentStepKind.Handoff => "is-handoff",
         _ => null,
     };
 

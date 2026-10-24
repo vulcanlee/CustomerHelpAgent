@@ -13,6 +13,7 @@ public sealed class SqliteWorkflowCheckpointStoreTests : IAsyncLifetime
 {
     private SqliteConnection connection = null!;
     private SqliteWorkflowCheckpointStore store = null!;
+    private WorkflowCheckpointService service = null!;
 
     public async Task InitializeAsync()
     {
@@ -21,7 +22,8 @@ public sealed class SqliteWorkflowCheckpointStoreTests : IAsyncLifetime
         var factory = new TestDbContextFactory(connection);
         await using var db = factory.CreateDbContext();
         await db.Database.EnsureCreatedAsync();
-        store = new SqliteWorkflowCheckpointStore(new WorkflowCheckpointService(factory, TimeProvider.System, NullLogger<WorkflowCheckpointService>.Instance));
+        service = new WorkflowCheckpointService(factory, TimeProvider.System, NullLogger<WorkflowCheckpointService>.Instance);
+        store = new SqliteWorkflowCheckpointStore(service);
     }
 
     public async Task DisposeAsync() => await connection.DisposeAsync();
@@ -86,5 +88,22 @@ public sealed class SqliteWorkflowCheckpointStoreTests : IAsyncLifetime
         Assert.NotNull(latest);
         Assert.Equal(index[^1].CheckpointId, latest.CheckpointId);
         Assert.Null(await manager.GetLatestCheckpointAsync("no-such-session"));
+    }
+
+    /// <summary>多 Agent 會話（M5）每輪存回後只留下指定的 checkpoint；不給要保留的 Id 時整批刪除；別的會話不受影響。</summary>
+    [Fact]
+    public async Task DeleteSessionCheckpoints_KeepsOnlyGivenCheckpoint()
+    {
+        await service.AddAsync("s1", "a", null, "{}");
+        await service.AddAsync("s1", "b", "a", "{}");
+        await service.AddAsync("s1", "c", "b", "{}");
+        await service.AddAsync("other", "x", null, "{}");
+
+        Assert.Equal(2, await service.DeleteSessionCheckpointsAsync("s1", "c"));
+        Assert.Equal(["c"], await service.ListCheckpointIdsAsync("s1"));
+
+        Assert.Equal(1, await service.DeleteSessionCheckpointsAsync("s1", keepCheckpointId: null));
+        Assert.Empty(await service.ListCheckpointIdsAsync("s1"));
+        Assert.Equal(["x"], await service.ListCheckpointIdsAsync("other"));
     }
 }

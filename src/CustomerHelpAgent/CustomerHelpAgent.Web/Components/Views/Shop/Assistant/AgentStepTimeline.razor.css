@@ -26,6 +26,49 @@
     padding: 0.4rem 0.5rem;
 }
 
+/* 多 Agent 交接（Handoff，M5）：左側重點色線＋淡底；交出與接手的 Agent 以名稱徽章顯示（色票取 --assistant-* 別名）。
+   交接事件由讀串流的一側發出，接手專員的前幾列（模型呼叫、記憶注入）在 Workflow 執行緒產生，所以交接列可能排在那幾列之後（已知、接受）。 */
+.backstage-row.is-handoff {
+    background: var(--assistant-handoff-bg);
+    border-bottom: none;
+    border-left: 3px solid var(--assistant-handoff);
+    border-radius: 10px;
+    padding: 0.4rem 0.5rem;
+}
+
+.backstage-handoff {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.backstage-agent-badge {
+    background: var(--assistant-speaker-bg);
+    border: 1px solid var(--assistant-handoff-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--assistant-speaker);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.05rem 0.55rem;
+    white-space: nowrap;
+}
+
+.backstage-agent-badge.is-target {
+    background: var(--assistant-handoff);
+    border-color: var(--assistant-handoff);
+    color: var(--shop-on-accent);
+}
+
+.backstage-handoff-arrow {
+    color: var(--assistant-handoff);
+    font-weight: 700;
+}
+
+.backstage-handoff-reason {
+    color: var(--shop-text);
+}
+
 /* 程式提醒（Warning）：整列標紅，與一般列一眼分得開。 */
 .backstage-row.is-warning {
     border-left: 3px solid var(--shop-step-warning);

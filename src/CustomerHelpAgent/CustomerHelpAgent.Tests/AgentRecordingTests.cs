@@ -130,10 +130,12 @@ public sealed class AgentRecordingTests : IAsyncLifetime
             chatFactory,
             new StubSystemPromptProvider(),
             new AgentSessionStore(factory, time, NullLogger<AgentSessionStore>.Instance),
+            new WorkflowCheckpointService(factory, time, NullLogger<WorkflowCheckpointService>.Instance),
             new AgentTraceService(factory, time, NullLogger<AgentTraceService>.Instance),
             orderService,
             policyService,
             requestService,
+            new CustomerMemoryService(factory, audit, time, NullLogger<CustomerMemoryService>.Instance),
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             inbox,
             demo,
@@ -339,6 +341,29 @@ public sealed class AgentRecordingTests : IAsyncLifetime
         Assert.Equal("gpt-test", row.ModelName);
         Assert.Equal(1, row.TurnCount);
         Assert.Equal(1, row.CallCount);
+    }
+
+    /// <summary>M5：錄製建立時記下會話的模式（回放據此重建 Agent 結構）；單一模式的劇本 A 是 Single，找不到會話時也當 Single。</summary>
+    [Fact]
+    public async Task Recording_StoresSessionMode()
+    {
+        var service = CreateRecordingService();
+        var singleKey = await RunFlagshipAsync(CreateRunner(LiveDemo(), recordingService: service));
+        var single = Assert.IsType<AgentRecordingDetail>(await service.GetAsync(await RecordingIdAsync(singleKey)));
+        Assert.Equal(AgentMode.Single, single.Recording.Mode);
+
+        var store = new AgentSessionStore(factory, TimeProvider.System, NullLogger<AgentSessionStore>.Instance);
+        var handoffKey = await store.CreateAsync(customer1, AgentMode.Handoff);
+        await service.AppendTurnAsync(handoffKey, customer1, AgentRecordedTurnKind.Send, "這雙想換大一碼");
+        // 之後的動作不會改掉建立時記下的模式。
+        await service.AppendTurnAsync(handoffKey, customer1, AgentRecordedTurnKind.Send, "黑的換大一碼");
+        var handoffId = await RecordingIdAsync(handoffKey);
+        Assert.Equal(AgentMode.Handoff, (await service.GetAsync(handoffId))!.Recording.Mode);
+        Assert.Contains((await service.GetRecordingsAsync(new DataRequest())).Result, x => x.Id == handoffId && x.Mode == AgentMode.Handoff);
+
+        var orphanKey = Guid.NewGuid();
+        await service.AppendTurnAsync(orphanKey, customer1, AgentRecordedTurnKind.Send, "沒有會話");
+        Assert.Equal(AgentMode.Single, (await service.GetAsync(await RecordingIdAsync(orphanKey)))!.Recording.Mode);
     }
 
     [Fact]

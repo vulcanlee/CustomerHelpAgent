@@ -9,6 +9,7 @@ using CustomerHelpAgent.Business.Helpers;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Scheduling;
 using CustomerHelpAgent.Web.Scheduling.Jobs;
@@ -579,6 +580,57 @@ public sealed class SoftDeletePurgeTests : IAsyncDisposable
         Assert.True(outcome.Succeeded);
         Assert.Contains("受保護", outcome.Message, StringComparison.Ordinal);
         Assert.Empty(audit.Entries);
+    }
+
+    [Fact]
+    public async Task Purge_DeletesMemoryOfPurgedAccount()
+    {
+        await InitializeAsync();
+        int gone, kept;
+        await using (var db = NewContext())
+        {
+            var expired = NewUser("expired", Expired);
+            var notYet = NewUser("notyet", NotYet);
+            db.MyUser.AddRange(expired, notYet);
+            await db.SaveChangesAsync();
+            gone = expired.Id;
+            kept = notYet.Id;
+            db.CustomerMemory.AddRange(
+                new CustomerMemory { CustomerUserId = gone, Kind = MemoryKind.ShoeSize, Value = "41", CreatedAt = Cutoff, UpdatedAt = Cutoff },
+                new CustomerMemory { CustomerUserId = gone, Kind = MemoryKind.PreferredColor, Value = "黑色", CreatedAt = Cutoff, UpdatedAt = Cutoff },
+                new CustomerMemory { CustomerUserId = kept, Kind = MemoryKind.ShoeSize, Value = "38", CreatedAt = Cutoff, UpdatedAt = Cutoff });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Service().PurgeExpiredAsync(Cutoff, default);
+
+        Assert.False(result.AnyFailed);
+        Assert.Single(Type(result, "MyUser").Removed);
+        await using var verify = NewContext();
+        Assert.Equal(kept, (await verify.CustomerMemory.SingleAsync()).CustomerUserId);
+    }
+
+    [Fact]
+    public async Task Purge_MemoryAndAccountAreRemovedAtomically_WhenSaveFails()
+    {
+        await InitializeAsync();
+        await using (var db = NewContext())
+        {
+            var expired = NewUser("expired", Expired);
+            db.MyUser.Add(expired);
+            await db.SaveChangesAsync();
+            db.CustomerMemory.Add(new CustomerMemory { CustomerUserId = expired.Id, Kind = MemoryKind.ShoeSize, Value = "41", CreatedAt = Cutoff, UpdatedAt = Cutoff });
+            await db.SaveChangesAsync();
+        }
+
+        // 存檔失敗：帳號與記憶必須同進退（兩者在同一次 SaveChanges），不能刪了帳號卻留下記憶。
+        interceptors.Add(new SaveHook(before: _ => throw new InvalidOperationException("boom")));
+        var result = await Service().PurgeExpiredAsync(Cutoff, default);
+
+        Assert.True(result.AnyFailed);
+        await using var verify = NewContext();
+        Assert.Single(await All<MyUser>(verify));
+        Assert.Single(await verify.CustomerMemory.ToListAsync());
     }
 
     [Fact]

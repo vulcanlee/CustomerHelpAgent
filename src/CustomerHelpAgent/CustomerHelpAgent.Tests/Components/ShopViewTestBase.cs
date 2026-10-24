@@ -23,18 +23,35 @@ namespace CustomerHelpAgent.Tests.Components;
 /// 顧客商店檢視的 bUnit 測試基底：in-memory SQLite 上的真服務（沒有服務介面可替換），
 /// 加上一位擁有「顧客商店」權限的登入顧客，讓檢視跑完真的 <c>AuthenticationStateHelper.Check()</c>。
 /// 種子：一雙跑鞋（黑／白 × 40／41／42），顧客的一張訂單內有「黑 40」與「白 41」兩個商品。
+/// 會跑多 Agent 交接（OffThread Workflow，背景執行緒同時存取資料庫）的檢視測試以 <c>fileDatabase: true</c> 改用
+/// <see cref="TestFileDbContextFactory"/>（每個 context 各自連線），共用 in-memory 連線並行時會出錯。
 /// </summary>
 public abstract class ShopViewTestBase : ComponentTestBase
 {
-    private readonly SqliteConnection connection;
+    private readonly SqliteConnection? connection;
+    private readonly TestFileDbContextFactory? fileFactory;
     private readonly BackendDBContext longLivedContext;
     private readonly string fileRoot = Path.Combine(Path.GetTempPath(), "ShopViewTests-" + Guid.NewGuid().ToString("N"));
 
     protected ShopViewTestBase()
+        : this(fileDatabase: false)
     {
-        connection = new SqliteConnection("Data Source=:memory:");
-        connection.Open();
-        Factory = new TestDbContextFactory(connection);
+    }
+
+    protected ShopViewTestBase(bool fileDatabase)
+    {
+        if (fileDatabase)
+        {
+            fileFactory = new TestFileDbContextFactory();
+            Factory = fileFactory;
+        }
+        else
+        {
+            connection = new SqliteConnection("Data Source=:memory:");
+            connection.Open();
+            Factory = new TestDbContextFactory(connection);
+        }
+
         longLivedContext = Factory.CreateDbContext();
         longLivedContext.Database.EnsureCreated();
         Seed(longLivedContext);
@@ -71,7 +88,7 @@ public abstract class ShopViewTestBase : ComponentTestBase
             NullLogger<AfterSalesRequestService>.Instance));
     }
 
-    protected TestDbContextFactory Factory { get; }
+    protected IDbContextFactory<BackendDBContext> Factory { get; }
 
     protected int CustomerId { get; private set; }
 
@@ -87,7 +104,8 @@ public abstract class ShopViewTestBase : ComponentTestBase
         if (disposing)
         {
             longLivedContext.Dispose();
-            connection.Dispose();
+            connection?.Dispose();
+            fileFactory?.Dispose();
             if (Directory.Exists(fileRoot))
             {
                 Directory.Delete(fileRoot, recursive: true);

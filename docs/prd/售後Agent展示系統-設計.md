@@ -1,12 +1,12 @@
 ﻿# 售後 Agent 展示系統 — 設計文件
 
-- 文件版本：0.5
-- 文件狀態：部分實作（M0、M1、M2、M3、M4 已實作；M5–M6 規劃中）
-- 現行系統版本：1.0.6
+- 文件版本：0.6
+- 文件狀態：部分實作（M0、M1、M2、M3、M4、M5 已實作；M6 規劃中）
+- 現行系統版本：1.0.7
 - 首次實作版本：1.0.2（M0）
 - 最後核對日期：2026/10/24
 
-> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）、M1（1.0.3）、M2（1.0.4）、M3（1.0.5）與 M4（1.0.6）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)），內容屬「規劃中」，不代表系統已提供。
+> 本文件是需求討論後經使用者核准的設計。除 M0（1.0.2）、M1（1.0.3）、M2（1.0.4）、M3（1.0.5）、M4（1.0.6）與 M5（1.0.7）已實作外（見 [售後 Agent 示範系統](../features/售後Agent示範系統.md)；MAF 功能的運用見 [MAF 功能運用說明](../features/售後Agent示範系統-MAF功能運用說明.md)），內容屬「規劃中」，不代表系統已提供。
 > 配套文件：[對外版企劃書](售後Agent示範系統企劃書.md)、[內部版企劃規劃說明書](售後Agent示範系統企劃規劃說明書.md)。
 ## 緣由（為什麼做）
 
@@ -190,11 +190,12 @@ AI 成本（新台幣）、Agent 停下詢問次數。並排呈現傳統 vs Agen
 | M5 | Handoff 切換＋長期記憶頁 | 交接事件出現在面板；刪除記憶後不再注入 |
 | M6 | 效益對照頁 | 以種子劇本跑兩種流程後數字合理、AI 成本與 TokenUsage 頁一致 |
 
-> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；**M2 已完成（1.0.4）**——`/shop/assistant` 單一售後 Agent（`AfterSalesAgentRunner`／`AfterSalesAgentGuard`／6 個受控工具）、`ApprovalRequiredAIFunction` 確認卡、幕後面板、`AgentSessionRecord` 會話持久化（migration `AddAgentRuntime`）、`/agent-runs` 後台紀錄頁，並補強 M1 服務（重複申請、目標規格、照片位元組上限、規則版本基準）；**M3 已完成（1.0.5）**——`DemoControlService` 七種故障模擬、`DemoResetService` 一鍵重置（固定編號）、`RecordingChatClient`／`ReplayChatClient` 錄製回放與金劇本、`/Auths/DemoSwitch` 一次性票券身分切換、`/demo-console` 展示控制台（migration `AddAgentSessionVersion`、`AddDemoControl`、`AddAgentRecording`），並補強 M2 Agent（確認卡去重、每輪步數總量、標紅、確認後下一輪、完整還原與多分頁防覆蓋）；**M4 已完成（1.0.6）**——Agent 管道送件自動觸發的 AI 初審 Workflow（進件→照片／規則／歷史三路併行→摘要→人工決策→執行→通知，checkpoint 存 SQLite）、`AfterSalesDecisionService` 核准開單（處理單 `AfterSalesFulfillment`）與顧客通知鈴、審核頁流程圖與 AI 建議面板、客服 AI 助手與轉人工交接摘要、初審錄製回放（migration `AddAfterSalesFulfillment`、`AddPreReviewWorkflow`、`AddRecordingStream`）；M5–M6 尚未實作。
+> 進度：**M0 已完成（1.0.2）**——`AgentChatClientFactory`＋`AuditingChatClient`；**M1 已完成（1.0.3）**——模擬業務系統（10 個實體、migration `AddShopDomain`）、`ShopLayout` 顧客頁、傳統審核流程、示範帳號種子；**M2 已完成（1.0.4）**——`/shop/assistant` 單一售後 Agent（`AfterSalesAgentRunner`／`AfterSalesAgentGuard`／6 個受控工具）、`ApprovalRequiredAIFunction` 確認卡、幕後面板、`AgentSessionRecord` 會話持久化（migration `AddAgentRuntime`）、`/agent-runs` 後台紀錄頁，並補強 M1 服務（重複申請、目標規格、照片位元組上限、規則版本基準）；**M3 已完成（1.0.5）**——`DemoControlService` 七種故障模擬、`DemoResetService` 一鍵重置（固定編號）、`RecordingChatClient`／`ReplayChatClient` 錄製回放與金劇本、`/Auths/DemoSwitch` 一次性票券身分切換、`/demo-console` 展示控制台（migration `AddAgentSessionVersion`、`AddDemoControl`、`AddAgentRecording`），並補強 M2 Agent（確認卡去重、每輪步數總量、標紅、確認後下一輪、完整還原與多分頁防覆蓋）；**M4 已完成（1.0.6）**——Agent 管道送件自動觸發的 AI 初審 Workflow（進件→照片／規則／歷史三路併行→摘要→人工決策→執行→通知，checkpoint 存 SQLite）、`AfterSalesDecisionService` 核准開單（處理單 `AfterSalesFulfillment`）與顧客通知鈴、審核頁流程圖與 AI 建議面板、客服 AI 助手與轉人工交接摘要、初審錄製回放（migration `AddAfterSalesFulfillment`、`AddPreReviewWorkflow`、`AddRecordingStream`）；**M5 已完成（1.0.7）**——線上客服「單一／多 Agent」切換（MAF 內建 Handoff 編排：分流 Agent → 換退貨／品質／物流專員，每位專員只拿自己的工具子集，面板與對話區顯示交接）、長期記憶（`remember_preference`＋記憶確認卡、`AIContextProvider` 注入、`/shop/memory` 我的 AI 記憶頁）、申請管道「AI 多 Agent」照樣跑 M4 初審、錄製回放保存模式、劇本 H 與 E（migration `AddCustomerMemory`、`AddAgentSessionMode`、`AddAgentRecordingMode`）；M6 尚未實作。
 > M1 實際狀態機為 `Submitted`／`NeedMoreInfo`／`Approved`／`Rejected`（§4.1 的「草稿／初審中／待人工／已完成」留待 M2、M4 視需要擴充），詳見 [售後 Agent 示範系統](../features/售後Agent示範系統.md) §4。
 > M2 實作與本文 §4.3 的差異：`track_shipment` 與 `check_variant_stock` 的參數是 `orderItemId`（不是 `orderId`／規格）；`ToolOutcome` 多了 `blocked`／`invalid` 兩種 status 與 `withheld_fields`；模型呼叫預設走 Responses API（`store=false`），因為實機推論模型在 Chat Completions 帶工具會被拒；`ChatClientAgent` 外加 `TracingChatClient` 與函式中介層 `AfterSalesAgentGuard`；§4.3「不確定即停」中「`not_found`／`timeout`／`conflict` 後模型仍下結論時面板標紅」**M2 未實作**（M2 改以程式封鎖寫入、逾時／權限／服務不可用以固定說明取代模型輸出來強制），延到 M3；實作與使用說明見 [售後 Agent 示範系統 §5](../features/售後Agent示範系統.md)。
 > M3 實作與本文 §4.5 的差異：故障列舉為 `DemoFault`（七種，另加「無適用規則」`PolicyNotFound`），狀態存 `DemoControlState` 單列，不叫 `FaultSimulationSetting`；「權限過期」只影響 Agent 工具（傳統流程的登入逾時由真實驗證機制處理），其餘故障 Agent 與傳統流程同受影響；回放以請求摘要（`ModelRequestDigest`）逐次比對，不符即 `ReplayDiverged`，顧客動作不符另有 `ReplayActionMismatch`（可重試）；`DemoSettings.Enabled=false` 時身分切換一律拒絕、控制台頁面全部停用，但選單項目仍顯示給管理員；Production 開啟示範模式拒絕啟動。§4.3「查無後直接下結論標紅」已於 M3 實作。詳見 [售後 Agent 示範系統 §6](../features/售後Agent示範系統.md)。
 > M4 實作與本文 §4.6 的差異：**不新增「已完成」狀態**——核准當下就在同一交易內開處理單，顧客看到「已核准」加處理單號；**傳統管道的核准同樣開單、扣庫存、通知顧客**（兩邊差別只在有沒有 AI，對照才公平），所有決定一律經 `AfterSalesReviewCoordinator` 與 `AfterSalesDecisionService.ApplyAsync`；**客服 AI 助手只在即時模式可用**（回放時停用，客服提問每次不同），初審 Workflow 本身支援錄製回放（`AgentRecordedCall.Stream` 分流）；助手的 6 個只讀工具沒有參數、案件綁定在開啟的那一筆，並即時查 `售後審核:view` 權限；客服在初審跑完前就決定允許（先確認），之後該輪標 `Superseded`、AI 結果僅供參考；checkpoint 粒度是 superstep 而不是節點，因此每個節點把結論先存進 `PreReviewRun` 以做到續跑冪等（已存結論的節點不再呼叫模型）；規則核對沒有成功時 AI 的任何建議一律降為「需人工判斷」；Workflows 1.25.0 的 fan-in 訊息從 checkpoint 還原時內容為空，以自訂 JSON 轉換器繞道（升級套件時須重驗）；送模型前的資料一律先遮蔽個資（`PreReviewPrivacy`），圖片不寫進 AI 對話紀錄。詳見 [售後 Agent 示範系統 §7](../features/售後Agent示範系統.md)。
+> M5 實作與本文 §4.7 的差異：**多 Agent 建立的申請記在原本沒有使用的 `AgentHandoff` 管道，標籤由「AI 轉人工」改為「AI 多 Agent」**（數值不變），AI 管道一律以 `IsAi()` 判斷，所以同樣跑 M4 初審（§3.1「傳統 vs Agent 以管道切分」延伸為兩個 AI 管道）；**記憶一種偏好只存一筆**（鞋碼、衣服尺碼、顏色、溝通偏好各一筆，新值覆蓋舊值），寫入一律經記憶確認卡，程式重核內容並拒絕電話、Email、地址、姓名與帳號；**記憶以固定的系統指示注入**（`AIContext.Instructions`，不是顧客訊息，不影響回放摘要；注入文字與使用規則由程式產生，不在可編輯的提示詞裡）；**交接採 MAF 內建 Handoff 編排**（`HandoffWorkflowBuilder`＋`workflow.AsAIAgent`），但確認卡回覆前必須呼叫實驗性的 `WorkflowSessionCheckpointRecovery.TryPrepare()`（`MAAI001`，依 §3.1 接受預覽／實驗性 API 並註記），並依 1.25 的框架行為補上五條 Runner 規則（只用外部那一份核准請求、待決卡改打字先明確拒絕、出錯不存回、每輪清 checkpoint、固定參與者 Id），全部由 `MafHandoffBehaviorTests` 釘住；框架沒有交接事件型別，交接事件由程式從串流判斷後發出；**每輪步數上限為 `HandoffMaxSteps + 1`**（預設 14＋1，與單一模式 `MaxSteps + 1` 同一公式）；新增劇本 H（B 的多 Agent 版）與 E（記憶；回放只涵蓋第一段會話）。詳見 [售後 Agent 示範系統 §8](../features/售後Agent示範系統.md)。
 
 **核准後的第一步**：把本設計存成 `docs/prd/售後Agent展示系統-設計.md`（UTF-8 含 BOM，更新 `docs/prd/README.md` 與 `docs/README.md` 索引），
 並寫出兩份企劃書初版（見 §8），再依 superpowers:writing-plans 為 M0＋M1 寫出逐步實作計畫（後續里程碑各自再寫），逐里程碑實作、驗證。

@@ -35,6 +35,11 @@
         <footer class="backstage-stop" role="status">
             <span class="backstage-stop-label">本輪停止原因</span>
             <span>@stop.PlainText</span>
+            @if (PendingCardTitle is { Length: > 0 } title)
+            {
+                @* 停止原因（例如規則衝突）不代表確認卡失效：同一輪提出的記憶卡照常等待顧客決定。 *@
+                <span class="backstage-stop-pending" data-role="backstage-pending-card">@($"確認卡「{title}」仍在等待顧客按下，照常有效。")</span>
+            }
         </footer>
     }
 </aside>

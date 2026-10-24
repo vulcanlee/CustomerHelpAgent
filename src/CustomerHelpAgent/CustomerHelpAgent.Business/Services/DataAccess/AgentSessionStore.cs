@@ -45,8 +45,8 @@ public class AgentSessionStore
             .FirstOrDefaultAsync(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId);
     }
 
-    /// <summary>建立一個空白（尚無對話）的新會話，回傳 SessionKey。</summary>
-    public async Task<Guid> CreateAsync(int customerUserId)
+    /// <summary>建立一個空白（尚無對話）的新會話，回傳 SessionKey。<paramref name="mode"/>（M5）建立後不再改變。</summary>
+    public async Task<Guid> CreateAsync(int customerUserId, AgentMode mode = AgentMode.Single)
     {
         var sessionKey = Guid.NewGuid();
         await using var context = await contextFactory.CreateDbContextAsync();
@@ -57,9 +57,10 @@ public class AgentSessionStore
             CustomerUserId = customerUserId,
             CreatedAt = now,
             UpdatedAt = now,
+            Mode = mode,
         });
         await context.SaveChangesAsync();
-        logger.LogInformation("Agent session created. SessionKey={SessionKey}", sessionKey);
+        logger.LogInformation("Agent session created. SessionKey={SessionKey}, Mode={Mode}", sessionKey, mode);
         return sessionKey;
     }
 
@@ -116,9 +117,13 @@ public class AgentSessionStore
         logger.LogInformation("Agent session closed. SessionKey={SessionKey}", sessionKey);
     }
 
-    /// <summary>記錄一張顯示給顧客的確認卡（尚未決定）。</summary>
+    /// <summary>
+    /// 記錄一張顯示給顧客的確認卡（尚未決定）。<paramref name="approvalRequestJson"/>：多 Agent 模式（M5）的外部核准請求原文，
+    /// 確認時以它產生回應；單一模式不給。
+    /// </summary>
     public async Task<AgentConfirmation> AddConfirmationAsync(
-        Guid sessionKey, int customerUserId, string approvalRequestId, string toolName, string argumentsJson, string cardJson)
+        Guid sessionKey, int customerUserId, string approvalRequestId, string toolName, string argumentsJson, string cardJson,
+        string? approvalRequestJson = null)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         var confirmation = new AgentConfirmation
@@ -129,6 +134,7 @@ public class AgentSessionStore
             ToolName = toolName,
             ArgumentsJson = argumentsJson,
             CardJson = cardJson,
+            ApprovalRequestJson = approvalRequestJson,
             CreatedAt = Now,
         };
         context.AgentConfirmation.Add(confirmation);
@@ -145,6 +151,16 @@ public class AgentSessionStore
         await using var context = await contextFactory.CreateDbContextAsync();
         return await context.AgentConfirmation.AsNoTracking()
             .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.Approved == null)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>這個會話裡核准請求 Id 為 <paramref name="approvalRequestId"/> 的確認卡（最新一張，不論是否已決定）；沒有回 null。</summary>
+    public async Task<AgentConfirmation?> GetConfirmationByRequestIdAsync(Guid sessionKey, int customerUserId, string approvalRequestId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.AgentConfirmation.AsNoTracking()
+            .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.ApprovalRequestId == approvalRequestId)
             .OrderByDescending(x => x.Id)
             .FirstOrDefaultAsync();
     }
@@ -170,12 +186,23 @@ public class AgentSessionStore
 
     /// <summary>
     /// 作廢這個會話所有未決的確認卡（顧客改打字或開新對話）：單一條件式更新（<c>Approved == null</c> → false），
-    /// 另一個分頁已搶下的決定不會被改寫。有作廢任何一張回傳 true。
+    /// 另一個分頁已搶下的決定不會被改寫。有作廢時回傳被作廢那張卡的工具名稱（M5 起，Runner 依卡片種類寫說明），沒有作廢回 null。
+    /// 同一個 DbContext 先讀工具名稱再更新（不多開連線：測試以 DbContext 建立次數插入另一個分頁的操作）。
     /// </summary>
-    public async Task<bool> VoidPendingConfirmationAsync(Guid sessionKey, int customerUserId)
+    public async Task<string?> VoidPendingConfirmationAsync(Guid sessionKey, int customerUserId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         var now = Now;
+        var toolName = await context.AgentConfirmation.AsNoTracking()
+            .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.Approved == null)
+            .OrderByDescending(x => x.Id)
+            .Select(x => x.ToolName)
+            .FirstOrDefaultAsync();
+        if (toolName is null)
+        {
+            return null;
+        }
+
         var voided = await context.AgentConfirmation
             .Where(x => x.SessionKey == sessionKey && x.CustomerUserId == customerUserId && x.Approved == null)
             .ExecuteUpdateAsync(s => s
@@ -186,7 +213,7 @@ public class AgentSessionStore
             logger.LogInformation("Agent pending confirmation voided. SessionKey={SessionKey}, Count={Count}", sessionKey, voided);
         }
 
-        return voided > 0;
+        return voided > 0 ? toolName : null;
     }
 
     /// <summary>

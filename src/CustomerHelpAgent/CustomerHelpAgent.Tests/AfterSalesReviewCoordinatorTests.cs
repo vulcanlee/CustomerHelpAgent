@@ -66,6 +66,33 @@ public sealed class AfterSalesReviewCoordinatorTests
         Assert.Equal(1, host.Fakes.SummaryCalls);
     }
 
+    /// <summary>M5：「AI 多 Agent」管道的申請與單一 Agent 一樣：停在人工決策時經 Workflow 決定，也可以重新初審。</summary>
+    [Fact]
+    public async Task Coordinator_HandoffChannel_ResumesWorkflowAndRetries()
+    {
+        await using var host = await PreReviewTestHost.CreateAsync();
+        var retryId = await host.AddRequestAsync(AfterSalesChannel.AgentHandoff);
+        var failed = (await host.Runs.CreateAsync(retryId))!;
+        await host.Runs.SetStatusAsync(failed.Id, PreReviewStatus.Failed, "boom");
+
+        var retry = await host.Coordinator(StaffUserId).RetryAsync(retryId);
+
+        Assert.True(retry.Success, retry.Message);
+        Assert.Equal([1, 2], (await host.RunsOfAsync(retryId)).Select(x => x.Attempt));
+        host.DrainQueue();
+
+        var requestId = await host.AddRequestAsync(AfterSalesChannel.AgentHandoff);
+        var run = (await host.Runs.CreateAsync(requestId))!;
+        await host.Worker.ProcessAsync(run.Id, CancellationToken.None);
+
+        var result = await host.Coordinator(StaffUserId).DecideAsync(requestId, StaffDecisionKind.Approve, null);
+
+        Assert.True(result.Success, result.Message);
+        var saved = await host.LatestRunAsync(requestId);
+        Assert.Equal(PreReviewStatus.Completed, saved.Status);
+        Assert.Equal(NodeStatus.Done, PreReviewTestHost.NodeOf(saved, PreReviewNode.StaffDecision));
+    }
+
     [Fact]
     public async Task Coordinator_ConcurrentDecision_ResumesOnce()
     {

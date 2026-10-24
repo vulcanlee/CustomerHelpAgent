@@ -1,0 +1,53 @@
+@using CustomerHelpAgent.Share.Agents
+
+@* 權限判定完成前不渲染任何內容，否則沒有權限的人會先看到頁面框架（PageAuthorizationTests 守門）。 *@
+@if (!isAccessChecked)
+{
+}
+else if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else if (memories is null)
+{
+    <div class="shop-memory-loading"><Spin /></div>
+}
+else
+{
+    <section class="shop-memory" aria-label="我的 AI 記憶">
+        <header class="shop-memory-head">
+            <h1 class="shop-memory-title">我的 AI 記憶</h1>
+            @if (memories.Count > 0)
+            {
+                <button type="button" class="shop-memory-delete-all" @onclick="DeleteAllAsync">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="delete_sweep" />
+                    <span>全部刪除</span>
+                </button>
+            }
+        </header>
+
+        <p class="shop-memory-note">這些是 AI 在對話中經你確認後記住的偏好；之後的對話會先向你確認，不會直接當成你的訂單資料。你可以隨時刪除。</p>
+
+        @if (memories.Count == 0)
+        {
+            <p class="shop-memory-empty">目前沒有 AI 記住的偏好。在線上客服對話中，AI 詢問並經你確認後，才會記在這裡。</p>
+        }
+
+        @foreach (var memory in memories)
+        {
+            <article class="shop-memory-item">
+                <div class="shop-memory-body">
+                    <div class="shop-memory-kind">@MemoryLabels.KindText(memory.Kind)</div>
+                    <div class="shop-memory-value">@memory.Value</div>
+                    <div class="shop-memory-time">記住時間 @memory.UpdatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+                </div>
+                <button type="button" class="shop-memory-delete" aria-label="@("刪除" + MemoryLabels.KindText(memory.Kind))" @onclick="() => DeleteAsync(memory)">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="delete" />
+                    <span>刪除</span>
+                </button>
+            </article>
+        }
+    </section>
+}

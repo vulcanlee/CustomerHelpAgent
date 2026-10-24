@@ -1,8 +1,8 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.62
+- 文件版本：6.63
 - 文件狀態：維護中
-- 現行系統版本：1.0.6
+- 現行系統版本：1.0.7
 - 首次實作版本：0.2.8
 - 最後核對日期：2026/10/24
 
@@ -50,7 +50,8 @@
 - [系統健康監控](features/系統健康監控.md)
 - [AI 日誌分析](features/AI日誌分析.md)
 - [AI 例外分析](features/AI例外分析.md)
-- [售後 Agent 示範系統（M0 計費接軌、M1 傳統流程、M2 單一售後 Agent、M3 展示控制、M4 客服後台 AI 已實作）](features/售後Agent示範系統.md)
+- [售後 Agent 示範系統（M0 計費接軌、M1 傳統流程、M2 單一售後 Agent、M3 展示控制、M4 客服後台 AI、M5 多 Agent 交接與長期記憶已實作）](features/售後Agent示範系統.md)
+- [售後 Agent 示範系統：MAF 功能運用說明（用到與沒用到的 MAF 功能、角色總結）](features/售後Agent示範系統-MAF功能運用說明.md)
 
 ### guides — 開發與操作指南
 - [VS Code 開發環境與新專案上手指南](guides/VS%20Code%20開發環境與新專案上手指南.md)
@@ -104,13 +105,14 @@
 - [稽核紀錄 PRD](prd/稽核紀錄-prd.md)
 - [寄信服務 PRD](prd/寄信服務-prd.md)
 - [日誌與例外處理 PRD（全系統共用規範）](prd/日誌與例外處理-prd.md)
-- [售後 Agent 展示系統設計（部分實作：M0–M4）](prd/售後Agent展示系統-設計.md)
+- [售後 Agent 展示系統設計（部分實作：M0–M5）](prd/售後Agent展示系統-設計.md)
 - [售後 Agent 示範系統企劃書（對外版，部分已完成）](prd/售後Agent示範系統企劃書.md)
-- [售後 Agent 示範系統企劃規劃說明書（內部版，M0–M4 已完成）](prd/售後Agent示範系統企劃規劃說明書.md)
+- [售後 Agent 示範系統企劃規劃說明書（內部版，M0–M5 已完成）](prd/售後Agent示範系統企劃規劃說明書.md)
 - [售後 Agent 展示系統 M0＋M1 實作計畫（已完成）](prd/售後Agent展示系統-M0M1實作計畫.md)
 - [售後 Agent 展示系統 M2 實作計畫（已完成）](prd/售後Agent展示系統-M2實作計畫.md)
 - [售後 Agent 展示系統 M3 實作計畫（已完成）](prd/售後Agent展示系統-M3實作計畫.md)
 - [售後 Agent 展示系統 M4 實作計畫（已完成）](prd/售後Agent展示系統-M4實作計畫.md)
+- [售後 Agent 展示系統 M5 實作計畫（已完成）](prd/售後Agent展示系統-M5實作計畫.md)
 - [售後 Agent 示範系統開發歷程紀錄（持續更新）](prd/售後Agent示範系統開發歷程紀錄.md)
 
 ### changelog — 變更紀錄

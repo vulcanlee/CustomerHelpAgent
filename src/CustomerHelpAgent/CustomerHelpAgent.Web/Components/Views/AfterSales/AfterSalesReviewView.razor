@@ -48,7 +48,7 @@ else
                     <StatusPill Text="@AfterSalesLabels.StatusText(context.Status)" Tone="@ToneOf(context.Status)" />
                 </Column>
                 <Column TData="string" Title="AI 初審">
-                    @if (context.Channel == AfterSalesChannel.Agent && preReviews.TryGetValue(context.Id, out var preReview))
+                    @if (context.Channel.IsAi() && preReviews.TryGetValue(context.Id, out var preReview))
                     {
                         <StatusPill Text="@PreReviewLabels.QueueTagText(preReview.Status, preReview.Recommendation)"
                                     Tone="@PreReviewTones.OfQueueTag(preReview.Status, preReview.Recommendation)" />
@@ -93,7 +93,7 @@ else
                     </dl>
                 </section>
 
-                @if (current.Channel == AfterSalesChannel.Agent)
+                @if (current.Channel.IsAi())
                 {
                     <PreReviewPanel RequestId="@current.Id" Retryable="@(current.Status == AfterSalesStatus.Submitted)" OnRunChanged="OnPreReviewChanged" />
                 }
@@ -188,7 +188,7 @@ else
                 }
             </text>;
 
-            @if (current.Channel == AfterSalesChannel.Agent)
+            @if (current.Channel.IsAi())
             {
                 @* 「AI 助手」分頁第一次點開才建立助手（之後切回「審核」也保留對話）；關窗時元件隨 current 一起卸載，對話即丟棄。 *@
                 <Tabs ActiveKey="@reviewTab" ActiveKeyChanged="OnReviewTabChanged">

@@ -102,6 +102,12 @@ public static class TokenUsageOperations
     public const string AfterSalesAgent = "AI 售後客服 Agent";
 
     /// <summary>
+    /// 顧客商店的 AI 售後多 Agent（M5，Handoff 編排：分流 Agent 與三位專員）。所有參與者的每次模型呼叫各記一筆，以會話識別碼串起來；
+    /// 與單一 Agent 分開記，M6 才能對照兩種模式的用量。
+    /// </summary>
+    public const string AfterSalesAgentHandoff = "AI 售後多 Agent";
+
+    /// <summary>
     /// 客服後台的 AI 初審 Workflow（M4）：照片、歷史紀錄、摘要三個模型節點各記一筆，在背景執行（記為系統呼叫），
     /// 以申請的 CaseKey 作對話識別碼，與顧客端 Agent 的同一個案件串起來。
     /// </summary>

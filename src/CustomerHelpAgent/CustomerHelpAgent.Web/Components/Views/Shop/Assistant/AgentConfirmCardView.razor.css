@@ -31,6 +31,28 @@
     margin: 0;
 }
 
+/* 記憶確認卡（M5）：圖示與「長期記憶」標籤用幕後面板的「記憶」來源色，與申請卡一眼分得開。 */
+.agent-confirm-card.is-memory .agent-confirm-icon {
+    color: var(--shop-source-memory);
+}
+
+.agent-confirm-tag {
+    background: var(--shop-source-memory-bg);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-source-memory);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.05rem 0.55rem;
+    white-space: nowrap;
+}
+
+.agent-confirm-note {
+    color: var(--shop-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
 .agent-confirm-facts {
     display: grid;
     gap: 0.35rem;

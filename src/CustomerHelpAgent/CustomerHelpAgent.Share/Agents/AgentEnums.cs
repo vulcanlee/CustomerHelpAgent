@@ -67,6 +67,24 @@ public enum AgentStepKind
     /// 停止原因與說明、規則卡、建立的申請編號。重新整理頁面時以它還原對話，不讀會話原文（被固定說明取代的模型文字不會再出現）。
     /// </summary>
     TurnResult,
+
+    /// <summary>
+    /// 多 Agent 模式（M5）的交接：發言的 Agent 換人（例如分流 Agent → 品質專員）。來源一律是 <see cref="AgentDataSource.Program"/>，
+    /// 白話「分流 Agent → 品質專員：{理由}」；RawJson <c>{ from, to, fromId, toId, reason }</c>（from／to 是顯示名稱，fromId／toId 是參與者 Id）。
+    /// </summary>
+    Handoff,
+}
+
+/// <summary>
+/// 售後 Agent 的會話模式（M5）。⚠️ 數值存在 <c>AgentSessionRecord.Mode</c>（M5 之前的會話一律是 <see cref="Single"/>），不可改號。
+/// </summary>
+public enum AgentMode
+{
+    /// <summary>單一售後 Agent（M2 起的 <c>ChatClientAgent</c>）。</summary>
+    Single = 1,
+
+    /// <summary>多 Agent 交接（MAF Handoff 編排）：分流 Agent → 換退貨／品質／物流專員。</summary>
+    Handoff = 2,
 }
 
 /// <summary>執行軌跡步驟的資料來源。</summary>

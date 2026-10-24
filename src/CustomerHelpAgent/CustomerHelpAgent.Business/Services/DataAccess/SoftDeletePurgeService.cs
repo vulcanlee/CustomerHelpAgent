@@ -265,6 +265,12 @@ public class SoftDeletePurgeService
 
                 var attachments = attachmentsOf?.Invoke(tracked) ?? [];
                 context.Remove(tracked);
+                // 顧客的 AI 長期記憶（M5）沒有外鍵：與帳號在同一次 SaveChanges（同一交易）移除，不會留下孤兒個人偏好，也不會刪了記憶卻留著帳號。
+                if (entityType == nameof(MyUser))
+                {
+                    context.CustomerMemory.RemoveRange(await context.CustomerMemory.Where(x => x.CustomerUserId == id).ToListAsync(CancellationToken.None));
+                }
+
                 try
                 {
                     await context.SaveChangesAsync(CancellationToken.None);

@@ -29,6 +29,7 @@ public sealed class DataAccessServiceLifetimeTests
         typeof(AfterSalesRequestService),
         typeof(AgentTraceService),
         typeof(AgentSessionStore),
+        typeof(CustomerMemoryService),
         typeof(AgentRecordingService),
         typeof(PreReviewRunService),
         typeof(WorkflowCheckpointService),

@@ -1,3 +1,5 @@
+using CustomerHelpAgent.Share.Agents;
+
 namespace CustomerHelpAgent.AccessDatas.Models;
 
 /// <summary>
@@ -14,6 +16,12 @@ public class AgentRecording
 
     /// <summary>錄製時的顧客 Id；刻意不設外鍵。</summary>
     public int CustomerUserId { get; set; }
+
+    /// <summary>
+    /// 錄製時會話的模式（M5）：建立錄製時從 <see cref="AgentSessionRecord.Mode"/> 記下，之後不變。回放必須以同一模式開新對話，
+    /// Runner 才會重建相同的 Agent 結構（單一 Agent 或多 Agent 交接）。M5 之前的錄製一律是 <see cref="AgentMode.Single"/>。
+    /// </summary>
+    public AgentMode Mode { get; set; } = AgentMode.Single;
 
     /// <summary>第一句顧客訊息的前 20 字。</summary>
     public string Title { get; set; } = string.Empty;

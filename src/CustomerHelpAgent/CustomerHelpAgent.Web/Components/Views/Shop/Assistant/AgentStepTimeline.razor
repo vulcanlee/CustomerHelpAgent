@@ -3,6 +3,7 @@
 @*
     步驟時間軸：每一列是「來源色標＋白話一句」，有原始資料的列可展開 <pre>。
     幕後面板（顧客端）與後台「Agent 執行紀錄」窗共用。白話與原始資料一律以純文字輸出，不經 MarkupString。
+    多 Agent 交接列（M5）：專屬樣式，交出與接手的 Agent 以名稱徽章顯示，後接交接理由。
 *@
 <ol class="backstage-timeline">
     @if (Events.Count == 0)
@@ -17,7 +18,22 @@
         <li class="backstage-row @RowClass(item.Kind)" data-kind="@item.Kind">
             <div class="backstage-line">
                 <AgentSourceTag Source="@item.Source" />
-                <span class="backstage-text">@item.PlainText</span>
+                @if (item.Kind == AgentStepKind.Handoff && HandoffEventData.FromRawJson(item.RawJson) is { } handoff)
+                {
+                    <span class="backstage-text backstage-handoff">
+                        <span class="backstage-agent-badge" data-role="handoff-from">@handoff.From</span>
+                        <span class="backstage-handoff-arrow">→</span>
+                        <span class="backstage-agent-badge is-target" data-role="handoff-to">@handoff.To</span>
+                        @if (!string.IsNullOrEmpty(handoff.Reason))
+                        {
+                            <span class="backstage-handoff-reason">@handoff.Reason</span>
+                        }
+                    </span>
+                }
+                else
+                {
+                    <span class="backstage-text">@item.PlainText</span>
+                }
                 <time class="backstage-time">@item.OccurredAt.ToString("HH:mm:ss")</time>
             </div>
             @if (!string.IsNullOrEmpty(item.RawJson))

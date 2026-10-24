@@ -10,6 +10,12 @@ public class AfterSalesAgentSettings
     /// <summary>一輪最多幾次「模型回應 → 執行工具」往返（<c>FunctionInvokingChatClient.MaximumIterationsPerRequest</c>，1–20）。</summary>
     public int MaxSteps { get; set; } = 8;
 
+    /// <summary>
+    /// 多 Agent 交接模式（M5）一輪最多幾步（1–40）：所有參與者的模型呼叫合計上限為 <c>HandoffMaxSteps + 1</c>（交接本身也會用掉模型呼叫，所以比
+    /// <see cref="MaxSteps"/> 大）；每位參與者單次的「模型回應 → 執行工具」往返仍以 <see cref="MaxSteps"/> 為上限。
+    /// </summary>
+    public int HandoffMaxSteps { get; set; } = 14;
+
     /// <summary>工具連續失敗（查無、無規則、衝突、不合法或拋例外）幾次就停下（1–5）。</summary>
     public int MaxConsecutiveToolFailures { get; set; } = 2;
 

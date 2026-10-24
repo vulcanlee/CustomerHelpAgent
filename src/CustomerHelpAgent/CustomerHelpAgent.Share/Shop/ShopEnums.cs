@@ -23,7 +23,11 @@ public enum AfterSalesStatus
 public enum AfterSalesChannel
 {
     Traditional = 1,
+
+    /// <summary>單一售後 Agent（「AI 助理」）。</summary>
     Agent = 2,
+
+    /// <summary>多 Agent 交接模式（M5，「AI 多 Agent」）；與 <see cref="Agent"/> 同屬 AI 管道（<c>AfterSalesChannelExtensions.IsAi</c>）。</summary>
     AgentHandoff = 3,
 }
 

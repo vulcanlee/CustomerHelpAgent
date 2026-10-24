@@ -40,6 +40,28 @@ public sealed class PreReviewWorkerTests
         Assert.Equal([run.Id], host.DrainQueue());
     }
 
+    /// <summary>M5：多 Agent 建立的申請（「AI 多 Agent」管道）一樣跑 M4 初審；啟動補建也涵蓋它。</summary>
+    [Fact]
+    public async Task HandoffRequest_GetsPreReview()
+    {
+        await using var host = await PreReviewTestHost.CreateAsync();
+        var itemId = await host.AddOrderItemAsync();
+
+        var result = await host.Scope(host.Alice, "alice").GetRequiredService<AfterSalesRequestService>()
+            .SubmitAsync(host.Alice, SizeExchange(itemId, AfterSalesChannel.AgentHandoff), []);
+
+        Assert.True(result.Success, result.Message);
+        var run = Assert.Single(await host.RunsOfAsync(result.RequestId!.Value));
+        Assert.Equal(PreReviewStatus.Pending, run.Status);
+        Assert.Equal([run.Id], host.DrainQueue());
+
+        // 送件後、建立初審前當機：啟動時補建。
+        var missing = await host.AddRequestAsync(AfterSalesChannel.AgentHandoff);
+        await host.Worker.RecoverAsync(CancellationToken.None);
+        var created = Assert.Single(await host.RunsOfAsync(missing));
+        Assert.Equal(PreReviewStatus.Pending, created.Status);
+    }
+
     [Fact]
     public async Task TraditionalSubmit_NoPreReview()
     {

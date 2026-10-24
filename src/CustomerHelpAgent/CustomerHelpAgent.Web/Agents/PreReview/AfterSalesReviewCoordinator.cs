@@ -21,7 +21,7 @@ namespace CustomerHelpAgent.Web.Agents.PreReview;
 public sealed class AfterSalesReviewCoordinator
 {
     public const string RequestNotFoundMessage = "找不到這筆售後申請。";
-    public const string RetryNotAvailableMessage = "只有 Agent 管道、尚在審核中的申請可以重新初審。";
+    public const string RetryNotAvailableMessage = "只有 AI 管道（AI 助理、AI 多 Agent）、尚在審核中的申請可以重新初審。";
     public const string RetryQueuedMessage = "已重新排入 AI 初審。";
 
     private readonly PreReviewRunService runs;
@@ -78,7 +78,7 @@ public sealed class AfterSalesReviewCoordinator
         }
 
         var staffUserId = currentUserService.CurrentUser.Id;
-        var latest = request.Channel == AfterSalesChannel.Agent ? await runs.GetLatestForRequestAsync(requestId) : null;
+        var latest = request.Channel.IsAi() ? await runs.GetLatestForRequestAsync(requestId) : null;
         switch (latest?.Status)
         {
             case PreReviewStatus.AwaitingDecision:
@@ -102,7 +102,7 @@ public sealed class AfterSalesReviewCoordinator
     }
 
     /// <summary>
-    /// 重新初審：替 Agent 管道、仍待審（已提交）的申請建立新的一輪並入列（上一輪失敗或已跑完都可以）。
+    /// 重新初審：替 AI 管道（單一與多 Agent）、仍待審（已提交）的申請建立新的一輪並入列（上一輪失敗或已跑完都可以）。
     /// 上一輪若還沒結束（初審中、等待決策）就標為已由人工處理，畫面與決策只看最新一輪。決定正在執行時不可重跑。
     /// </summary>
     public async Task<DecisionResult> RetryAsync(int requestId)
@@ -113,7 +113,7 @@ public sealed class AfterSalesReviewCoordinator
             return Fail(RequestNotFoundMessage);
         }
 
-        if (request.Channel != AfterSalesChannel.Agent || request.Status != AfterSalesStatus.Submitted)
+        if (!request.Channel.IsAi() || request.Status != AfterSalesStatus.Submitted)
         {
             return Fail(RetryNotAvailableMessage);
         }

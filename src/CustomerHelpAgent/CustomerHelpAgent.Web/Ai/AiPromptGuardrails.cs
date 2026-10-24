@@ -68,6 +68,10 @@ public static class AiPromptGuardrails
         PromptTemplateKeys.AfterSalesPreReviewHistory => PreReviewPromptDefaults.HistoryInstructions,
         PromptTemplateKeys.AfterSalesPreReviewSummary => PreReviewPromptDefaults.SummaryInstructions,
         PromptTemplateKeys.AfterSalesStaffAssistant => StaffAssistantPromptDefaults.Instructions,
+        PromptTemplateKeys.AfterSalesTriage => AfterSalesHandoffPromptDefaults.TriageInstructions,
+        PromptTemplateKeys.AfterSalesExchangeSpecialist => AfterSalesHandoffPromptDefaults.ExchangeInstructions,
+        PromptTemplateKeys.AfterSalesQualitySpecialist => AfterSalesHandoffPromptDefaults.QualityInstructions,
+        PromptTemplateKeys.AfterSalesLogisticsSpecialist => AfterSalesHandoffPromptDefaults.LogisticsInstructions,
         _ => throw new ArgumentOutOfRangeException(nameof(templateKey), templateKey, "未知的提示詞種類。"),
     };
 
@@ -84,7 +88,11 @@ public static class AiPromptGuardrails
     {
         PromptTemplateKeys.LogAnalysis => "日誌內容",
         PromptTemplateKeys.ExceptionAnalysis => "例外內容（訊息、頁面、堆疊等）",
-        PromptTemplateKeys.AfterSalesAgent => "工具回傳內容與顧客訊息",
+        PromptTemplateKeys.AfterSalesAgent
+            or PromptTemplateKeys.AfterSalesTriage
+            or PromptTemplateKeys.AfterSalesExchangeSpecialist
+            or PromptTemplateKeys.AfterSalesQualitySpecialist
+            or PromptTemplateKeys.AfterSalesLogisticsSpecialist => "工具回傳內容與顧客訊息",
         PromptTemplateKeys.AfterSalesPreReviewPhoto => "顧客描述與照片內容",
         PromptTemplateKeys.AfterSalesPreReviewHistory => "過往申請紀錄與顧客對話內容",
         PromptTemplateKeys.AfterSalesPreReviewSummary => "各項初審結論",

@@ -1,0 +1,94 @@
+/* 顏色一律取 theme.css 的 --shop-* 別名（速查表 §6.9）。 */
+.shop-memory-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.shop-memory {
+    display: grid;
+    gap: 1rem;
+}
+
+.shop-memory-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.shop-memory-title {
+    color: var(--shop-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.shop-memory-note {
+    background: var(--shop-tint);
+    border-radius: 12px;
+    color: var(--shop-text);
+    margin: 0;
+    padding: 0.6rem 0.9rem;
+}
+
+.shop-memory-empty {
+    color: var(--shop-muted);
+    margin: 0;
+}
+
+.shop-memory-item {
+    align-items: center;
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-card);
+    box-shadow: var(--shop-shadow);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+}
+
+.shop-memory-body {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.shop-memory-kind {
+    color: var(--shop-muted);
+    font-size: 0.8rem;
+}
+
+.shop-memory-value {
+    color: var(--shop-text);
+    font-weight: 700;
+}
+
+.shop-memory-time {
+    color: var(--shop-muted);
+    font-size: 0.875rem;
+}
+
+.shop-memory-delete,
+.shop-memory-delete-all {
+    align-items: center;
+    background: var(--shop-surface);
+    border: 1px solid var(--shop-line);
+    border-radius: var(--shop-radius-pill);
+    color: var(--shop-accent);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 600;
+    gap: 0.35rem;
+    padding: 0.35rem 0.9rem;
+}
+
+.shop-memory-delete:hover,
+.shop-memory-delete:focus-visible,
+.shop-memory-delete-all:hover,
+.shop-memory-delete-all:focus-visible {
+    background: var(--shop-accent-soft);
+    border-color: var(--shop-accent);
+}

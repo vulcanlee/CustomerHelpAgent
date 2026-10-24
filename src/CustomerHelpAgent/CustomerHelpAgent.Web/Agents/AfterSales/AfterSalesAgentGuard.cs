@@ -15,7 +15,8 @@ namespace CustomerHelpAgent.Web.Agents.AfterSales;
 /// <item>每次工具呼叫發 <see cref="AgentStepKind.ToolRequest"/>、<see cref="AgentStepKind.ProgramCheck"/>（身分核對）、<see cref="AgentStepKind.ToolResult"/>（含刻意不送欄位）。</item>
 /// <item>本輪出現 <c>not_found</c>／<c>no_policy</c>／<c>conflict</c> 後封鎖寫入（<see cref="WriteBlocked"/>）：
 /// <c>create_after_sales_request</c> 不執行、回 <c>blocked</c>。⚠️ 寫入工具需要確認，模型提出時其實先變成核准請求而不會走到這裡，
-/// 所以 Runner 在顯示確認卡前也會檢查 <see cref="WriteBlocked"/>；這裡是第二道防線。</item>
+/// 所以 Runner 在顯示確認卡前也會檢查 <see cref="WriteBlocked"/>；這裡是第二道防線。
+/// 記憶工具 <c>remember_preference</c>（M5）只是偏好、不是業務寫入，不受封鎖寫入影響（但照樣受下一條的終止規則約束）。</item>
 /// <item><c>forbidden</c>／<c>timeout</c>／<c>unavailable</c> → 立即終止（<c>ctx.Terminate</c>），回覆改用程式的固定說明（<see cref="FixedReply"/>）。</item>
 /// <item><c>conflict</c> → 停止原因 <see cref="AgentStopReason.PolicyConflict"/>，不終止（讓模型說明轉人工）。</item>
 /// <item>本輪出現 <c>not_found</c>／<c>timeout</c>／<c>conflict</c>／<c>no_policy</c> 依工具記下，同一工具後續回 <c>ok</c> 即清除；
@@ -24,6 +25,9 @@ namespace CustomerHelpAgent.Web.Agents.AfterSales;
 /// <item>工具連續失敗（非 ok，或拋例外）達 <see cref="Configuration.AfterSalesAgentSettings.MaxConsecutiveToolFailures"/> 次 → 終止。
 /// 工具都以信封回報失敗而不拋例外，所以 <c>FunctionInvokingChatClient</c> 自己的連續錯誤計數只涵蓋例外，這裡另外計算。</item>
 /// </list>
+/// 多 Agent 模式（M5）：同一個實例掛在每位參與者上（<c>participant.AsBuilder().Use(guard.InvokeAsync)</c>），上述規則對所有參與者合併計算、
+/// 與單一模式完全相同；建構時給 <c>agentDisplayName</c>，工具請求的白話改寫成發出呼叫的參與者（例如「品質專員決定…」），RawJson 加上 <c>agent</c>。
+/// ⚠️ 交接函式 <c>handoff_to_N</c> 只是宣告、由 executor 攔截，不會經過這裡；交接事件由 Runner 掃描 update 發出。
 /// </summary>
 public sealed class AfterSalesAgentGuard
 {
@@ -41,15 +45,23 @@ public sealed class AfterSalesAgentGuard
     private readonly Func<AgentTraceEvent, Task> emit;
     private readonly TimeProvider timeProvider;
     private readonly ILogger logger;
+    private readonly Func<string?, string?>? agentDisplayName;
     private readonly List<AgentPolicyCard> policyCards = [];
     private readonly HashSet<string> uncertainTools = [];
 
-    public AfterSalesAgentGuard(int maxConsecutiveFailures, Func<AgentTraceEvent, Task> emit, TimeProvider timeProvider, ILogger logger)
+    /// <param name="agentDisplayName">多 Agent 模式（M5）：參與者名稱（<c>agent.Name</c>）→ 顯示名稱；單一模式不給。</param>
+    public AfterSalesAgentGuard(
+        int maxConsecutiveFailures,
+        Func<AgentTraceEvent, Task> emit,
+        TimeProvider timeProvider,
+        ILogger logger,
+        Func<string?, string?>? agentDisplayName = null)
     {
         this.maxConsecutiveFailures = maxConsecutiveFailures;
         this.emit = emit;
         this.timeProvider = timeProvider;
         this.logger = logger;
+        this.agentDisplayName = agentDisplayName;
     }
 
     /// <summary>由 Guard 判定的停止原因；null＝交給 Runner 依回應判定。</summary>
@@ -83,8 +95,16 @@ public sealed class AfterSalesAgentGuard
     {
         var name = context.Function.Name;
         ToolCallCount++;
-        await EmitAsync(AgentStepKind.ToolRequest, AgentDataSource.Conversation, DescribeRequest(name, context.Arguments),
-            Serialize(new { tool = name, arguments = context.Arguments }));
+        if (agentDisplayName?.Invoke(agent.Name) is { } speaker)
+        {
+            await EmitAsync(AgentStepKind.ToolRequest, AgentDataSource.Conversation, ReplaceActor(DescribeRequest(name, context.Arguments), speaker),
+                Serialize(new { tool = name, agent = speaker, arguments = context.Arguments }));
+        }
+        else
+        {
+            await EmitAsync(AgentStepKind.ToolRequest, AgentDataSource.Conversation, DescribeRequest(name, context.Arguments),
+                Serialize(new { tool = name, arguments = context.Arguments }));
+        }
 
         if (name == AfterSalesAgentTools.CreateAfterSalesRequestName && WriteBlocked)
         {
@@ -176,8 +196,11 @@ public sealed class AfterSalesAgentGuard
 
             case ToolOutcomeStatus.Unavailable:
                 // 送出申請拋例外時，工具的訊息（「申請可能未完成…請勿重複送出」）本身就是程式產生的固定說明，比「規則服務」準確。
+                // 記憶儲存失敗也一樣用工具自己的程式訊息（「儲存記憶失敗…」），不說成規則服務。
                 Terminate(context, AgentStopReason.ServiceUnavailable,
-                    name == AfterSalesAgentTools.CreateAfterSalesRequestName ? outcome.Message : UnavailableExplanation);
+                    name is AfterSalesAgentTools.CreateAfterSalesRequestName or AfterSalesAgentTools.RememberPreferenceName
+                        ? outcome.Message
+                        : UnavailableExplanation);
                 break;
 
             case ToolOutcomeStatus.Conflict:
@@ -270,6 +293,7 @@ public sealed class AfterSalesAgentGuard
         {
             AfterSalesAgentTools.GetEffectivePolicyName => AgentDataSource.Policy,
             AfterSalesAgentTools.RequestPhotoUploadName => AgentDataSource.Program,
+            AfterSalesAgentTools.RememberPreferenceName => AgentDataSource.Memory,
             _ => AgentDataSource.Database,
         },
         _ => AgentDataSource.Program,
@@ -287,8 +311,17 @@ public sealed class AfterSalesAgentGuard
             AfterSalesAgentTools.TrackShipmentName => "Agent 決定查詢這筆訂單的物流狀態",
             AfterSalesAgentTools.RequestPhotoUploadName => "Agent 請你上傳照片" + Conditions(("原因", Arg(args, "reason"))),
             AfterSalesAgentTools.CreateAfterSalesRequestName => $"你已確認，Agent 送出「{issue}」售後申請",
+            AfterSalesAgentTools.RememberPreferenceName => $"你已確認，Agent 記住你的{MemoryKindLabel(Arg(args, "kind"))}偏好",
             _ => $"Agent 決定呼叫工具 {name}",
         };
+    }
+
+    /// <summary>白話裡的第一個「Agent 」換成發出呼叫的參與者顯示名稱（多 Agent 模式），例如「品質專員決定…」。</summary>
+    private static string ReplaceActor(string text, string speaker)
+    {
+        const string Actor = "Agent ";
+        var index = text.IndexOf(Actor, StringComparison.Ordinal);
+        return index < 0 ? $"{speaker}：{text}" : string.Concat(text.AsSpan(0, index), speaker, text.AsSpan(index + Actor.Length));
     }
 
     private static string DescribeResult(string name, ToolOutcome outcome)
@@ -312,6 +345,8 @@ public sealed class AfterSalesAgentGuard
             AfterSalesAgentTools.RequestPhotoUploadName => "等待你上傳照片，本輪先停在這裡",
             AfterSalesAgentTools.CreateAfterSalesRequestName when data is { } created
                 => $"售後申請已建立並回查確認，申請編號 {Text(created, "request_no")}",
+            AfterSalesAgentTools.RememberPreferenceName when data is { } memory
+                => $"已記住偏好：{MemoryKindLabel(Text(memory, "kind"))} {Text(memory, "value")}（只代表偏好，之後會先向你確認）",
             _ => "完成",
         };
         return outcome.WithheldFields.Count == 0 ? text : $"{text}，未送出：{string.Join("、", outcome.WithheldFields)}";
@@ -330,6 +365,9 @@ public sealed class AfterSalesAgentGuard
         ToolOutcomeStatus.Invalid => "不符條件",
         _ => status.ToString(),
     };
+
+    private static string MemoryKindLabel(string? kind)
+        => AfterSalesAgentTools.TryParseMemoryKind(kind, out var memoryKind) ? MemoryLabels.KindText(memoryKind) : kind ?? "未指定";
 
     private static string IssueLabel(string? issueType)
         => AfterSalesAgentTools.TryParseIssueType(issueType, out var type) ? AfterSalesLabels.TypeText(type) : issueType ?? "未指定";

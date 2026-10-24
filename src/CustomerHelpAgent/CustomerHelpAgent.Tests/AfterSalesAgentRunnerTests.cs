@@ -148,10 +148,12 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
             chatFactory,
             new StubSystemPromptProvider(),
             new AgentSessionStore(sessionStoreFactory ?? factory, time, NullLogger<AgentSessionStore>.Instance),
+            new WorkflowCheckpointService(factory, time, NullLogger<WorkflowCheckpointService>.Instance),
             new AgentTraceService(factory, time, NullLogger<AgentTraceService>.Instance),
             orderService,
             policyService,
             requestService,
+            new CustomerMemoryService(factory, audit, time, NullLogger<CustomerMemoryService>.Instance),
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             inbox,
             demo,
@@ -815,7 +817,7 @@ public sealed class AfterSalesAgentRunnerTests : IAsyncLifetime
         Assert.Equal("low", root.GetProperty("reasoning").GetProperty("effort").GetString());
         Assert.False(root.TryGetProperty("temperature", out _));
         Assert.False(root.GetProperty("parallel_tool_calls").GetBoolean());
-        Assert.Equal(6, root.GetProperty("tools").GetArrayLength());
+        Assert.Equal(7, root.GetProperty("tools").GetArrayLength());
     }
 
     [Fact]
@@ -1413,9 +1415,15 @@ internal sealed class ScriptedAgentModel : IChatClient
 
     public List<IReadOnlyList<ChatMessage>> Requests { get; } = [];
 
+    /// <summary>每次呼叫收到的 <see cref="ChatOptions"/>（與 <see cref="Requests"/> 同序；系統指示在 <c>Instructions</c>）。</summary>
+    public List<ChatOptions?> RequestOptions { get; } = [];
+
     public int CallCount => Requests.Count;
 
     public Func<IReadOnlyList<ChatMessage>, ChatResponse>? Fallback { get; set; }
+
+    /// <summary>比照 Responses API 檢查工具呼叫與結果成對（預設開啟，不成對時拋例外＝實機的 HTTP 400），見 <see cref="ResponsesApiPairing"/>。</summary>
+    public bool StrictToolPairing { get; set; } = true;
 
     public static ChatResponse FunctionCall(string name, Dictionary<string, object?> args)
         => new(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("call-" + Guid.NewGuid().ToString("N")[..8], name, args)]));
@@ -1435,6 +1443,12 @@ internal sealed class ScriptedAgentModel : IChatClient
         cancellationToken.ThrowIfCancellationRequested();
         var list = messages.ToList();
         Requests.Add(list);
+        RequestOptions.Add(options);
+        if (StrictToolPairing)
+        {
+            ResponsesApiPairing.EnsurePaired(list);
+        }
+
         if (script.TryDequeue(out var next))
         {
             return next is Exception ex ? Task.FromException<ChatResponse>(ex) : Task.FromResult((ChatResponse)next);

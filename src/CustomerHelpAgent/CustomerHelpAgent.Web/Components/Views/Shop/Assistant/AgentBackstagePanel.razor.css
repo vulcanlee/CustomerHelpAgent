@@ -72,6 +72,11 @@
     padding: 0.5rem 0.75rem;
 }
 
+.backstage-stop-pending {
+    color: var(--shop-text);
+    font-weight: 600;
+}
+
 .backstage-stop-label {
     color: var(--shop-muted);
     font-size: 0.75rem;

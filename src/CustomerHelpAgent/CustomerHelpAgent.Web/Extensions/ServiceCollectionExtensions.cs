@@ -218,6 +218,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AfterSalesRequestService>();
         services.AddScoped<AgentTraceService>();
         services.AddScoped<AgentSessionStore>();
+        // 顧客長期記憶（M5）：經顧客確認的偏好；內容一律過 MemoryContentPolicy，不收個資與業務事實。
+        services.AddScoped<CustomerMemoryService>();
         // 售後 Agent 會話錄製（1.0.5 起）：示範模式＋即時模式時由 Runner／RecordingChatClient 寫入；重置示範資料不刪。
         services.AddScoped<AgentRecordingService>();
         // AI 初審 Workflow 持久化（M4）：每一輪初審的進度與結論，以及 MAF checkpoint（由 SqliteWorkflowCheckpointStore 轉接）。

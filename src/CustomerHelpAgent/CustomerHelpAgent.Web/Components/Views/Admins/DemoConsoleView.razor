@@ -1,5 +1,6 @@
 @using CustomerHelpAgent.Business.Startup
 @using CustomerHelpAgent.Models.Agents
+@using CustomerHelpAgent.Share.Agents
 @using CustomerHelpAgent.Share.Demo
 @using CustomerHelpAgent.Share.Helpers
 
@@ -78,6 +79,10 @@ else
                         <div class="demo-console-scenario-head">
                             <span class="demo-console-scenario-code">@scenario.Code</span>
                             <span class="demo-console-scenario-title">@scenario.Title</span>
+                            @if (scenario.Mode != AgentMode.Single)
+                            {
+                                <span class="demo-console-scenario-mode"><StatusPill Text="@AgentModeLabels.Text(scenario.Mode)" Tone="StatusTone.Accent" /></span>
+                            }
                         </div>
                         <div class="demo-console-muted">帳號：@scenario.Account</div>
                         @if (scenario.Faults.Count > 0)

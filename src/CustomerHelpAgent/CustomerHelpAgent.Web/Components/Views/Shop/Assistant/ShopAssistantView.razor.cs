@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.JSInterop;
 using CustomerHelpAgent.Business.Services.DataAccess;
 using CustomerHelpAgent.Business.Services.Other;
@@ -37,8 +39,13 @@ namespace CustomerHelpAgent.Web.Components.Views.Shop.Assistant;
 /// 輸入框帶入錄製的下一句且唯讀，只能按送出；確認卡只開放錄製時按的那一個；上傳照片提示「請上傳任一張照片以繼續」（張數要與錄製時相同才能送出）。
 /// 動作與錄製不同（<see cref="AgentStopReason.ReplayActionMismatch"/>）只補一則系統訊息、畫面回到送出前；回放結束或中止顯示固定說明，
 /// 展示者（Cookie 帶 <see cref="DemoClaims.PresenterId"/>）另有「回到展示控制台」——經切回展示者的票券導過去（<c>/demo-console</c> 只限管理員）。</item>
+/// <item>模式（M5）：標題列「單一 Agent ｜ 多 Agent」切換（先確認、再以新模式開新對話；執行中停用、回放中鎖定為錄製時的模式）；
+/// 網址 <c>?mode=handoff</c>／<c>single</c>（<see cref="AgentModeLabels"/>，展示控制台用）與目前會話不同時以該模式開新對話，回放中忽略。
+/// 多 Agent 模式每段回覆標示發言者（<see cref="AgentTurnResult.Segments"/>／<see cref="AgentTurnResult.Speaker"/>），
+/// 交接以「已轉給品質專員」插在該專員的回覆之前；Runner 的回呼在背景執行緒觸發，一律經 <c>InvokeAsync</c> 回到渲染器再改狀態。</item>
 /// </list>
-/// 進頁時接續最新一個未關閉的會話並以執行軌跡還原對話與幕後面板；另一個分頁已先更新會話時，這一輪以系統訊息提示重新整理。每次送出、確認、取消、上傳各記一筆流程埋點（CaseKey＝會話識別碼）。
+/// 進頁時接續最新一個未關閉的會話並以執行軌跡還原對話與幕後面板；另一個分頁已先更新會話時，這一輪以系統訊息提示重新整理。
+/// 每次送出、確認、取消、上傳各記一筆流程埋點（CaseKey＝會話識別碼；管道依目前會話的模式）。
 /// </summary>
 public partial class ShopAssistantView : IDisposable
 {
@@ -49,6 +56,12 @@ public partial class ShopAssistantView : IDisposable
 
     /// <summary>按下確認後這一輪失敗（沒有結果）時，接在確認卡下方的程式說明。</summary>
     private const string NotSubmittedExplanation = "這次沒有完成送出，請稍後再試或到「我的申請」確認。";
+
+    /// <summary>記憶卡按下「記住」後沒有記住、這一輪也沒有結果時，接在確認卡下方的程式說明。</summary>
+    private const string MemoryNotSavedExplanation = "這次沒有完成記住，請稍後再試或到「我的 AI 記憶」確認。";
+
+    /// <summary>切換模式的確認窗內文。</summary>
+    private const string ModeSwitchConfirmText = "切換模式會開始新對話，目前的對話會保留在紀錄中。";
 
     /// <summary>串流增量最多每隔這麼久重繪一次，避免逐字觸發渲染。</summary>
     private static readonly TimeSpan DeltaRenderInterval = TimeSpan.FromMilliseconds(80);
@@ -76,6 +89,9 @@ public partial class ShopAssistantView : IDisposable
 
     [Inject]
     public AgentPhotoInbox PhotoInbox { get; set; } = default!;
+
+    [Inject]
+    public CustomerMemoryService MemoryService { get; set; } = default!;
 
     [Inject]
     public ProcessMetricService ProcessMetricService { get; set; } = default!;
@@ -114,13 +130,24 @@ public partial class ShopAssistantView : IDisposable
     /// <summary>AI 設定的錯誤訊息；非 null 時不送出任何訊息。</summary>
     private string? aiError;
     private Guid? sessionKey;
+
+    /// <summary>
+    /// 目前會話的模式（M5）：流程度量依此記在「AI 助理」或「AI 多 Agent」管道；切換鈕與多 Agent 提示也依它顯示。
+    /// 每次換會話（進頁、網址參數、回放鎖定、切換模式、開新對話）都跟著實際會話的模式更新。
+    /// </summary>
+    private AgentMode sessionMode = AgentMode.Single;
     private string draft = string.Empty;
     private bool busy;
     private bool awaitingPhotos;
     private bool showBackstage = true;
 
-    /// <summary>串流中的預覽文字；null 表示目前沒有在跑的回合。</summary>
-    private StringBuilder? streaming;
+    /// <summary>
+    /// 串流中的預覽（依序的文字段與交接）；null 表示目前沒有在跑的回合。只在渲染器的同步內容裡修改（回呼一律經 <c>InvokeAsync</c>）。
+    /// </summary>
+    private List<LiveItem>? live;
+
+    /// <summary>串流中目前的發言者（最近一次交接的接手者；這一輪還沒交接時不知道，為 null）。</summary>
+    private string? liveSpeaker;
     private long lastDeltaRender;
 
     /// <summary>本輪 <see cref="AgentStepKind.ModelReply"/> 事件的來源：程式產生的回覆以系統訊息樣式呈現。</summary>
@@ -148,6 +175,19 @@ public partial class ShopAssistantView : IDisposable
         System,
         PolicyCards,
         Confirmation,
+
+        /// <summary>多 Agent 模式的交接（M5）：「已轉給品質專員」，<see cref="ChatEntry.Text"/> 是接手者的顯示名稱。</summary>
+        Handoff,
+    }
+
+    /// <summary>串流預覽的一項：交接（<see cref="HandoffTo"/> 不為 null）或一段文字。</summary>
+    private sealed class LiveItem
+    {
+        public string? HandoffTo { get; init; }
+
+        public string? Speaker { get; init; }
+
+        public StringBuilder Text { get; } = new();
     }
 
     private sealed class ChatEntry
@@ -155,6 +195,9 @@ public partial class ShopAssistantView : IDisposable
         public required EntryKind Kind { get; init; }
 
         public string Text { get; init; } = string.Empty;
+
+        /// <summary>多 Agent 模式的發言者顯示名稱（例如「品質專員」）；單一模式為 null（不顯示標籤）。</summary>
+        public string? Speaker { get; init; }
 
         /// <summary>Agent 泡泡的安全 HTML（<see cref="AiMarkdownRenderer.ToSafeHtml"/>），建立時算一次。</summary>
         public string Html { get; init; } = string.Empty;
@@ -170,7 +213,23 @@ public partial class ShopAssistantView : IDisposable
 
     private int CustomerId => CurrentUserService.CurrentUser.Id;
 
-    private bool HasPendingCard => entries.Any(x => x.Kind == EntryKind.Confirmation && x.CardState is CardState.Pending or CardState.Submitting);
+    /// <summary>還沒處理完的確認卡（申請卡或記憶卡）；未處理前輸入框停用。</summary>
+    private ConfirmationCard? PendingCard
+        => entries.LastOrDefault(x => x.Kind == EntryKind.Confirmation && x.CardState is CardState.Pending or CardState.Submitting)?.Card;
+
+    private bool HasPendingCard => PendingCard is not null;
+
+    /// <summary>多 Agent 模式標題下的提示：分流 Agent 與三位專員（名稱取自交接拓樸，不另寫一份）。</summary>
+    private static string HandoffHint
+    {
+        get
+        {
+            var triage = HandoffTopologyFactory.DisplayNameOf(HandoffTopologyFactory.TriageId);
+            var specialists = HandoffTopologyFactory.Participants
+                .Where(x => x.Id != HandoffTopologyFactory.TriageId).Select(x => x.DisplayName).ToList();
+            return $"多 Agent 模式：{triage}先了解您的問題，再轉給{string.Join("、", specialists[..^1])}或{specialists[^1]}處理；每則回覆都會標示是誰回答。";
+        }
+    }
 
     private bool CanType => loaded && sessionKey is not null && aiError is null && !busy && !HasPendingCard
         && (!IsReplay || (ReplayEnd is null && ReplayNext?.Kind == AgentRecordedTurnKind.Send));
@@ -198,6 +257,7 @@ public partial class ShopAssistantView : IDisposable
     private string ComposerPlaceholder
         => aiError is not null ? "AI 服務尚未設定"
         : busy ? "客服處理中，請稍候…"
+        : PendingCard?.Kind == ConfirmationCardKind.Memory ? "請先按下確認卡上的「記住」或「不用記住」"
         : HasPendingCard ? "請先按下確認卡上的「確認送出」或「取消」"
         : IsReplay && ReplayEnd is not null ? "回放已結束"
         : IsReplay && ReplayNext?.Kind == AgentRecordedTurnKind.PhotosUploaded ? "請上傳任一張照片以繼續"
@@ -231,7 +291,21 @@ public partial class ShopAssistantView : IDisposable
         try
         {
             var key = await Runner.StartOrResumeAsync();
+            var mode = await Runner.GetModeAsync(key);
+            // 回放中一律用錄製時的模式（忽略網址參數）；不是回放時，網址的 ?mode= 與目前會話不同就以該模式開新對話。
+            var script = await Runner.GetReplayScriptAsync(key);
+            var wanted = script.IsReplay ? script.Mode : QueryMode();
+            if (wanted is { } target && target != mode)
+            {
+                key = await Runner.StartNewAsync(target);
+                mode = target;
+                Logger.LogInformation(
+                    "Shop assistant started a new conversation in the requested mode. SessionKey={SessionKey}, Mode={Mode}, FromReplay={FromReplay}",
+                    key, mode, script.IsReplay);
+            }
+
             await RestoreAsync(key);
+            sessionMode = mode;
             sessionKey = key;
             await RefreshReplayAsync();
         }
@@ -292,21 +366,33 @@ public partial class ShopAssistantView : IDisposable
     /// </summary>
     private async Task RestoreAsync(Guid key)
     {
+        // 多 Agent 模式：交接列在該輪 TurnResult 之前，先收起來，與即時回合一樣插在接手者的回覆之前。
+        var handoffs = new List<string>();
         foreach (var item in await Runner.GetHistoryAsync(key))
         {
             switch (item.Kind)
             {
                 case AgentStepKind.UserMessage:
+                    AddHandoffEntries(handoffs);
+                    handoffs.Clear();
                     entries.Add(new ChatEntry { Kind = EntryKind.User, Text = item.Text });
                     break;
+                case AgentStepKind.Handoff when item.Speaker is { } to:
+                    handoffs.Add(to);
+                    break;
                 case AgentStepKind.TurnResult:
-                    AddReplyEntries(item.Text, item.IsProgramReply, item.StopExplanation, item.PolicyCards);
+                    AddReplyEntries(item.Text, item.IsProgramReply, item.StopExplanation, item.PolicyCards, item.Speaker, item.Segments, handoffs);
+                    handoffs.Clear();
                     break;
                 case AgentStepKind.ConfirmationShown when item.PendingCard is { } card:
+                    AddHandoffEntries(handoffs);
+                    handoffs.Clear();
                     entries.Add(new ChatEntry { Kind = EntryKind.Confirmation, Card = card, CardState = CardState.Pending });
                     break;
             }
         }
+
+        AddHandoffEntries(handoffs);
 
         traceEvents = [.. await Runner.GetTraceEventsAsync(key)];
         var record = await SessionStore.GetAsync(key, CustomerId);
@@ -354,15 +440,32 @@ public partial class ShopAssistantView : IDisposable
         }
 
         // 版本衝突時沒有結果，但申請可能已建立：卡片一定要標成已建立，不可顯示成沒送出。
-        entry.RequestNo = result?.CreatedRequestNo ?? conflictRequestNo;
+        // 記憶卡：以顧客的記憶裡是否確實有卡片上的種類與內容為準（工具執行後才失敗、或版本衝突時也一樣）。
+        var isMemory = card.Kind == ConfirmationCardKind.Memory;
+        entry.RequestNo = isMemory ? null : result?.CreatedRequestNo ?? conflictRequestNo;
         entry.CardState = !approve ? CardState.Canceled
+            : isMemory ? (await IsRememberedAsync(card) ? CardState.Remembered : CardState.NotCreated)
             : entry.RequestNo is not null ? CardState.Created
             : CardState.NotCreated;
 
         // 這一輪沒有結果（例外已另行通知）：卡片寫「請看下方的說明」，對話裡要有那則說明（版本衝突時已有衝突說明，不重複）。
-        if (approve && result is null && !disposed && !turnConflicted)
+        if (approve && result is null && !disposed && !turnConflicted && entry.CardState == CardState.NotCreated)
         {
-            entries.Add(SystemEntry(NotSubmittedExplanation));
+            entries.Add(SystemEntry(isMemory ? MemoryNotSavedExplanation : NotSubmittedExplanation));
+        }
+    }
+
+    /// <summary>記憶卡上的偏好是否已在顧客的記憶裡（查不到時當作沒有，只記錄）。</summary>
+    private async Task<bool> IsRememberedAsync(ConfirmationCard card)
+    {
+        try
+        {
+            return (await MemoryService.GetAsync(CustomerId)).Any(x => x.Kind == card.MemoryKind && x.Value == card.MemoryValue);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Shop assistant could not check whether the confirmed preference was saved.");
+            return false;
         }
     }
 
@@ -413,16 +516,46 @@ public partial class ShopAssistantView : IDisposable
             return;
         }
 
+        // 沿用目前的模式；回放中一律用錄製時的模式。
+        await StartConversationAsync(IsReplay && replayScript.Mode is { } recorded ? recorded : sessionMode);
+    }
+
+    /// <summary>模式切換（M5）：先確認，再以新模式開新對話（舊對話關閉、保留在紀錄中）。執行中或回放中不可切換。</summary>
+    private async Task OnSwitchModeAsync(AgentMode mode)
+    {
+        if (busy || IsReplay || sessionKey is null || mode == sessionMode)
+        {
+            return;
+        }
+
+        if (await ConfirmDialog.AskAsync(ModalService, "切換模式", ModeSwitchConfirmText, $"切換到{AgentModeLabels.Text(mode)}") == false)
+        {
+            return;
+        }
+
+        await StartConversationAsync(mode);
+
+        // 網址還帶著 ?mode= 時拿掉，免得重新整理又被參數切回去。
+        if (QueryMode() is not null)
+        {
+            NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter(AgentModeLabels.QueryName, (string?)null), replace: true);
+        }
+    }
+
+    /// <summary>以指定模式開新對話並清空畫面；頁面的模式跟著新會話。</summary>
+    private async Task StartConversationAsync(AgentMode mode)
+    {
         try
         {
-            sessionKey = await Runner.StartNewAsync();
+            sessionKey = await Runner.StartNewAsync(mode);
+            sessionMode = mode;
             entries.Clear();
             traceEvents = [];
             pendingPhotos.Clear();
             awaitingPhotos = false;
             draft = string.Empty;
             replayStopReason = null;
-            Logger.LogInformation("Shop assistant started a new conversation. SessionKey={SessionKey}", sessionKey);
+            Logger.LogInformation("Shop assistant started a new conversation. SessionKey={SessionKey}, Mode={Mode}", sessionKey, mode);
             await RefreshReplayAsync();
         }
         catch (Exception ex)
@@ -458,7 +591,8 @@ public partial class ShopAssistantView : IDisposable
         turnReplySource = null;
         turnConflicted = false;
         conflictRequestNo = null;
-        streaming = new StringBuilder();
+        live = [];
+        liveSpeaker = null;
         lastDeltaRender = TimeProvider.GetTimestamp();
         ChatEntry? userEntry = null;
         if (userText is not null)
@@ -487,7 +621,7 @@ public partial class ShopAssistantView : IDisposable
             }
             else
             {
-                ApplyResult(result);
+                ApplyResult(result, LiveHandoffs());
             }
 
             return result;
@@ -502,6 +636,7 @@ public partial class ShopAssistantView : IDisposable
         {
             // 另一個分頁已先更新這段對話：這一輪沒有存回。以系統訊息呈現（重新整理後還原的也是這則說明）。
             Logger.LogWarning(ex, "Shop assistant turn was not saved because the conversation was updated in another tab.");
+            AddHandoffEntries(LiveHandoffs());
             entries.Add(SystemEntry(ex.Message));
             turnConflicted = true;
             conflictRequestNo = ex.CreatedRequestNo;
@@ -511,19 +646,21 @@ public partial class ShopAssistantView : IDisposable
         {
             // Runner 對「會話不存在／已結束」等狀況拋出的訊息是給顧客看的中文。
             Logger.LogWarning(ex, "Shop assistant turn was rejected by the agent runner.");
+            AddHandoffEntries(LiveHandoffs());
             ViewNotification.Caution(NotificationService, ex.Message);
             return null;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Shop assistant turn failed.");
+            AddHandoffEntries(LiveHandoffs());
             ViewNotification.UnexpectedError(NotificationService, "線上客服處理失敗，請稍後再試。", ex);
             return null;
         }
         finally
         {
             busy = false;
-            streaming = null;
+            live = null;
             if (!disposed)
             {
                 await RefreshReplayAsync();
@@ -568,10 +705,12 @@ public partial class ShopAssistantView : IDisposable
         NavigationManager.NavigateTo(DemoSwitch.UrlFor(ticket), forceLoad: true);
     }
 
-    /// <summary>串流的文字只是預覽：以最終的 <see cref="AgentTurnResult.ReplyText"/> 重繪。</summary>
-    private void ApplyResult(AgentTurnResult result)
+    /// <summary>串流的文字只是預覽：以最終的 <see cref="AgentTurnResult.ReplyText"/>（多 Agent 模式依發言者分段）重繪。</summary>
+    private void ApplyResult(AgentTurnResult result, IReadOnlyList<string> handoffs)
     {
-        AddReplyEntries(result.ReplyText, turnReplySource != AgentDataSource.Conversation, result.StopExplanation, result.PolicyCards);
+        AddReplyEntries(
+            result.ReplyText, turnReplySource != AgentDataSource.Conversation, result.StopExplanation, result.PolicyCards,
+            result.Speaker, result.Segments, handoffs);
 
         if (result.Confirmation is { } card)
         {
@@ -585,12 +724,49 @@ public partial class ShopAssistantView : IDisposable
         }
     }
 
-    /// <summary>一輪的回覆（程式說明以系統訊息呈現）、另附的停止說明與規則卡；即時回合與還原共用。</summary>
-    private void AddReplyEntries(string replyText, bool programReply, string? stopExplanation, IReadOnlyList<AgentPolicyCard> policyCards)
+    /// <summary>
+    /// 一輪的回覆（程式說明以系統訊息呈現）、另附的停止說明與規則卡；即時回合與還原共用。
+    /// 多 Agent 模式（M5）：<paramref name="handoffs"/> 是這一輪依序的交接接手者。回覆有分段時，「已轉給…」插在該位第一次發言的那段之前
+    /// （交接事件與專員的文字分屬不同執行緒，以發言者對應，不依事件時間）；沒有分段時全部放在回覆之前，整則回覆標示 <paramref name="speaker"/>。
+    /// </summary>
+    private void AddReplyEntries(
+        string replyText,
+        bool programReply,
+        string? stopExplanation,
+        IReadOnlyList<AgentPolicyCard> policyCards,
+        string? speaker = null,
+        IReadOnlyList<AgentReplySegment>? segments = null,
+        IReadOnlyList<string>? handoffs = null)
     {
-        if (!string.IsNullOrWhiteSpace(replyText))
+        var pending = new Queue<string>(handoffs ?? []);
+        if (!programReply && segments is { Count: > 0 })
         {
-            entries.Add(programReply ? SystemEntry(replyText) : AgentEntry(replyText));
+            foreach (var segment in segments)
+            {
+                if (segment.Speaker is { } segmentSpeaker && pending.Contains(segmentSpeaker))
+                {
+                    while (pending.TryDequeue(out var to))
+                    {
+                        entries.Add(HandoffEntry(to));
+                        if (to == segmentSpeaker)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                entries.Add(AgentEntry(segment.Text, segment.Speaker));
+            }
+
+            AddHandoffEntries(pending);
+        }
+        else
+        {
+            AddHandoffEntries(pending);
+            if (!string.IsNullOrWhiteSpace(replyText))
+            {
+                entries.Add(programReply ? SystemEntry(replyText) : AgentEntry(replyText, speaker));
+            }
         }
 
         // 模型有回覆、程式另有停止說明（步數上限、規則衝突…）時補一則系統訊息；程式回覆本身就是說明，不重複。
@@ -605,7 +781,15 @@ public partial class ShopAssistantView : IDisposable
         }
     }
 
-    /// <summary>Runner 的事件可能來自其他執行緒：一律回到渲染器的同步內容再改狀態。</summary>
+    private void AddHandoffEntries(IEnumerable<string> handoffs) => entries.AddRange(handoffs.Select(HandoffEntry));
+
+    /// <summary>這一輪串流中依序的交接接手者。</summary>
+    private List<string> LiveHandoffs() => live?.Where(x => x.HandoffTo is not null).Select(x => x.HandoffTo!).ToList() ?? [];
+
+    /// <summary>
+    /// Runner 的事件可能來自其他執行緒（多 Agent 模式的 Workflow 在背景執行緒執行）：一律回到渲染器的同步內容再改狀態。
+    /// 交接事件（M5）在串流預覽插入「已轉給…」並切換目前的發言者。
+    /// </summary>
     private Task OnEventAsync(AgentTraceEvent item) => InvokeAsync(() =>
     {
         if (disposed)
@@ -618,18 +802,28 @@ public partial class ShopAssistantView : IDisposable
         {
             turnReplySource = item.Source;
         }
+        else if (item.Kind == AgentStepKind.Handoff && live is not null && HandoffEventData.FromRawJson(item.RawJson) is { } handoff)
+        {
+            live.Add(new LiveItem { HandoffTo = handoff.To });
+            liveSpeaker = handoff.To;
+        }
 
         StateHasChanged();
     });
 
     private Task OnTextDeltaAsync(string text) => InvokeAsync(() =>
     {
-        if (disposed || streaming is null)
+        if (disposed || live is null)
         {
             return;
         }
 
-        streaming.Append(text);
+        if (live.Count == 0 || live[^1].HandoffTo is not null)
+        {
+            live.Add(new LiveItem { Speaker = liveSpeaker });
+        }
+
+        live[^1].Text.Append(text);
         var now = TimeProvider.GetTimestamp();
         if (TimeProvider.GetElapsedTime(lastDeltaRender, now) >= DeltaRenderInterval)
         {
@@ -639,10 +833,51 @@ public partial class ShopAssistantView : IDisposable
     });
 
     private Task RecordAsync(Guid key, string action)
-        => ProcessMetricService.RecordAsync(key, AfterSalesChannel.Agent, ProcessActor.Customer, action, CustomerId);
+        => ProcessMetricService.RecordAsync(key, AfterSalesChannelExtensions.ForAgentMode(sessionMode), ProcessActor.Customer, action, CustomerId);
 
-    private static ChatEntry AgentEntry(string text)
-        => new() { Kind = EntryKind.Agent, Text = text, Html = AiMarkdownRenderer.ToSafeHtml(text) };
+    /// <summary>網址的 <c>?mode=</c>（展示控制台用）；沒有或不認得時回 null。</summary>
+    private AgentMode? QueryMode()
+        => QueryHelpers.ParseQuery(new Uri(NavigationManager.Uri).Query).TryGetValue(AgentModeLabels.QueryName, out var value)
+            ? AgentModeLabels.FromQuery(value.ToString())
+            : null;
+
+    /// <summary>
+    /// 幕後面板停止原因下方的「確認卡仍在等待」說明（M5 Task 3 m1）：只在<b>記憶卡</b>待確認、而最近一輪的停止原因<b>不是</b>等待確認時才給
+    /// （例如同一輪先查到規則衝突、再提出記住偏好，停止原因是「規則衝突」）。一般申請卡或停止原因本來就是等待確認時不顯示，單一模式畫面不變。
+    /// </summary>
+    private string? BackstagePendingCardTitle
+        => PendingCard is { Kind: ConfirmationCardKind.Memory } card && LatestStopReason() is { } reason && reason != AgentStopReason.AwaitingConfirmation
+            ? card.Title
+            : null;
+
+    /// <summary>幕後面板最近一筆 <see cref="AgentStepKind.Stop"/> 事件的停止原因（RawJson <c>{ stopReason }</c>）；讀不到回 null。</summary>
+    private AgentStopReason? LatestStopReason()
+    {
+        var raw = traceEvents.LastOrDefault(x => x.Kind == AgentStepKind.Stop)?.RawJson;
+        if (raw is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("stopReason", out var value) && value.ValueKind == JsonValueKind.String
+                && Enum.TryParse<AgentStopReason>(value.GetString(), out var reason)
+                ? reason
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static ChatEntry AgentEntry(string text, string? speaker = null)
+        => new() { Kind = EntryKind.Agent, Text = text, Speaker = speaker, Html = AiMarkdownRenderer.ToSafeHtml(text) };
+
+    private static ChatEntry HandoffEntry(string to) => new() { Kind = EntryKind.Handoff, Text = to };
 
     private static ChatEntry SystemEntry(string text) => new() { Kind = EntryKind.System, Text = text };
 }

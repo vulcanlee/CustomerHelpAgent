@@ -111,6 +111,7 @@ public sealed class DemoFaultInjectionTests : IAsyncLifetime
             orders,
             policies,
             requests,
+            new CustomerMemoryService(factory, new RecordingAuditLogService(), new ManualTimeProvider(UtcNow), NullLogger<CustomerMemoryService>.Instance),
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             currentUser,
             inbox,

@@ -30,8 +30,10 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
     private static readonly string[] ToolNames =
     [
         "query_my_orders", "get_effective_policy", "check_variant_stock",
-        "track_shipment", "request_photo_upload", "create_after_sales_request",
+        "track_shipment", "request_photo_upload", "create_after_sales_request", "remember_preference",
     ];
+
+    private static readonly string[] ApprovalRequiredTools = ["create_after_sales_request", "remember_preference"];
 
     private readonly string fileRoot = Path.Combine(Path.GetTempPath(), "AgentToolsTests-" + Guid.NewGuid().ToString("N"));
     private readonly RecordingAuditLogService audit = new();
@@ -109,6 +111,7 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
             orderService,
             policyService,
             requestService,
+            new CustomerMemoryService(factory, audit, time, NullLogger<CustomerMemoryService>.Instance),
             new PermissionChecker(permissionContext, NullLogger<PermissionChecker>.Instance),
             currentUser,
             inbox,
@@ -423,8 +426,53 @@ public sealed class AfterSalesAgentToolsTests : IAsyncLifetime
             Assert.DoesNotContain("customer", schema, StringComparison.OrdinalIgnoreCase);
         }
 
-        Assert.IsType<ApprovalRequiredAIFunction>(functions.Single(x => x.Name == "create_after_sales_request"));
-        Assert.All(functions.Where(x => x.Name != "create_after_sales_request"), f => Assert.IsNotType<ApprovalRequiredAIFunction>(f));
+        Assert.All(functions.Where(x => ApprovalRequiredTools.Contains(x.Name)), f => Assert.IsType<ApprovalRequiredAIFunction>(f));
+        Assert.All(functions.Where(x => !ApprovalRequiredTools.Contains(x.Name)), f => Assert.IsNotType<ApprovalRequiredAIFunction>(f));
+    }
+
+    /// <summary>多 Agent 模式（M5）的工具子集：只回傳指定名稱的工具（順序同全部清單、核准包裝不變）；名稱拼錯直接拋例外，不默默少給。</summary>
+    [Fact]
+    public void CreateFunctions_WithNames_ReturnsSubsetAndRejectsUnknown()
+    {
+        var tools = CreateTools();
+
+        var subset = tools.CreateFunctions(AfterSalesAgentTools.RememberPreferenceName, AfterSalesAgentTools.QueryMyOrdersName);
+
+        Assert.Equal([AfterSalesAgentTools.QueryMyOrdersName, AfterSalesAgentTools.RememberPreferenceName], subset.Select(x => x.Name));
+        Assert.IsType<ApprovalRequiredAIFunction>(subset[1]);
+        Assert.Equal(ToolNames.Length, tools.CreateFunctions().Count);
+        var ex = Assert.Throws<ArgumentException>(() => tools.CreateFunctions(AfterSalesAgentTools.QueryMyOrdersName, "check_stock"));
+        Assert.Contains("check_stock", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 記憶工具（M5）：確認後才會被框架執行（見 <c>CustomerMemoryAgentTests</c>）；執行時寫入前仍由程式重核——
+    /// 含電話 → invalid、不寫入；種類不明 → invalid；合格 → ok 並寫入本人、本會話的記憶。
+    /// </summary>
+    [Fact]
+    public async Task RememberPreference_RechecksContentBeforeSaving()
+    {
+        var tools = CreateTools();
+
+        var (phone, _) = await InvokeAsync(tools, "remember_preference", new() { ["kind"] = "communication", ["value"] = "打 0912345678 找我" });
+        var (unknown, _) = await InvokeAsync(tools, "remember_preference", new() { ["kind"] = "address", ["value"] = "41" });
+        await using (var db = factory.CreateDbContext())
+        {
+            Assert.Empty(await db.CustomerMemory.ToListAsync());
+        }
+
+        var (saved, json) = await InvokeAsync(tools, "remember_preference", new() { ["kind"] = "shoe_size", ["value"] = " 41 " });
+
+        Assert.Equal(ToolOutcomeStatus.Invalid, phone.Status);
+        Assert.Contains("電話", phone.Message, StringComparison.Ordinal);
+        Assert.Equal(ToolOutcomeStatus.Invalid, unknown.Status);
+        Assert.Equal(ToolOutcomeStatus.Ok, saved.Status);
+        Assert.Contains("\"value\":\"41\"", json, StringComparison.Ordinal);
+        await using (var db = factory.CreateDbContext())
+        {
+            var row = Assert.Single(await db.CustomerMemory.ToListAsync());
+            Assert.Equal((customer1, MemoryKind.ShoeSize, "41", sessionKey), (row.CustomerUserId, row.Kind, row.Value, row.SourceSessionKey));
+        }
     }
 
     [Fact]

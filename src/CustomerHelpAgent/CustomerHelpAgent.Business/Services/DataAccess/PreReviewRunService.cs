@@ -300,13 +300,13 @@ public class PreReviewRunService
     }
 
     /// <summary>
-    /// Agent 管道、已提交、卻沒有任何一輪初審的申請 Id（送件後、建立初審前當機，或掛勾失敗）；依 Id 由舊到新。啟動時補建用。
+    /// AI 管道（單一與多 Agent）、已提交、卻沒有任何一輪初審的申請 Id（送件後、建立初審前當機，或掛勾失敗）；依 Id 由舊到新。啟動時補建用。
     /// </summary>
     public async Task<List<int>> GetAgentRequestIdsWithoutRunAsync()
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         return await context.AfterSalesRequest.AsNoTracking()
-            .Where(x => x.Channel == AfterSalesChannel.Agent
+            .Where(x => AfterSalesChannelExtensions.AiChannels.Contains(x.Channel)
                 && x.Status == AfterSalesStatus.Submitted
                 && !context.PreReviewRun.Any(r => r.AfterSalesRequestId == x.Id))
             .OrderBy(x => x.Id)

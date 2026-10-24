@@ -1,8 +1,9 @@
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.Models.Agents;
 
-/// <summary>錄製清單的一列（顧客姓名以關掉軟刪除過濾器的明確查詢取得）。</summary>
+/// <summary>錄製清單的一列（顧客姓名以關掉軟刪除過濾器的明確查詢取得）。<see cref="Mode"/>（M5）：錄製時會話的模式，回放以它開新對話。</summary>
 public sealed record AgentRecordingSummary(
     int Id,
     Guid SessionKey,
@@ -14,7 +15,8 @@ public sealed record AgentRecordingSummary(
     decimal? TotalCostTwd,
     int TurnCount,
     int CallCount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    AgentMode Mode = AgentMode.Single);
 
 /// <summary>錄製的一個顧客動作。</summary>
 public sealed record AgentRecordedTurnView(

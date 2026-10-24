@@ -158,6 +158,14 @@
     /* 時間軸的程式提醒列（AgentStepKind.Warning，1.0.5 起）標紅：沿用全站錯誤色。 */
     --shop-step-warning: var(--app-error);
 
+    /* 線上客服的多 Agent 模式（M5）：對話裡的「已轉給…」、Agent 回覆上方的發言者徽章、幕後面板的交接列。
+       別名層，一律指向既有 --app-*：交接沿用重點色（與一般程式說明的深梅黑分得開）。 */
+    --assistant-handoff: var(--app-accent);
+    --assistant-handoff-bg: var(--app-tint);
+    --assistant-handoff-line: var(--app-accent-dim);
+    --assistant-speaker: var(--app-accent);
+    --assistant-speaker-bg: var(--app-accent-soft);
+
     /* ── AI 初審（審核頁的流程圖與 AI 建議卡，M4）──
        別名層：一律指向既有 --app-*，不放字面值。等待＝灰、進行中＝重點色、完成＝綠、失敗＝錯誤色；
        徽章 AI＝重點色、程式＝原文區塊深梅黑、人＝綠；警示文字標紅沿用全站錯誤色。 */

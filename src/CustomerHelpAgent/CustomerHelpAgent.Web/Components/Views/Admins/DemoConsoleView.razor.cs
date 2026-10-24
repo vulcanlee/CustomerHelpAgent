@@ -11,6 +11,7 @@ using CustomerHelpAgent.Business.Services.Other;
 using CustomerHelpAgent.Business.Startup;
 using CustomerHelpAgent.Models.Agents;
 using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 using CustomerHelpAgent.Share.Helpers;
 using CustomerHelpAgent.Web.Agents;
@@ -28,7 +29,8 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
     /// <item>⚠️ 稽核在這裡寫：<see cref="DemoControlService"/> 是 Singleton、拿不到登入者，不寫稽核；
     /// 故障、模式、金劇本、刪除錄製都由本頁以登入的管理員寫 <see cref="AuditActions.Demo"/>。重置的稽核由 <see cref="DemoResetService"/> 自己寫。</item>
     /// <item>「準備此劇本」依序：確認 → 重置 → 只開這個劇本的故障 → 模式（選了回放且劇本有金劇本才回放，否則即時，確認窗先講清楚）
-    /// → 取一張切換成劇本帳號的票券（切換後到線上客服）→ 整頁導向 <c>/Auths/DemoSwitch</c>。任何一步失敗就停下、不切換身分。</item>
+    /// → 取一張切換成劇本帳號的票券（切換後到線上客服；多 Agent 劇本帶 <c>?mode=handoff</c>，見 <see cref="AssistantUrlFor"/>）
+    /// → 整頁導向 <c>/Auths/DemoSwitch</c>。任何一步失敗就停下、不切換身分。</item>
     /// <item><see cref="DemoControlService.Changed"/> 在別的執行緒觸發，一律 <c>InvokeAsync</c>；Dispose 時取消訂閱。</item>
     /// </list>
     /// </summary>
@@ -224,13 +226,22 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
                 }
 
                 var isCustomer = DemoSeedData.Accounts.Any(x => x.Account == scenario.Account && x.RoleName == MagicObjectHelper.顧客角色);
-                var ticket = TicketService.Issue(CurrentUserService.CurrentUser.Id, scenario.Account, isCustomer ? ShopAssistantUrl : null);
+                var ticket = TicketService.Issue(CurrentUserService.CurrentUser.Id, scenario.Account, isCustomer ? AssistantUrlFor(scenario) : null);
                 Logger.LogInformation(
-                    "Demo scenario prepared. ScenarioCode={ScenarioCode}, TargetAccount={TargetAccount}, Mode={Mode}, ActiveRecordingId={ActiveRecordingId}",
-                    scenario.Code, scenario.Account, DemoControlService.Mode, DemoControlService.ActiveRecordingId);
+                    "Demo scenario prepared. ScenarioCode={ScenarioCode}, TargetAccount={TargetAccount}, Mode={Mode}, AgentMode={AgentMode}, ActiveRecordingId={ActiveRecordingId}",
+                    scenario.Code, scenario.Account, DemoControlService.Mode, scenario.Mode, DemoControlService.ActiveRecordingId);
                 NavigationManager.NavigateTo(DemoSwitch.UrlFor(ticket), forceLoad: true);
             }, "準備劇本");
         }
+
+        /// <summary>
+        /// 劇本切換身分後要去的線上客服網址：多 Agent 劇本帶 <c>?mode=handoff</c>（線上客服頁據此以多 Agent 模式開新對話），
+        /// 單一 Agent 劇本維持 <see cref="ShopAssistantUrl"/>。
+        /// </summary>
+        internal static string AssistantUrlFor(DemoScenario scenario)
+            => scenario.Mode == AgentMode.Single
+                ? ShopAssistantUrl
+                : $"{ShopAssistantUrl}?{AgentModeLabels.QueryName}={AgentModeLabels.QueryValue(scenario.Mode)}";
 
         /// <summary>確認窗：依序列出會做的事；選了回放卻沒有金劇本時講明改用即時（不默默失敗）。</summary>
         internal static string BuildPrepareConfirmText(DemoScenario scenario, bool replayRequested, AgentRecordingSummary? golden, string? aiError)
@@ -261,7 +272,8 @@ namespace CustomerHelpAgent.Web.Components.Views.Admins
                 sb.Append("　注意：AI 模型尚未設定，即時模式無法對話。\n");
             }
 
-            sb.Append($"4. 切換成示範帳號 {scenario.Account}，開啟線上客服。\n");
+            sb.Append($"4. 切換成示範帳號 {scenario.Account}，開啟線上客服")
+                .Append(scenario.Mode == AgentMode.Single ? "。\n" : $"（{AgentModeLabels.Text(scenario.Mode)} 模式）。\n");
             sb.Append("\n正在進行中的顧客對話會中斷；紀錄與錄製會保留。此動作無法復原。");
             return sb.ToString();
         }

@@ -253,6 +253,9 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ApprovalRequestJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("Approved")
                         .HasColumnType("INTEGER");
 
@@ -368,6 +371,9 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsGolden")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mode")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ModelName")
@@ -487,6 +493,9 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("LastStopReason")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mode")
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("SessionKey")
@@ -743,6 +752,42 @@ namespace CustomerHelpAgent.AccessDatas.Migrations
                         .HasFilter("\"IsDeleted\" = 0");
 
                     b.ToTable("Category");
+                });
+
+            modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.CustomerMemory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CustomerUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SourceSessionKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerUserId");
+
+                    b.HasIndex("CustomerUserId", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("CustomerMemory");
                 });
 
             modelBuilder.Entity("CustomerHelpAgent.AccessDatas.Models.DemoControlState", b =>

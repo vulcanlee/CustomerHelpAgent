@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerHelpAgent.Web.Configuration.Validation;
 
-/// <summary><c>AfterSalesAgentSettings</c>（1.0.4 起）：步數、連續失敗次數、工具逾時、API 形式、推理強度、溫度與看圖模型名稱都要在合理範圍內，寫錯就拒絕啟動。</summary>
+/// <summary><c>AfterSalesAgentSettings</c>（1.0.4 起）：步數（含多 Agent 模式）、連續失敗次數、工具逾時、API 形式、推理強度、溫度與看圖模型名稱都要在合理範圍內，寫錯就拒絕啟動。</summary>
 public sealed class AfterSalesAgentSettingsValidator : IValidateOptions<AfterSalesAgentSettings>
 {
     private const string Section = AfterSalesAgentSettings.SectionName;
@@ -13,6 +13,7 @@ public sealed class AfterSalesAgentSettingsValidator : IValidateOptions<AfterSal
     {
         var errors = new OptionsErrors();
         errors.RequireRange($"{Section}:{nameof(options.MaxSteps)}", options.MaxSteps, 1, 20);
+        errors.RequireRange($"{Section}:{nameof(options.HandoffMaxSteps)}", options.HandoffMaxSteps, 1, 40);
         errors.RequireRange($"{Section}:{nameof(options.MaxConsecutiveToolFailures)}", options.MaxConsecutiveToolFailures, 1, 5);
         errors.RequireRange($"{Section}:{nameof(options.ToolTimeoutSeconds)}", options.ToolTimeoutSeconds, 1, 120);
 

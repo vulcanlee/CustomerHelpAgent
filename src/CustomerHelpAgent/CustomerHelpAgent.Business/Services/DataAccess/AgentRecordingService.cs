@@ -4,6 +4,7 @@ using CustomerHelpAgent.AccessDatas;
 using CustomerHelpAgent.AccessDatas.Models;
 using CustomerHelpAgent.Models.Agents;
 using CustomerHelpAgent.Models.Systems;
+using CustomerHelpAgent.Share.Agents;
 using CustomerHelpAgent.Share.Demo;
 
 namespace CustomerHelpAgent.Business.Services.DataAccess;
@@ -43,7 +44,10 @@ public class AgentRecordingService
 
     private DateTime Now => timeProvider.GetLocalNow().DateTime;
 
-    /// <summary>記一個顧客動作；這段會話還沒有錄製就先建立（標題取第一句顧客訊息的前 <see cref="TitleLength"/> 字）。不拋例外。</summary>
+    /// <summary>
+    /// 記一個顧客動作；這段會話還沒有錄製就先建立（標題取第一句顧客訊息的前 <see cref="TitleLength"/> 字；
+    /// 模式取自會話的 <see cref="AgentSessionRecord.Mode"/>，找不到會話時為 <see cref="AgentMode.Single"/>，之後不再改變）。不拋例外。
+    /// </summary>
     public async Task AppendTurnAsync(Guid sessionKey, int customerUserId, AgentRecordedTurnKind kind, string? customerText)
     {
         try
@@ -55,16 +59,21 @@ public class AgentRecordingService
             if (recording is null)
             {
                 turn.Sequence = 1;
+                var mode = await context.AgentSessionRecord.AsNoTracking()
+                    .Where(x => x.SessionKey == sessionKey)
+                    .Select(x => (AgentMode?)x.Mode)
+                    .FirstOrDefaultAsync() ?? AgentMode.Single;
                 context.AgentRecording.Add(new AgentRecording
                 {
                     SessionKey = sessionKey,
                     CustomerUserId = customerUserId,
+                    Mode = mode,
                     Title = MakeTitle(customerText),
                     CreatedAt = now,
                     Turns = [turn],
                 });
                 await context.SaveChangesAsync();
-                logger.LogInformation("Agent recording started. SessionKey={SessionKey}", sessionKey);
+                logger.LogInformation("Agent recording started. SessionKey={SessionKey}, Mode={Mode}", sessionKey, mode);
                 return;
             }
 
@@ -279,6 +288,7 @@ public class AgentRecordingService
             x.TotalCostTwd,
             x.Turns.Count,
             x.Calls.Count,
-            x.CreatedAt));
+            x.CreatedAt,
+            x.Mode));
     }
 }

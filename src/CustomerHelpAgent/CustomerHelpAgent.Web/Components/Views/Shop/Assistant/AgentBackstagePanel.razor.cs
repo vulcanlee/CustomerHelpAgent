@@ -32,6 +32,13 @@ public partial class AgentBackstagePanel : IDisposable
     [Parameter, EditorRequired]
     public IReadOnlyList<AgentTraceEvent> Events { get; set; } = [];
 
+    /// <summary>
+    /// 停止原因下方要註明「照常有效」的待確認卡標題（M5）：呼叫端只在停止原因會讓人誤以為卡片失敗時才給——
+    /// 例如同一輪先查到規則衝突、再提出記住偏好，停止原因是「規則衝突」，但記憶卡並沒有失敗。一般情況為 null（不顯示）。
+    /// </summary>
+    [Parameter]
+    public string? PendingCardTitle { get; set; }
+
     private AgentTraceEvent? LatestStop => Events.LastOrDefault(x => x.Kind == AgentStepKind.Stop);
 
     /// <summary>啟用中的故障（控制台的顯示順序）；示範模式關閉時一律是空的。</summary>

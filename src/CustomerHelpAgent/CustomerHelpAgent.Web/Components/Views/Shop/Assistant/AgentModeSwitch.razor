@@ -1,0 +1,77 @@
+@using CustomerHelpAgent.Share.Agents
+
+@*
+    線上客服的模式切換（M5）：「單一 Agent ｜ 多 Agent」分段按鈕，語意是單選群組（radiogroup／radio）。
+    鍵盤：roving tabindex（只有選中的那個在 Tab 順序裡），方向鍵（左右上下）移到另一個並選取；選取＝交給呼叫端先確認、再開新對話。
+    執行中停用；回放中鎖定為錄製時的模式（顯示鎖頭，鎖定原因以 aria-describedby 讀出）。
+*@
+<div class="agent-mode-switch @(Locked ? "is-locked" : null)" role="radiogroup" aria-label="Agent 模式" data-role="mode-switch"
+     aria-describedby="@(Locked ? lockHintId : null)" title="@(Locked ? LockHint : null)">
+    @for (var index = 0; index < Modes.Length; index++)
+    {
+        var mode = Modes[index];
+        var position = index;
+        var selected = mode == Mode;
+        <button type="button" role="radio" class="agent-mode-option @(selected ? "is-selected" : null)"
+                aria-checked="@(selected ? "true" : "false")" tabindex="@(selected ? "0" : "-1")" data-mode="@AgentModeLabels.QueryValue(mode)"
+                disabled="@(Disabled || Locked)" @ref="buttons[position]"
+                @onclick="() => SelectAsync(mode)" @onkeydown="args => OnKeyDownAsync(args, position)">
+            @if (Locked && selected)
+            {
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="lock" />
+            }
+            <span>@AgentModeLabels.Text(mode)</span>
+        </button>
+    }
+    @if (Locked)
+    {
+        <span id="@lockHintId" class="agent-mode-hidden" data-role="mode-lock-hint">@LockHint</span>
+    }
+</div>
+
+@code {
+    private const string LockHint = "回放中：模式鎖定為錄製時的模式";
+
+    private static readonly AgentMode[] Modes = [AgentMode.Single, AgentMode.Handoff];
+
+    private readonly ElementReference[] buttons = new ElementReference[Modes.Length];
+    private readonly string lockHintId = "agent-mode-lock-" + Guid.NewGuid().ToString("N");
+
+    /// <summary>目前會話的模式。</summary>
+    [Parameter, EditorRequired]
+    public AgentMode Mode { get; set; }
+
+    /// <summary>執行中（或還沒載入會話）時停用。</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>回放中：鎖定為錄製時的模式。</summary>
+    [Parameter]
+    public bool Locked { get; set; }
+
+    /// <summary>選了另一個模式（呼叫端先確認、再開新對話）。</summary>
+    [Parameter]
+    public EventCallback<AgentMode> OnChange { get; set; }
+
+    private Task SelectAsync(AgentMode mode)
+        => mode == Mode || Disabled || Locked ? Task.CompletedTask : OnChange.InvokeAsync(mode);
+
+    /// <summary>單選群組的方向鍵：焦點移到上一個／下一個（循環）並選取它。</summary>
+    private async Task OnKeyDownAsync(KeyboardEventArgs args, int position)
+    {
+        var step = args.Key switch
+        {
+            "ArrowRight" or "ArrowDown" => 1,
+            "ArrowLeft" or "ArrowUp" => -1,
+            _ => 0,
+        };
+        if (step == 0 || Disabled || Locked)
+        {
+            return;
+        }
+
+        var target = (position + step + Modes.Length) % Modes.Length;
+        await buttons[target].FocusAsync();
+        await SelectAsync(Modes[target]);
+    }
+}

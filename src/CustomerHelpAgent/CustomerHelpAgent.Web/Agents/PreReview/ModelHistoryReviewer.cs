@@ -107,20 +107,21 @@ public sealed class ModelHistoryReviewer : IHistoryReviewer
     /// 只留這一輪初審建立當下（<paramref name="cutOff"/>＝<c>PreReviewRun.CreatedAt</c>，含）以前的步驟，並拿掉「建立申請」這個工具自己的結果。
     /// ⚠️ 送件掛勾在 <c>create_after_sales_request</c> 工具內（commit 之後）就建立這一輪並入列，而守門員要等工具回來才寫它的結果步驟，
     /// 顧客之後也可能繼續聊：不切掉的話，提示詞（與回放比對用的請求摘要）會隨背景執行的時機不同而不同。
-    /// 工具結果步驟本身沒有工具名稱，以「緊接在建立申請的請求步驟之後的第一個結果」認定（工具一次只跑一個）。
+    /// 顧客長期記憶工具（M5，<c>remember_preference</c>）的結果也拿掉：記憶只是偏好，不是業務事實，不能當作歷史證據。
+    /// 工具結果步驟本身沒有工具名稱，以「緊接在這兩個工具的請求步驟之後的第一個結果」認定（工具一次只跑一個）。
     /// </summary>
     internal static IEnumerable<AgentRunStepView> TraceUpTo(IEnumerable<AgentRunStepView> steps, DateTime cutOff)
     {
-        var skipCreateResult = false;
+        var skipResult = false;
         foreach (var step in steps.Where(x => x.OccurredAt <= cutOff))
         {
             if (step.Kind == AgentStepKind.ToolRequest)
             {
-                skipCreateResult = IsCreateRequest(step.RawJson);
+                skipResult = IsExcludedToolRequest(step.RawJson);
             }
-            else if (step.Kind == AgentStepKind.ToolResult && skipCreateResult)
+            else if (step.Kind == AgentStepKind.ToolResult && skipResult)
             {
-                skipCreateResult = false;
+                skipResult = false;
                 continue;
             }
 
@@ -128,7 +129,8 @@ public sealed class ModelHistoryReviewer : IHistoryReviewer
         }
     }
 
-    private static bool IsCreateRequest(string? rawJson)
+    /// <summary>建立申請或記憶工具的請求步驟（它們的結果不送歷史初審）。</summary>
+    private static bool IsExcludedToolRequest(string? rawJson)
     {
         if (string.IsNullOrEmpty(rawJson))
         {
@@ -141,7 +143,7 @@ public sealed class ModelHistoryReviewer : IHistoryReviewer
             return document.RootElement.ValueKind == JsonValueKind.Object
                 && document.RootElement.TryGetProperty("tool", out var tool)
                 && tool.ValueKind == JsonValueKind.String
-                && tool.GetString() == AfterSalesAgentTools.CreateAfterSalesRequestName;
+                && tool.GetString() is AfterSalesAgentTools.CreateAfterSalesRequestName or AfterSalesAgentTools.RememberPreferenceName;
         }
         catch (JsonException)
         {

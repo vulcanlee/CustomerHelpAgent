@@ -55,6 +55,18 @@ public static class PromptTemplateKeys
     /// <summary>客服後台的 AI 助手（M4）。</summary>
     public const string AfterSalesStaffAssistant = "AfterSalesStaffAssistant";
 
+    /// <summary>顧客端多 Agent（M5）：分流 Agent 的系統指示。</summary>
+    public const string AfterSalesTriage = "AfterSalesTriage";
+
+    /// <summary>顧客端多 Agent（M5）：換退貨專員的系統指示。</summary>
+    public const string AfterSalesExchangeSpecialist = "AfterSalesExchangeSpecialist";
+
+    /// <summary>顧客端多 Agent（M5）：品質專員的系統指示。</summary>
+    public const string AfterSalesQualitySpecialist = "AfterSalesQualitySpecialist";
+
+    /// <summary>顧客端多 Agent（M5）：物流專員的系統指示。</summary>
+    public const string AfterSalesLogisticsSpecialist = "AfterSalesLogisticsSpecialist";
+
     public static readonly IReadOnlyList<string> All =
     [
         LogAnalysis,
@@ -64,5 +76,9 @@ public static class PromptTemplateKeys
         AfterSalesPreReviewHistory,
         AfterSalesPreReviewSummary,
         AfterSalesStaffAssistant,
+        AfterSalesTriage,
+        AfterSalesExchangeSpecialist,
+        AfterSalesQualitySpecialist,
+        AfterSalesLogisticsSpecialist,
     ];
 }

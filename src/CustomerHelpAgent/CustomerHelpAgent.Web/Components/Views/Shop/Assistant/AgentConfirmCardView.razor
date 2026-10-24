@@ -1,22 +1,39 @@
+@using CustomerHelpAgent.Share.Agents
 @using CustomerHelpAgent.Web.Agents.AfterSales
 
 @*
     寫入前的確認卡：內容全部由程式依模型提出的參數重新查詢後組成（ConfirmationCard），不採模型文字。
     按下「確認送出」前不會建立申請；送出後由程式再重核一次資格才寫入。
+    記憶確認卡（M5，Card.Kind＝Memory）：「記憶」標籤、要記住的種類與內容（程式重核後的值）、程式產生的詢問句，
+    以及「只代表偏好、不是事實」的說明；按「記住」前不會儲存，記住後連到「我的 AI 記憶」。
 *@
-<article class="agent-confirm-card @(State == CardState.Pending ? "is-pending" : null)" aria-label="@Card.Title">
+<article class="agent-confirm-card @(IsMemory ? "is-memory" : null) @(State == CardState.Pending ? "is-pending" : null)" aria-label="@Card.Title">
     <header class="agent-confirm-head">
-        <span class="agent-confirm-icon" aria-hidden="true"><MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="fact_check" /></span>
+        <span class="agent-confirm-icon" aria-hidden="true"><MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@(IsMemory ? "bookmark" : "fact_check")" /></span>
         <h3 class="agent-confirm-title">@Card.Title</h3>
+        @if (IsMemory)
+        {
+            <span class="agent-confirm-tag">長期記憶</span>
+        }
     </header>
 
-    <dl class="agent-confirm-facts">
-        <div><dt>商品</dt><dd>@Card.ProductLine</dd></div>
-        <div><dt>規格</dt><dd>@Card.FromSpec@(Card.ToSpec is null ? null : " → " + Card.ToSpec)</dd></div>
-        <div><dt>類型</dt><dd>@Card.IssueLabel</dd></div>
-        <div><dt>規則</dt><dd>@Card.PolicyLine</dd></div>
-        <div><dt>照片</dt><dd>@Card.PhotoCount 張</dd></div>
-    </dl>
+    @if (IsMemory)
+    {
+        <dl class="agent-confirm-facts">
+            <div><dt>項目</dt><dd>@(Card.MemoryKind is { } kind ? MemoryLabels.PreferenceText(kind) : "偏好")</dd></div>
+            <div><dt>內容</dt><dd>@Card.MemoryValue</dd></div>
+        </dl>
+    }
+    else
+    {
+        <dl class="agent-confirm-facts">
+            <div><dt>商品</dt><dd>@Card.ProductLine</dd></div>
+            <div><dt>規格</dt><dd>@Card.FromSpec@(Card.ToSpec is null ? null : " → " + Card.ToSpec)</dd></div>
+            <div><dt>類型</dt><dd>@Card.IssueLabel</dd></div>
+            <div><dt>規則</dt><dd>@Card.PolicyLine</dd></div>
+            <div><dt>照片</dt><dd>@Card.PhotoCount 張</dd></div>
+        </dl>
+    }
 
     @if (Card.Facts.Count > 0)
     {
@@ -28,18 +45,23 @@
         </ul>
     }
 
+    @if (IsMemory && State == CardState.Pending)
+    {
+        <p class="agent-confirm-note">記憶只代表您的偏好，不是訂單或規則；之後的對話會先向您確認，也可以隨時到「我的 AI 記憶」刪除。</p>
+    }
+
     @switch (State)
     {
         case CardState.Pending:
             <footer class="agent-confirm-actions">
-                <p class="agent-confirm-hint">按下「確認送出」前不會建立申請。</p>
+                <p class="agent-confirm-hint">@(IsMemory ? "按下「記住」前不會儲存。" : "按下「確認送出」前不會建立申請。")</p>
                 <button type="button" class="agent-confirm-button is-primary" data-action="confirm" disabled="@(Disabled || ConfirmDisabled)" @onclick="OnConfirm">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="check" />
-                    <span>確認送出</span>
+                    <span>@(IsMemory ? "記住" : "確認送出")</span>
                 </button>
                 <button type="button" class="agent-confirm-button" data-action="cancel" disabled="@(Disabled || CancelDisabled)" @onclick="OnCancel">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="close" />
-                    <span>取消</span>
+                    <span>@(IsMemory ? "不用記住" : "取消")</span>
                 </button>
             </footer>
             break;
@@ -55,17 +77,26 @@
                 </a>
             </div>
             break;
+        case CardState.Remembered:
+            <div class="agent-confirm-result is-created" role="status">
+                <span>已記住這個偏好：<strong>@Card.MemoryValue</strong></span>
+                <a class="agent-confirm-link" href="/shop/memory">
+                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="bookmarks" />
+                    <span>到我的 AI 記憶查看</span>
+                </a>
+            </div>
+            break;
         case CardState.Canceled:
-            <p class="agent-confirm-result" role="status">已取消，沒有建立申請。</p>
+            <p class="agent-confirm-result" role="status">@(IsMemory ? "已選擇不用記住，不會儲存。" : "已取消，沒有建立申請。")</p>
             break;
         default:
-            <p class="agent-confirm-result" role="status">沒有建立申請，請看下方的說明。</p>
+            <p class="agent-confirm-result" role="status">@(IsMemory ? "沒有記住這個偏好，請看下方的說明。" : "沒有建立申請，請看下方的說明。")</p>
             break;
     }
 </article>
 
 @code {
-    /// <summary>確認卡在畫面上的狀態。</summary>
+    /// <summary>確認卡在畫面上的狀態。<see cref="Created"/> 只用於申請卡、<see cref="Remembered"/> 只用於記憶卡；<see cref="NotCreated"/> 兩者共用（沒有完成）。</summary>
     public enum CardState
     {
         Pending,
@@ -73,10 +104,13 @@
         Created,
         Canceled,
         NotCreated,
+        Remembered,
     }
 
     [Parameter, EditorRequired]
     public ConfirmationCard Card { get; set; } = default!;
+
+    private bool IsMemory => Card.Kind == ConfirmationCardKind.Memory;
 
     [Parameter]
     public CardState State { get; set; }

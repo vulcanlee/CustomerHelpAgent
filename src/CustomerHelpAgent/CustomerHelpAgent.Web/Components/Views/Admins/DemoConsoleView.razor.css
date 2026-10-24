@@ -118,6 +118,11 @@
     font-weight: 700;
 }
 
+/* 多 Agent 劇本的模式標籤（M5）靠右。 */
+.demo-console-scenario-mode {
+    margin-left: auto;
+}
+
 .demo-console-scenario-title,
 .demo-console-fault-name {
     color: var(--app-text);

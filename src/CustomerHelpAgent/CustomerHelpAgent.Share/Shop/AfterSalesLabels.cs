@@ -26,7 +26,7 @@ public static class AfterSalesLabels
     {
         AfterSalesChannel.Traditional => "傳統表單",
         AfterSalesChannel.Agent => "AI 助理",
-        AfterSalesChannel.AgentHandoff => "AI 轉人工",
+        AfterSalesChannel.AgentHandoff => "AI 多 Agent",
         _ => channel.ToString(),
     };
 }

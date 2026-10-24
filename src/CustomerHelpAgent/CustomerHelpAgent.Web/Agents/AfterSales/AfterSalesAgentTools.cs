@@ -32,17 +32,32 @@ public sealed class AfterSalesToolContext
     /// <summary>售後申請建立並回查成功後呼叫（參數為申請 Id），供 Runner 回填確認紀錄。</summary>
     public Func<int, Task>? OnRequestCreated { get; init; }
 
+    /// <summary>
+    /// 多 Agent 模式（M5）：本輪開始時在呼叫端執行緒查好的「顧客商店」權限。有值時工具不再即時查（工具在 Workflow 的背景執行緒執行，
+    /// <see cref="IPermissionChecker"/> 用的 circuit 範圍 DbContext 不可並行）；登入身分與展示的權限過期故障仍逐次檢查。單一模式為 null（每次即時查）。
+    /// </summary>
+    public bool? ShopPermissionGranted { get; init; }
+
+    /// <summary>
+    /// 建立的售後申請要記在哪個管道（M5）：Runner 依會話模式給（<see cref="AfterSalesChannelExtensions.ForAgentMode"/>），
+    /// 多 Agent 模式是 <see cref="AfterSalesChannel.AgentHandoff"/>（一樣會跑 M4 初審）；預設單一 Agent。
+    /// </summary>
+    public AfterSalesChannel Channel { get; init; } = AfterSalesChannel.Agent;
+
     /// <summary>工具要求本輪停下的原因（<c>request_photo_upload</c> 成功時設為 <see cref="AgentStopReason.AwaitingPhotoUpload"/>）。</summary>
     public AgentStopReason? StopReason { get; set; }
 }
 
 /// <summary>
-/// 售後 Agent 的 6 個受控工具。安全邊界：
+/// 售後 Agent 的 7 個受控工具。安全邊界：
 /// <list type="bullet">
 /// <item>顧客身分只來自 <see cref="CurrentUserService"/>（且須與 <see cref="AfterSalesToolContext.CustomerUserId"/> 相同、仍具「顧客商店」權限），
 /// 工具參數沒有任何使用者識別欄位；模型多傳的引數會被 <see cref="AIFunctionFactory"/> 忽略。</item>
 /// <item>回傳一律是 <see cref="ToolOutcome"/> 信封（序列化成 <see cref="System.Text.Json.JsonElement"/>），只含投影 DTO 的欄位。</item>
 /// <item>寫入工具 <c>create_after_sales_request</c> 以 <see cref="ApprovalRequiredAIFunction"/> 包裝，執行時再以程式重核資格。</item>
+/// <item>記憶工具 <c>remember_preference</c>（M5）同樣以 <see cref="ApprovalRequiredAIFunction"/> 包裝：顧客在記憶確認卡上同意後才執行，
+/// 寫入時 <see cref="CustomerMemoryService.UpsertAsync"/> 再以 <c>MemoryContentPolicy</c> 重核（含個資一律拒絕）。記憶只是偏好，不是業務寫入，
+/// 所以不受 Guard 的「封鎖寫入」影響，但照樣受逾時、權限、服務不可用的終止規則約束。</item>
 /// <item>展示的 <see cref="DemoFault.PermissionExpired"/> 只在這裡注入（身分檢查一律不通過 → <c>forbidden</c>）；其餘故障由業務服務注入。</item>
 /// </list>
 /// 權限以 <see cref="IPermissionChecker"/> 即時查資料庫，而不是 <c>AuthenticationStateHelper.CheckAccessPage</c>：
@@ -56,6 +71,11 @@ public sealed class AfterSalesAgentTools
     public const string TrackShipmentName = "track_shipment";
     public const string RequestPhotoUploadName = "request_photo_upload";
     public const string CreateAfterSalesRequestName = "create_after_sales_request";
+    public const string RememberPreferenceName = "remember_preference";
+
+    /// <summary><c>remember_preference</c> 的 <c>kind</c> 參數說明（模型看得到）。</summary>
+    private const string MemoryKindDescription =
+        "偏好種類：shoe_size（鞋碼）、clothing_size（衣服尺碼）、color（顏色）、communication（溝通偏好）";
 
     private const string IssueTypeDescription =
         "問題類型：size_exchange（換尺碼）、color_exchange（換顏色）、return_refund（退貨退款）、quality_issue（品質問題）、shipment_urge（物流催件）";
@@ -76,9 +96,18 @@ public sealed class AfterSalesAgentTools
         ["shipment_urge"] = AfterSalesType.ShipmentUrge,
     };
 
+    private static readonly Dictionary<string, MemoryKind> MemoryKinds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["shoe_size"] = MemoryKind.ShoeSize,
+        ["clothing_size"] = MemoryKind.ClothingSize,
+        ["color"] = MemoryKind.PreferredColor,
+        ["communication"] = MemoryKind.Communication,
+    };
+
     private readonly ShopOrderService shopOrderService;
     private readonly AfterSalesPolicyService policyService;
     private readonly AfterSalesRequestService requestService;
+    private readonly CustomerMemoryService memoryService;
     private readonly IPermissionChecker permissionChecker;
     private readonly CurrentUserService currentUserService;
     private readonly AgentPhotoInbox photoInbox;
@@ -91,6 +120,7 @@ public sealed class AfterSalesAgentTools
         ShopOrderService shopOrderService,
         AfterSalesPolicyService policyService,
         AfterSalesRequestService requestService,
+        CustomerMemoryService memoryService,
         IPermissionChecker permissionChecker,
         CurrentUserService currentUserService,
         AgentPhotoInbox photoInbox,
@@ -102,6 +132,7 @@ public sealed class AfterSalesAgentTools
         this.shopOrderService = shopOrderService;
         this.policyService = policyService;
         this.requestService = requestService;
+        this.memoryService = memoryService;
         this.permissionChecker = permissionChecker;
         this.currentUserService = currentUserService;
         this.photoInbox = photoInbox;
@@ -143,7 +174,32 @@ public sealed class AfterSalesAgentTools
     internal static bool TryParseIssueType(string? issueType, out AfterSalesType type)
         => IssueTypes.TryGetValue(issueType ?? string.Empty, out type);
 
-    public IReadOnlyList<AIFunction> CreateFunctions() =>
+    /// <summary>模型送來的偏好種類（<c>shoe_size</c>…）轉成 <see cref="MemoryKind"/>；Runner 組記憶確認卡時共用同一份對照。</summary>
+    internal static bool TryParseMemoryKind(string? kind, out MemoryKind memoryKind)
+        => MemoryKinds.TryGetValue(kind ?? string.Empty, out memoryKind);
+
+    /// <summary>
+    /// 建立工具函式。不給 <paramref name="names"/> 回傳全部 7 個（單一 Agent）；給了只回傳這些名稱的工具（多 Agent 模式各參與者的工具子集，M5），
+    /// 順序與全部清單相同。⚠️ 名稱拼錯直接拋例外（程式錯誤），不可默默少給工具。
+    /// </summary>
+    public IReadOnlyList<AIFunction> CreateFunctions(params string[] names)
+    {
+        var all = CreateAllFunctions();
+        if (names.Length == 0)
+        {
+            return all;
+        }
+
+        var unknown = names.Where(name => all.All(f => f.Name != name)).ToList();
+        if (unknown.Count > 0)
+        {
+            throw new ArgumentException($"Unknown after-sales agent tool names: {string.Join(", ", unknown)}", nameof(names));
+        }
+
+        return all.Where(f => names.Contains(f.Name)).ToList();
+    }
+
+    private IReadOnlyList<AIFunction> CreateAllFunctions() =>
     [
         Create(QueryMyOrdersAsync, QueryMyOrdersName,
             "查詢目前登入顧客本人的訂單商品（品名、顏色、尺碼、配送狀態）。可依顏色或關鍵字篩選；不提供收件人、地址、手機與價格。"),
@@ -157,6 +213,9 @@ public sealed class AfterSalesAgentTools
             "請顧客上傳照片（例如品質問題需要照片佐證）。呼叫後本輪會停下，等顧客上傳完成再繼續。"),
         new ApprovalRequiredAIFunction(Create(CreateAfterSalesRequestAsync, CreateAfterSalesRequestName,
             "建立售後申請。必須先取得規則卡並向顧客確認內容；顧客在確認卡上同意後才會執行，執行時程式會重新核對資格。")),
+        new ApprovalRequiredAIFunction(Create(RememberPreferenceAsync, RememberPreferenceName,
+            "記住顧客明確說出、希望之後沿用的一項偏好（鞋碼、衣服尺碼、顏色或溝通方式）。系統會顯示確認卡，顧客同意後才會儲存；"
+            + "不可記錄姓名、電話、Email、地址或訂單內容。")),
     ];
 
     public Task<ToolOutcome> QueryMyOrdersAsync(
@@ -346,7 +405,7 @@ public sealed class AfterSalesAgentTools
                     TargetColor = targetColor,
                     IsWorn = isWorn,
                     Description = description ?? string.Empty,
-                    Channel = AfterSalesChannel.Agent,
+                    Channel = context.Channel,
                 }, files);
             }
             catch (Exception ex)
@@ -373,6 +432,39 @@ public sealed class AfterSalesAgentTools
                 "Agent after-sales request created. RequestId={RequestId}, RequestType={RequestType}, PhotoCount={PhotoCount}",
                 result.RequestId, type, files.Count);
             return ToolOutcome.Ok(new { result.RequestNo, result.RequestId });
+        }, cancellationToken);
+
+    /// <summary>
+    /// 記住一項偏好（顧客在記憶確認卡上同意後才會執行）。內容由 <see cref="CustomerMemoryService.UpsertAsync"/> 重核：
+    /// 不合格式或含個資 → <c>invalid</c>（不寫入）；服務失敗 → <c>unavailable</c>。
+    /// ⚠️ 寫入一律等到完成，不受工具逾時約束（與建立申請相同：服務沒有 CancellationToken，放棄等待不會中斷寫入）。
+    /// </summary>
+    public Task<ToolOutcome> RememberPreferenceAsync(
+        [Description(MemoryKindDescription)] string kind,
+        [Description("要記住的內容，例如：41、M、黑、請先傳訊息再打電話")] string value,
+        CancellationToken cancellationToken = default)
+        => RunAsync(RememberPreferenceName, async (customerUserId, ct) =>
+        {
+            if (!TryParseMemoryKind(kind, out var memoryKind))
+            {
+                return ToolOutcome.Fail(ToolOutcomeStatus.Invalid, "無法辨識的偏好種類。" + MemoryKindDescription);
+            }
+
+            var result = await memoryService.UpsertAsync(customerUserId, memoryKind, value ?? string.Empty, context.SessionKey);
+            if (result.Success && result.Memory is { } saved)
+            {
+                await EmitProgramCheckAsync(
+                    $"程式重新核對要記住的內容：格式符合、不含個資，已記住{MemoryLabels.PreferenceText(memoryKind)}（只代表偏好，之後會先向你確認）。");
+                return ToolOutcome.Ok(new { Kind = kind!.Trim().ToLowerInvariant(), saved.Value });
+            }
+
+            if (result.Message == CustomerMemoryService.FailedMessage)
+            {
+                return ToolOutcome.Fail(ToolOutcomeStatus.Unavailable, CustomerMemoryService.FailedMessage);
+            }
+
+            await EmitProgramCheckAsync($"程式重新核對要記住的內容不通過（{result.Message.TrimEnd('。')}），不儲存。");
+            return ToolOutcome.Fail(ToolOutcomeStatus.Invalid, result.Message);
         }, cancellationToken);
 
     /// <summary>工具函式：結果一律序列化成 <see cref="ToolOutcome"/> 信封（客服 AI 助手的工具共用）。</summary>
@@ -526,8 +618,7 @@ public sealed class AfterSalesAgentTools
             return null;
         }
 
-        // 「頁面:view」動作鍵：裸頁面鍵（舊制＝全動作）也會通過，與 CheckAccessPage 的規則一致。
-        if (!await permissionChecker.HasPermissionAsync(userId, PermissionKey.For(MagicObjectHelper.角色_顧客商店, PermissionActions.View)))
+        if (!(context.ShopPermissionGranted ?? await HasShopPermissionAsync(permissionChecker, userId)))
         {
             logger.LogWarning(
                 "After-sales agent tool rejected because the user lacks the shop permission. ToolName={ToolName}, UserId={UserId}",
@@ -537,6 +628,10 @@ public sealed class AfterSalesAgentTools
 
         return userId;
     }
+
+    /// <summary>是否仍有「顧客商店」權限（「頁面:view」動作鍵：裸頁面鍵（舊制＝全動作）也會通過，與 CheckAccessPage 的規則一致）。</summary>
+    internal static Task<bool> HasShopPermissionAsync(IPermissionChecker permissionChecker, int userId)
+        => permissionChecker.HasPermissionAsync(userId, PermissionKey.For(MagicObjectHelper.角色_顧客商店, PermissionActions.View));
 
     /// <summary>本人的訂單商品與所屬訂單（簽收時間、配送狀態）；不是本人的回 null。</summary>
     private async Task<(ShopOrderSummary Order, ShopOrderItemView Item)?> FindOwnedItemAsync(

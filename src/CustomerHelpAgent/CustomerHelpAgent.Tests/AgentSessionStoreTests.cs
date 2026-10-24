@@ -38,7 +38,7 @@ public sealed class AgentSessionStoreTests : IAsyncLifetime
         Assert.NotNull(await store.GetPendingConfirmationAsync(key, CustomerId));
         Assert.True(await store.TryClaimConfirmationAsync(confirmation.Id, CustomerId, approved: true));
 
-        Assert.False(await store.VoidPendingConfirmationAsync(key, CustomerId));
+        Assert.Null(await store.VoidPendingConfirmationAsync(key, CustomerId));
 
         await using var db = new TestDbContextFactory(connection).CreateDbContext();
         Assert.True((await db.AgentConfirmation.SingleAsync()).Approved);
@@ -51,8 +51,8 @@ public sealed class AgentSessionStoreTests : IAsyncLifetime
         var key = await store.CreateAsync(CustomerId);
         await store.AddConfirmationAsync(key, CustomerId, "ficc_1", "create_after_sales_request", "{}", "{}");
 
-        Assert.False(await store.VoidPendingConfirmationAsync(key, CustomerId + 1));
-        Assert.True(await store.VoidPendingConfirmationAsync(key, CustomerId));
+        Assert.Null(await store.VoidPendingConfirmationAsync(key, CustomerId + 1));
+        Assert.Equal("create_after_sales_request", await store.VoidPendingConfirmationAsync(key, CustomerId));
 
         Assert.Null(await store.GetPendingConfirmationAsync(key, CustomerId));
         await using var db = new TestDbContextFactory(connection).CreateDbContext();
@@ -92,5 +92,27 @@ public sealed class AgentSessionStoreTests : IAsyncLifetime
         var record = (await store.GetAsync(key, CustomerId))!;
         Assert.Equal(0, record.StateVersion);
         Assert.Equal(string.Empty, record.StateJson);
+    }
+
+    /// <summary>會話模式（M5）：預設單一 Agent，指定多 Agent 時存下來；確認卡可帶外部核准請求原文，並能以核准請求 Id 找回（只限本人、本會話）。</summary>
+    [Fact]
+    public async Task Create_WithMode_AndConfirmationByRequestId()
+    {
+        var store = CreateStore();
+        var single = await store.CreateAsync(CustomerId);
+        var handoff = await store.CreateAsync(CustomerId, AgentMode.Handoff);
+
+        Assert.Equal(AgentMode.Single, (await store.GetAsync(single, CustomerId))!.Mode);
+        Assert.Equal(AgentMode.Handoff, (await store.GetAsync(handoff, CustomerId))!.Mode);
+
+        const string RequestId = "27:exchange_exchange_UserInput:ficc_call-1";
+        var added = await store.AddConfirmationAsync(handoff, CustomerId, RequestId, "create_after_sales_request", "{}", "{}", "{\"requestId\":\"x\"}");
+        Assert.Equal("{\"requestId\":\"x\"}", (await store.GetPendingConfirmationAsync(handoff, CustomerId))!.ApprovalRequestJson);
+
+        var found = await store.GetConfirmationByRequestIdAsync(handoff, CustomerId, RequestId);
+        Assert.Equal(added.Id, found!.Id);
+        Assert.Equal("{\"requestId\":\"x\"}", found.ApprovalRequestJson);
+        Assert.Null(await store.GetConfirmationByRequestIdAsync(handoff, CustomerId + 1, RequestId));
+        Assert.Null(await store.GetConfirmationByRequestIdAsync(single, CustomerId, RequestId));
     }
 }

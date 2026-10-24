@@ -5,7 +5,7 @@ using CustomerHelpAgent.Share.Shop;
 namespace CustomerHelpAgent.Web.Agents.PreReview;
 
 /// <summary>
-/// 送件／補件 commit 後觸發 AI 初審（scoped，取代 Business 的 no-op 預設）：只處理 Agent 管道，
+/// 送件／補件 commit 後觸發 AI 初審（scoped，取代 Business 的 no-op 預設）：只處理 AI 管道（單一與多 Agent，M5 起），
 /// 建立新的一輪（補件後重新送件是下一個 Attempt）並放進 <see cref="PreReviewQueue"/>。傳統表單管道零 AI，直接略過。
 /// 這裡只寫一筆資料、入列就返回，初審由 <see cref="PreReviewWorker"/> 在背景執行。
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class PreReviewSubmittedHook : IAfterSalesSubmittedHook
 
     public async Task OnSubmittedAsync(int requestId, AfterSalesChannel channel)
     {
-        if (channel != AfterSalesChannel.Agent)
+        if (!channel.IsAi())
         {
             return;
         }
